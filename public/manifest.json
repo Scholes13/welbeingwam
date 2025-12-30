@@ -1,0 +1,21 @@
+{
+    "name": "WAM25 Wellness",
+    "short_name": "WAM25",
+    "start_url": "/dashboard",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#000000",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "https://placehold.co/192x192/FC4C02/FFFFFF?text=WAM",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/512x512/FC4C02/FFFFFF?text=WAM",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
