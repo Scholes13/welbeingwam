@@ -14,7 +14,7 @@ export async function GET() {
         // 1. Fetch Users
         const { data: profiles, error: profileError } = await supabase
             .from('profiles')
-            .select('id, full_name, avatar_url')
+            .select('id, full_name, avatar_url, instagram_username')
 
         if (profileError) throw profileError
 
@@ -51,6 +51,7 @@ export async function GET() {
                 user_id: p.id,
                 full_name: p.full_name || 'N/A',
                 avatar_url: p.avatar_url,
+                instagram_username: p.instagram_username,
                 total_steps: 0,
                 quest_points: 0,
                 overall_points: 0

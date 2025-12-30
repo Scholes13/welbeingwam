@@ -6,6 +6,7 @@ interface LeaderboardEntry {
     user_id: string
     full_name: string
     avatar_url: string
+    instagram_username?: string
     total_steps: number
     quest_points: number
     overall_points: number
@@ -118,10 +119,16 @@ export default function Leaderboard() {
                                 <h3 className="text-base font-bold text-white truncate pr-2">
                                     {entry.full_name}
                                 </h3>
-                                <p className="text-xs text-gray-500 uppercase tracking-wider">
-                                    {activeTab === 'overall' && 'Total Points'}
-                                    {activeTab === 'steps' && 'Total Steps'}
-                                    {activeTab === 'quests' && 'Quest Points'}
+                                <p className="text-xs text-gray-500 tracking-wider">
+                                    {entry.instagram_username ? (
+                                        <span className="text-[#FC4C02]">@{entry.instagram_username}</span>
+                                    ) : (
+                                        <span className="uppercase">
+                                            {activeTab === 'overall' && 'Total Points'}
+                                            {activeTab === 'steps' && 'Total Steps'}
+                                            {activeTab === 'quests' && 'Quest Points'}
+                                        </span>
+                                    )}
                                 </p>
                             </div>
 

@@ -2,13 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { LogOut, Settings, Award, Activity } from 'lucide-react'
+import { LogOut, Settings, Award, Activity, Scan } from 'lucide-react'
+import QRCode from 'react-qr-code'
 
 export default function ProfilePage() {
     const [profile, setProfile] = useState<any>(null)
     const [stats, setStats] = useState({ count: 0, distance: 0, steps: 0 })
     const [loading, setLoading] = useState(true)
+    const [showIdCard, setShowIdCard] = useState(false)
     const router = useRouter()
 
     useEffect(() => {
@@ -103,7 +106,22 @@ export default function ProfilePage() {
                 {/* Menu */}
                 <div className="space-y-3">
                     <div className="bg-gray-900/30 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden">
-                        <button className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5">
+
+                        {/* ID Card Button */}
+                        <button
+                            onClick={() => setShowIdCard(true)}
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
+                                    <Scan className="w-5 h-5" />
+                                </div>
+                                <span className="font-medium">My ID Card</span>
+                            </div>
+                            <span className="text-gray-500">→</span>
+                        </button>
+
+                        <Link href="/profile/settings" className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
                                     <Settings className="w-5 h-5" />
@@ -111,7 +129,7 @@ export default function ProfilePage() {
                                 <span className="font-medium">Settings</span>
                             </div>
                             <span className="text-gray-500">→</span>
-                        </button>
+                        </Link>
 
                         <button
                             onClick={handleLogout}
@@ -134,6 +152,48 @@ export default function ProfilePage() {
                     </p>
                 </div>
             </div>
+
+            {/* ID Card Modal */}
+            {showIdCard && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowIdCard(false)}>
+                    <div className="bg-white text-black p-8 rounded-3xl w-full max-w-sm relative overflow-hidden" onClick={e => e.stopPropagation()}>
+                        {/* Card Background Pattern */}
+                        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-r from-[#FC4C02] to-orange-400" />
+
+                        <div className="relative flex flex-col items-center">
+                            <div className="bg-white p-1.5 rounded-full mb-4 shadow-lg mt-8">
+                                <img
+                                    src={profile.profile}
+                                    alt={profile.username}
+                                    className="w-20 h-20 rounded-full object-cover border-4 border-white"
+                                />
+                            </div>
+
+                            <h2 className="text-2xl font-bold mb-1">{profile.firstname} {profile.lastname}</h2>
+                            <p className="text-gray-500 mb-6">@{profile.username}</p>
+
+                            <div className="bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.1)] mb-4">
+                                <QRCode
+                                    value={profile.access_code || 'NO-CODE'}
+                                    size={180}
+                                    level="H"
+                                />
+                            </div>
+
+                            <p className="font-mono text-xl font-bold tracking-widest text-[#FC4C02] mb-8">
+                                {profile.access_code}
+                            </p>
+
+                            <button
+                                onClick={() => setShowIdCard(false)}
+                                className="w-full py-3 bg-gray-100 hover:bg-gray-200 rounded-xl font-bold transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

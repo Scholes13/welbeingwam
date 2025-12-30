@@ -2,13 +2,22 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan } from 'lucide-react'
+import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 
 export default function AdminPage() {
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards'>('users')
+
+    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities'>('users')
+
+    // Activity & Scanner State
+    const [activities, setActivities] = useState<any[]>([])
+    const [activityForm, setActivityForm] = useState({ title: '', date: new Date().toISOString().split('T')[0] })
+    const [isScannerOpen, setIsScannerOpen] = useState(false)
+    const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
+    const [scanResult, setScanResult] = useState<{ success: boolean, message: string, user?: any } | null>(null)
 
     // Survey State for Navigation
     const [selectedSurvey, setSelectedSurvey] = useState<any | null>(null)
@@ -69,11 +78,12 @@ export default function AdminPage() {
     const [isAdjusting, setIsAdjusting] = useState(false)
 
     useEffect(() => {
-        fetchUsers()
-        fetchQuests()
-        fetchSurveys()
-        fetchRewards()
-    }, [])
+        if (activeTab === 'users') fetchUsers()
+        else if (activeTab === 'quests') fetchQuests()
+        else if (activeTab === 'surveys') fetchSurveys()
+        else if (activeTab === 'rewards') fetchRewards()
+        else if (activeTab === 'activities') fetchActivities()
+    }, [activeTab])
 
     useEffect(() => {
         if (selectedSurvey) {
@@ -91,6 +101,66 @@ export default function AdminPage() {
             const data = await res.json()
             if (data.users) setUsers(data.users)
         } catch (e) { console.error(e) } finally { setLoading(false) }
+    }
+
+    const fetchActivities = async () => {
+        try {
+            const res = await fetch('/api/admin/activities')
+            const data = await res.json()
+            setActivities(data)
+        } catch (error) {
+            console.error('Error fetching activities:', error)
+        }
+    }
+
+    const handleCreateActivity = async (e: React.FormEvent) => {
+        e.preventDefault()
+        try {
+            const res = await fetch('/api/admin/activities', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(activityForm)
+            })
+            if (res.ok) {
+                setIsModalOpen(false)
+                setActivityForm({ title: '', date: new Date().toISOString().split('T')[0] })
+                fetchActivities()
+            }
+        } catch (error) {
+            console.error('Error creating activity:', error)
+        }
+    }
+
+    const handleScan = async (accessCodes: any[]) => {
+        if (!accessCodes || accessCodes.length === 0) return
+        const code = accessCodes[0].rawValue
+
+        try {
+            const res = await fetch('/api/admin/attendance/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    activity_id: selectedActivityId,
+                    access_code: code
+                })
+            })
+            const data = await res.json()
+            setScanResult({
+                success: data.success || false,
+                message: data.message || data.error,
+                user: data.user
+            })
+
+            if (data.success) {
+                // Refresh list to update counts
+                fetchActivities()
+                // Optional: Close scanner after success or keep open for next
+                // setIsScannerOpen(false) 
+            }
+
+        } catch (error) {
+            console.error('Scan Error:', error)
+        }
     }
 
     const fetchQuests = async () => {
@@ -310,7 +380,7 @@ export default function AdminPage() {
                     className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                 >
                     <Plus size={20} />
-                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : (!selectedSurvey ? 'Survey' : 'Question')}
+                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : (!selectedSurvey ? 'Survey' : 'Question')}
                 </button>
             </div>
 
@@ -339,6 +409,12 @@ export default function AdminPage() {
                     className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'rewards' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
                 >
                     <Gift size={18} /> Rewards
+                </button>
+                <button
+                    onClick={() => { setActiveTab('activities'); setSelectedSurvey(null) }}
+                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'activities' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
+                >
+                    <Calendar size={18} /> Activities
                 </button>
             </div>
 
@@ -665,9 +741,55 @@ export default function AdminPage() {
                 )
             }
 
+            {/* Activities Tab */}
+            {activeTab === 'activities' && (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-xl font-bold">Manage Activities</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {activities.map((activity) => (
+                            <div key={activity.id} className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 hover:bg-white/5 transition-colors">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="font-bold text-lg text-white mb-1">{activity.title}</h3>
+                                        <div className="flex items-center gap-2 text-gray-400 text-sm">
+                                            <Calendar className="w-4 h-4" />
+                                            {activity.activity_date}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
+                                        {activity.attendance_count || 0} Present
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        setSelectedActivityId(activity.id)
+                                        setIsScannerOpen(true)
+                                        setScanResult(null)
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors"
+                                >
+                                    <Scan className="w-4 h-4" />
+                                    Scan Attendance
+                                </button>
+                            </div>
+                        ))}
+
+                        {activities.length === 0 && (
+                            <div className="col-span-full text-center py-12 text-gray-500">
+                                No activities found. Create one to get started.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Create Modal */}
             <AnimatePresence>
-                {isModalOpen && (
+                {isModalOpen && activeTab !== 'activities' && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                         <motion.div
                             initial={{ opacity: 0 }}
@@ -1031,7 +1153,107 @@ export default function AdminPage() {
                         </div>
                     )
                 }
+
             </AnimatePresence >
+
+            {/* Create Activity Modal */}
+            <AnimatePresence>
+                {isModalOpen && activeTab === 'activities' && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                                <h2 className="text-xl font-bold">New Activity</h2>
+                                <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleCreateActivity} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-1">Activity Title</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={activityForm.title}
+                                        onChange={e => setActivityForm({ ...activityForm, title: e.target.value })}
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. Morning Run"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-400 mb-1">Date</label>
+                                    <input
+                                        type="date"
+                                        required
+                                        value={activityForm.date}
+                                        onChange={e => setActivityForm({ ...activityForm, date: e.target.value })}
+                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="w-full bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl transition-colors"
+                                >
+                                    Create Activity
+                                </button>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* QR Scanner Modal */}
+            <AnimatePresence>
+                {isScannerOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+                    >
+                        <div className="w-full max-w-md bg-[#121212] rounded-3xl overflow-hidden border border-white/10 relative">
+                            <button
+                                onClick={() => setIsScannerOpen(false)}
+                                className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+
+                            <div className="p-6 text-center">
+                                <h2 className="text-2xl font-bold mb-2">Scan QR Code</h2>
+                                <p className="text-gray-400 text-sm mb-6">Point camera at user's ID Card</p>
+
+                                <div className="rounded-xl overflow-hidden border-2 border-[#FC4C02]/50 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-6">
+                                    <Scanner
+                                        onScan={handleScan}
+                                    />
+                                </div>
+
+                                {scanResult && (
+                                    <div className={`p-4 rounded-xl border ${scanResult.success ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
+                                        <div className="font-bold flex items-center justify-center gap-2 mb-1">
+                                            {scanResult.success ? <Shield className="w-5 h-5" /> : <X className="w-5 h-5" />}
+                                            {scanResult.success ? 'Success!' : 'Error'}
+                                        </div>
+                                        <p className="text-sm">{scanResult.message}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Delete Confirmation Modal */}
             <AnimatePresence>
