@@ -47,6 +47,22 @@ export async function POST(request: Request) {
             throw insertError
         }
 
+        // 3. Award Points if Activity has points
+        const { data: activity } = await supabase
+            .from('admin_activities')
+            .select('points, title')
+            .eq('id', activity_id)
+            .single()
+
+        if (activity && activity.points > 0) {
+            await supabase.from('point_adjustments').insert({
+                user_id: user.id,
+                points: activity.points,
+                reason: `Activity Attendance: ${activity.title}`,
+                date: new Date().toISOString()
+            })
+        }
+
         return NextResponse.json({ 
             success: true, 
             message: `Scanned: ${user.full_name}`,

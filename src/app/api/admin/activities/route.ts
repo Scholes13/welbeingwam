@@ -39,7 +39,7 @@ export async function GET() {
 // 2. POST: Create new activity
 export async function POST(request: Request) {
     try {
-        const { title, date } = await request.json()
+        const { title, date, points } = await request.json()
 
         if (!title || !date) {
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
         const { error } = await supabase
             .from('admin_activities')
-            .insert({ title, activity_date: date })
+            .insert({ title, activity_date: date, points: points || 0 })
 
         if (error) throw error
 
@@ -60,6 +60,42 @@ export async function POST(request: Request) {
 
     } catch (error) {
         console.error('Create Activity Error:', error)
+        return NextResponse.json({ error: 'Failed' }, { status: 500 })
+    }
+}
+
+// 3. DELETE: Delete activity
+export async function DELETE(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url)
+        const id = searchParams.get('id')
+
+        if (!id) {
+            return NextResponse.json({ error: 'Activity ID is required' }, { status: 400 })
+        }
+
+        const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+        )
+
+        // Delete activity (Cascade should handle attendance if configured, otherwise we might need to delete attendance first)
+        // Assuming CASCADE is set up or we want to hard delete. 
+        // If no cascade, we delete attendance first manually to be safe.
+        await supabase.from('attendance').delete().eq('activity_id', id)
+        await supabase.from('point_adjustments').delete().ilike('reason', `%${id}%`) // Optional cleanup if we stored ID, but reason implies loose coupling
+        
+        const { error } = await supabase
+            .from('admin_activities')
+            .delete()
+            .eq('id', id)
+
+        if (error) throw error
+
+        return NextResponse.json({ success: true })
+
+    } catch (error) {
+        console.error('Delete Activity Error:', error)
         return NextResponse.json({ error: 'Failed' }, { status: 500 })
     }
 }

@@ -170,7 +170,7 @@ export default function ProfilePage() {
                             </div>
 
                             <h2 className="text-2xl font-bold mb-1">{profile.firstname} {profile.lastname}</h2>
-                            <p className="text-gray-500 mb-6">@{profile.username}</p>
+                            <p className="text-gray-500 mb-6">@{profile.instagram_username || profile.username}</p>
 
                             <div className="bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.1)] mb-4">
                                 <QRCode

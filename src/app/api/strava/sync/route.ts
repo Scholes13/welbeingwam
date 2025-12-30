@@ -178,7 +178,11 @@ export async function GET() {
     const { data: surveys } = await supabase.from('surveys').select('*').eq('is_active', true)
 
     return NextResponse.json({
-        profile: profileData,
+        profile: {
+            ...profileData,
+            instagram_username: userProfile?.instagram_username,
+            access_code: userProfile?.access_code
+        },
         activities: activitiesData,
         quests: quests || [],
         userQuests: userQuests || [],
