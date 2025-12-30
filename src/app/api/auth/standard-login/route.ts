@@ -31,10 +31,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
-    // Set Session Cookies
+    // Set Session Cookies (Valid for 400 days)
     const cookieStore = await cookies()
-    cookieStore.set('strava_athlete_id', user.id, { httpOnly: true, secure: true }) // Reuse existing cookie logic
-    cookieStore.set('is_manual_user', 'true', { httpOnly: true, secure: true })
+    const oneYear = 60 * 60 * 24 * 400
+    cookieStore.set('strava_athlete_id', user.id, { httpOnly: true, secure: true, maxAge: oneYear }) 
+    cookieStore.set('is_manual_user', 'true', { httpOnly: true, secure: true, maxAge: oneYear })
 
     return NextResponse.json({ success: true })
 

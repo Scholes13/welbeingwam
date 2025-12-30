@@ -1,38 +1,13 @@
-'use client'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+import LoginForm from '@/components/LoginForm'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { User, Lock, ArrowRight, Loader2 } from 'lucide-react'
+export default async function Home() {
+  const cookieStore = await cookies()
+  const session = cookieStore.get('strava_athlete_id')
 
-export default function Home() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const router = useRouter()
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    try {
-      const res = await fetch('/api/auth/standard-login', {
-        method: 'POST',
-        body: JSON.stringify({ username, password }),
-      })
-
-      if (res.ok) {
-        router.push('/dashboard')
-      } else {
-        const data = await res.json()
-        setError(data.error || 'Login failed')
-      }
-    } catch (e) {
-      setError('Something went wrong')
-    } finally {
-      setLoading(false)
-    }
+  if (session) {
+    redirect('/dashboard')
   }
 
   return (
@@ -43,67 +18,7 @@ export default function Home() {
         <div className="absolute bottom-[20%] left-[-10%] w-[400px] h-[400px] bg-purple-600 rounded-full mix-blend-screen filter blur-[150px] opacity-15" />
       </div>
 
-      <div className="relative z-10 w-full max-w-sm">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <h1 className="text-6xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-500 mb-2">
-            WAM25
-          </h1>
-          <p className="text-gray-400 font-light tracking-wide">
-            Scaling Impact
-          </p>
-        </div>
-
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="relative group">
-            <User className="absolute left-4 top-3.5 text-gray-500 w-5 h-5 group-focus-within:text-[#FC4C02] transition-colors" />
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
-            />
-          </div>
-
-          <div className="relative group">
-            <Lock className="absolute left-4 top-3.5 text-gray-500 w-5 h-5 group-focus-within:text-[#FC4C02] transition-colors" />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
-              <p className="text-red-400 text-xs font-medium">{error}</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={!username || !password || loading}
-            className="w-full bg-[#FC4C02] hover:bg-[#e04402] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition-all shadow-[0_0_20px_rgba(252,76,2,0.3)] hover:shadow-[0_0_30px_rgba(252,76,2,0.5)] flex items-center justify-center gap-2 group"
-          >
-            {loading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                Login Account
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </>
-            )}
-          </button>
-        </form>
-
-        <p className="mt-8 text-center text-xs text-gray-600">
-          Forgot password? Contact Super Admin.
-        </p>
-      </div>
+      <LoginForm />
     </main>
   )
 }

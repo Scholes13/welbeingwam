@@ -25,7 +25,8 @@ export default function AdminPage() {
     const [formData, setFormData] = useState({
         username: '',
         password: '',
-        fullName: ''
+        fullName: '',
+        gender: ''
     })
 
     // Form State (Quest)
@@ -209,7 +210,7 @@ export default function AdminPage() {
             if (res.ok) {
                 setIsModalOpen(false)
                 if (activeTab === 'users') {
-                    setFormData({ username: '', password: '', fullName: '' })
+                    setFormData({ username: '', password: '', fullName: '', gender: '' })
                     fetchUsers()
                 } else if (activeTab === 'quests') {
                     setQuestData({ title: '', description: '', points: 0 })
@@ -730,6 +731,18 @@ export default function AdminPage() {
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                             />
                                         </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Gender (Optional)</label>
+                                            <select
+                                                value={formData.gender}
+                                                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            >
+                                                <option value="">Random (Any)</option>
+                                                <option value="male">Male</option>
+                                                <option value="female">Female</option>
+                                            </select>
+                                        </div>
                                     </>
                                 ) : activeTab === 'quests' ? (
                                     /* CREATE QUEST FORM */
@@ -945,121 +958,126 @@ export default function AdminPage() {
                             </form>
                         </motion.div>
                     </div>
-                )}
-            </AnimatePresence>
+                )
+                }
+            </AnimatePresence >
 
 
             {/* Point Adjustment Modal */}
             <AnimatePresence>
-                {showPointsModal && pointsTarget && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setShowPointsModal(false)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
-                        >
-                            <h3 className="text-xl font-bold mb-4 text-white">Adjust Points</h3>
-                            <p className="text-gray-400 mb-6 text-sm">
-                                Adjusting points for <span className="text-white font-bold">{pointsTarget.name}</span>
-                            </p>
+                {
+                    showPointsModal && pointsTarget && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setShowPointsModal(false)}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            />
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                            >
+                                <h3 className="text-xl font-bold mb-4 text-white">Adjust Points</h3>
+                                <p className="text-gray-400 mb-6 text-sm">
+                                    Adjusting points for <span className="text-white font-bold">{pointsTarget.name}</span>
+                                </p>
 
-                            <div className="space-y-4 mb-6">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Points Amount</label>
-                                    <div className="text-xs text-gray-500 mb-1">Use negative value to subtract</div>
-                                    <input
-                                        type="number"
-                                        value={adjustPointsData.points}
-                                        onChange={(e) => setAdjustPointsData({ ...adjustPointsData, points: e.target.value })}
-                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                        placeholder="e.g. 100 or -50"
-                                    />
+                                <div className="space-y-4 mb-6">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Points Amount</label>
+                                        <div className="text-xs text-gray-500 mb-1">Use negative value to subtract</div>
+                                        <input
+                                            type="number"
+                                            value={adjustPointsData.points}
+                                            onChange={(e) => setAdjustPointsData({ ...adjustPointsData, points: e.target.value })}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            placeholder="e.g. 100 or -50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reason</label>
+                                        <input
+                                            type="text"
+                                            value={adjustPointsData.reason}
+                                            onChange={(e) => setAdjustPointsData({ ...adjustPointsData, reason: e.target.value })}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            placeholder="e.g. Manual Adjustment"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reason</label>
-                                    <input
-                                        type="text"
-                                        value={adjustPointsData.reason}
-                                        onChange={(e) => setAdjustPointsData({ ...adjustPointsData, reason: e.target.value })}
-                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                        placeholder="e.g. Manual Adjustment"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setShowPointsModal(false)}
-                                    className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors font-bold"
-                                    disabled={isAdjusting}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleAdjustPoints}
-                                    disabled={isAdjusting || !adjustPointsData.points || !adjustPointsData.reason}
-                                    className="px-4 py-2 rounded-lg bg-[#FC4C02] hover:bg-orange-600 text-white font-bold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isAdjusting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                                    Save
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setShowPointsModal(false)}
+                                        className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors font-bold"
+                                        disabled={isAdjusting}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleAdjustPoints}
+                                        disabled={isAdjusting || !adjustPointsData.points || !adjustPointsData.reason}
+                                        className="px-4 py-2 rounded-lg bg-[#FC4C02] hover:bg-orange-600 text-white font-bold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isAdjusting ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                        Save
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )
+                }
+            </AnimatePresence >
 
             {/* Delete Confirmation Modal */}
             <AnimatePresence>
-                {deleteTarget && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setDeleteTarget(null)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
-                        >
-                            <h3 className="text-xl font-bold mb-2 text-white">Confirm Deletion</h3>
-                            <p className="text-gray-400 mb-6">
-                                Are you sure you want to delete <span className="text-white font-bold">{deleteTarget.name}</span>?
-                                <br />This action cannot be undone.
-                            </p>
-                            <div className="flex justify-end gap-3">
-                                <button
-                                    onClick={() => setDeleteTarget(null)}
-                                    className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors font-bold"
-                                    disabled={deleteLoading}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={performDelete}
-                                    disabled={deleteLoading}
-                                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center gap-2"
-                                >
-                                    {deleteLoading ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                    Delete
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+                {
+                    deleteTarget && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setDeleteTarget(null)}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            />
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                            >
+                                <h3 className="text-xl font-bold mb-2 text-white">Confirm Deletion</h3>
+                                <p className="text-gray-400 mb-6">
+                                    Are you sure you want to delete <span className="text-white font-bold">{deleteTarget.name}</span>?
+                                    <br />This action cannot be undone.
+                                </p>
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setDeleteTarget(null)}
+                                        className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors font-bold"
+                                        disabled={deleteLoading}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={performDelete}
+                                        disabled={deleteLoading}
+                                        className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center gap-2"
+                                    >
+                                        {deleteLoading ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                        Delete
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )
+                }
+            </AnimatePresence >
         </div >
     )
 }
