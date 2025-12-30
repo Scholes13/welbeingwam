@@ -61,6 +61,14 @@ export async function POST(request: Request) {
                 reason: `Activity Attendance: ${activity.title}`,
                 date: new Date().toISOString()
             })
+
+            // 4. Send Notification
+            await supabase.from('notifications').insert({
+                user_id: user.id,
+                title: 'Activity Points Awarded',
+                message: `You earned ${activity.points} points for attending ${activity.title}!`,
+                is_read: false
+            })
         }
 
         return NextResponse.json({ 
