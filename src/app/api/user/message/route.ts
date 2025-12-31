@@ -91,19 +91,14 @@ export async function POST(request: Request) {
                       .eq('type', 'message')
                       .eq('is_reply', false)
                   
-                  // Award points
-                  const { data: profile } = await supabase
-                      .from('profiles')
-                      .select('points')
-                      .eq('id', senderId)
-                      .single()
-                  
-                  if (profile) {
-                      await supabase
-                          .from('profiles')
-                          .update({ points: (profile.points || 0) + REPLY_REWARD_POINTS })
-                          .eq('id', senderId)
-                  }
+                  // Award points via point_adjustments (so it shows in leaderboard)
+                  await supabase
+                      .from('point_adjustments')
+                      .insert({
+                          user_id: senderId,
+                          points: REPLY_REWARD_POINTS,
+                          reason: 'Bonus: Replied to positive message'
+                      })
                   
                   console.log(`[Reply] Awarded ${REPLY_REWARD_POINTS} points to user ${senderId}`)
                   

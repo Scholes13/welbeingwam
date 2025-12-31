@@ -73,19 +73,14 @@ export async function POST(request: Request) {
 
         if (claimError) throw claimError
 
-        // Award points to user
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('points')
-            .eq('id', userId)
-            .single()
-
-        if (profile) {
-            await supabase
-                .from('profiles')
-                .update({ points: (profile.points || 0) + spot.points })
-                .eq('id', userId)
-        }
+        // Award points to user via point_adjustments (so it shows in leaderboard)
+        await supabase
+            .from('point_adjustments')
+            .insert({
+                user_id: userId,
+                points: spot.points,
+                reason: `Scanned QR Spot: ${spot.name}`
+            })
 
         // Send notification
         await supabase.from('notifications').insert({
