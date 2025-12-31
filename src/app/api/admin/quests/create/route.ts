@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { title, description, points } = await request.json()
+    const { title, description, points, expires_at } = await request.json()
     const cookieStore = await cookies()
     const currentUserId = cookieStore.get('strava_athlete_id')?.value
 
@@ -35,7 +35,8 @@ export async function POST(request: Request) {
             title,
             description,
             points,
-            is_active: true
+            is_active: true,
+            expires_at: expires_at || null
         })
 
     if (error) {

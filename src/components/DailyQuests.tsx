@@ -1,13 +1,37 @@
 'use client'
 
-import { useState } from 'react'
-import { Check, Gift, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Check, Gift, Loader2, Timer } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
 
 export default function DailyQuests({ quests = [], userQuests = [], onClaim }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
 
     const { success, error } = useToast()
+
+    const getCountdown = (expiresAt: string) => {
+        const total = Date.parse(expiresAt) - Date.parse(new Date().toString())
+        const seconds = Math.floor((total / 1000) % 60)
+        const minutes = Math.floor((total / 1000 / 60) % 60)
+        const hours = Math.floor((total / (1000 * 60 * 60)) % 24)
+        const days = Math.floor(total / (1000 * 60 * 60 * 24))
+
+        if (total <= 0) return 'Expired'
+
+        if (days > 0) return `${days}d ${hours}h left`
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+    }
+
+    // Force re-render every second for countdown
+    const [tick, setTick] = useState(0)
+    useEffect(() => {
+        // Only run timer if there are quests with deadlines
+        const hasDeadline = quests.some((q: any) => q.expires_at)
+        if (!hasDeadline) return
+
+        const timer = setInterval(() => setTick(t => t + 1), 1000)
+        return () => clearInterval(timer)
+    }, [quests])
 
     const handleClaim = async (questId: string) => {
         setLoadingIds(prev => [...prev, questId])
@@ -58,6 +82,10 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim }: a
             <div className="space-y-4">
                 {visibleQuests.map((quest: any) => {
                     const isClaiming = loadingIds.includes(quest.id)
+                    const timeLeft = quest.expires_at ? getCountdown(quest.expires_at) : null
+                    const isExpired = timeLeft === 'Expired'
+
+                    if (isExpired) return null // Hide expired quests
 
                     return (
                         <div key={quest.id} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex items-center justify-between gap-4">
@@ -68,7 +96,13 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim }: a
                                         +{quest.points}
                                     </span>
                                 </h3>
-                                <p className="text-gray-400 text-sm line-clamp-1">{quest.description}</p>
+                                <p className="text-gray-400 text-sm line-clamp-1 mb-1">{quest.description}</p>
+                                {timeLeft && (
+                                    <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5 mt-1">
+                                        <Timer className="w-3.5 h-3.5" />
+                                        {timeLeft}
+                                    </div>
+                                )}
                             </div>
 
                             <button

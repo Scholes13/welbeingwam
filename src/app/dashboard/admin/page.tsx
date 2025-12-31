@@ -46,11 +46,10 @@ export default function AdminPage() {
     })
 
     // Form State (Quest)
-    const [questData, setQuestData] = useState({
-        title: '',
-        description: '',
-        points: 0
-    })
+    const [questTitle, setQuestTitle] = useState('')
+    const [questDesc, setQuestDesc] = useState('')
+    const [questPoints, setQuestPoints] = useState('')
+    const [questExpiresAt, setQuestExpiresAt] = useState('')
 
     // Form State (Survey Container)
     const [surveyContainerData, setSurveyContainerData] = useState({
@@ -337,7 +336,12 @@ export default function AdminPage() {
                 body = formData
             } else if (activeTab === 'quests') {
                 url = '/api/admin/quests/create'
-                body = questData
+                body = {
+                    title: questTitle,
+                    description: questDesc,
+                    points: parseInt(questPoints) || 0,
+                    expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null
+                }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
                 // Create Survey Container
                 url = '/api/admin/surveys/create'
@@ -371,7 +375,10 @@ export default function AdminPage() {
                     setFormData({ username: '', password: '', fullName: '', gender: '' })
                     fetchUsers()
                 } else if (activeTab === 'quests') {
-                    setQuestData({ title: '', description: '', points: 0 })
+                    setQuestTitle('')
+                    setQuestDesc('')
+                    setQuestPoints('')
+                    setQuestExpiresAt('')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
                     setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0 })
@@ -998,8 +1005,8 @@ export default function AdminPage() {
                                             <input
                                                 type="text"
                                                 required
-                                                value={questData.title}
-                                                onChange={(e) => setQuestData({ ...questData, title: e.target.value })}
+                                                value={questTitle}
+                                                onChange={(e) => setQuestTitle(e.target.value)}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                                 placeholder="e.g. Drink 2L Water"
                                             />
@@ -1009,8 +1016,8 @@ export default function AdminPage() {
                                             <input
                                                 type="number"
                                                 required
-                                                value={questData.points}
-                                                onChange={(e) => setQuestData({ ...questData, points: parseInt(e.target.value) || 0 })}
+                                                value={questPoints}
+                                                onChange={(e) => setQuestPoints(e.target.value)}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                             />
                                         </div>
@@ -1018,9 +1025,18 @@ export default function AdminPage() {
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description</label>
                                             <textarea
                                                 required
-                                                value={questData.description}
-                                                onChange={(e) => setQuestData({ ...questData, description: e.target.value })}
+                                                value={questDesc}
+                                                onChange={(e) => setQuestDesc(e.target.value)}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] h-24 resize-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Deadline (Optional)</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={questExpiresAt}
+                                                onChange={(e) => setQuestExpiresAt(e.target.value)}
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] [&::-webkit-calendar-picker-indicator]:invert"
                                             />
                                         </div>
                                     </>
