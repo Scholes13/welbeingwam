@@ -106,48 +106,46 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.9 }}
-                                className={`relative overflow-hidden border p-6 rounded-2xl flex items-center justify-between gap-4 transition-colors ${errorMessage ? 'bg-red-500/10 border-red-500/50' : 'bg-[#1a1a1a] border-white/10'
+                                className={`relative border p-5 rounded-2xl flex items-center gap-4 transition-colors ${errorMessage ? 'bg-red-500/10 border-red-500/50' : 'bg-[#1a1a1a] border-white/10'
                                     }`}
                             >
-                                <div className="z-10 flex-1">
-                                    <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+                                <div className="z-10 flex-1 min-w-0 flex flex-col gap-1">
+                                    <h3 className="font-bold text-white leading-snug break-words pr-2">
                                         {quest.title}
-                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] px-2 py-0.5 rounded-full">
-                                            +{quest.points}
-                                        </span>
                                     </h3>
-                                    <p className="text-gray-400 text-sm line-clamp-1 mb-1">{quest.description}</p>
+                                    <p className="text-gray-400 text-xs line-clamp-2">{quest.description}</p>
 
-                                    {/* Footer Info: Timer or Error Message */}
-                                    <div className="h-5 flex items-center">
-                                        {errorMessage ? (
-                                            <motion.div
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                className="text-xs font-bold text-red-500 flex items-center gap-1"
-                                            >
-                                                <XCircle size={12} /> {errorMessage}
-                                            </motion.div>
-                                        ) : timeLeft ? (
-                                            <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5">
-                                                <Timer className="w-3.5 h-3.5" />
-                                                {timeLeft}
-                                            </div>
-                                        ) : null}
+                                    {/* Footer Info: Badge + Timer */}
+                                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
+                                            +{quest.points} PTS
+                                        </span>
+
+                                        <div className="h-5 flex items-center">
+                                            {errorMessage ? (
+                                                <div className="text-xs font-bold text-red-500 flex items-center gap-1">
+                                                    <XCircle size={12} /> {errorMessage}
+                                                </div>
+                                            ) : timeLeft ? (
+                                                <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5">
+                                                    <Timer className="w-3.5 h-3.5" />
+                                                    {timeLeft}
+                                                </div>
+                                            ) : null}
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="z-10">
+                                <div className="z-10 shrink-0 self-center">
                                     <motion.button
                                         onClick={() => handleClaim(quest.id)}
                                         disabled={isLoading || isSuccess}
-                                        animate={errorMessage ? { x: [0, -5, 5, -5, 5, 0] } : {}}
-                                        transition={{ duration: 0.4 }}
-                                        className={`px-4 py-2 rounded-full font-bold text-xs min-w-[100px] flex justify-center items-center overflow-hidden relative transition-all ${isSuccess
-                                            ? 'bg-green-500 text-white'
+                                        whileTap={{ scale: 0.95 }}
+                                        className={`px-5 py-2.5 rounded-xl font-bold text-xs min-w-[90px] flex justify-center items-center overflow-hidden relative transition-all shadow-lg ${isSuccess
+                                            ? 'bg-green-500 text-white shadow-green-500/20'
                                             : errorMessage
                                                 ? 'bg-red-500 text-white'
-                                                : 'bg-white text-black hover:bg-gray-200'
+                                                : 'bg-white text-black hover:bg-gray-200 shadow-white/10'
                                             }`}
                                     >
                                         <AnimatePresence mode="wait">
@@ -167,7 +165,7 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                                                     animate={{ scale: 1, opacity: 1 }}
                                                     className="flex items-center gap-1"
                                                 >
-                                                    <Check size={16} /> Claimed
+                                                    <Check size={16} />
                                                 </motion.div>
                                             ) : (
                                                 <motion.span

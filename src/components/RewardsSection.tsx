@@ -170,7 +170,7 @@ export default function RewardsSection() {
                                                     <motion.img
                                                         initial={{ scale: 0 }}
                                                         animate={{ scale: 1 }}
-                                                        type="tween"
+                                                        transition={{ type: "tween" }}
                                                         src={previewAvatar || ''}
                                                         alt="New"
                                                         className="w-full h-full object-cover bg-white"
