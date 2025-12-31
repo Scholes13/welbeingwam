@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, Gift, Loader2, Timer } from 'lucide-react'
+import { Check, Gift, Loader2, Timer, XCircle } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/context/ToastContext'
 
-export default function DailyQuests({ quests = [], userQuests = [], onClaim }: any) {
+export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
+    const [successIds, setSuccessIds] = useState<string[]>([])
+    const [errorData, setErrorData] = useState<{ [key: string]: string }>({})
 
     const { success, error } = useToast()
 
@@ -25,96 +28,164 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim }: a
     // Force re-render every second for countdown
     const [tick, setTick] = useState(0)
     useEffect(() => {
-        // Only run timer if there are quests with deadlines
         const hasDeadline = quests.some((q: any) => q.expires_at)
         if (!hasDeadline) return
-
         const timer = setInterval(() => setTick(t => t + 1), 1000)
         return () => clearInterval(timer)
     }, [quests])
 
     const handleClaim = async (questId: string) => {
         setLoadingIds(prev => [...prev, questId])
+        setErrorData(prev => { const n = { ...prev }; delete n[questId]; return n }) // Clear previous errors
+
         try {
             const res = await fetch('/api/quests/claim', {
                 method: 'POST',
                 body: JSON.stringify({ questId })
             })
+            const data = await res.json()
+
             if (res.ok) {
-                success('Quest Claimed! Points added.')
-                onClaim() // Refresh parent data
+                // Success Animation Sequence
+                setSuccessIds(prev => [...prev, questId])
+                setTimeout(() => {
+                    onClaim() // Refresh data after animation
+                }, 1500)
             } else {
-                throw new Error('Failed to claim')
+                throw new Error(data.error || 'Failed to claim')
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error(e)
-            error('Failed to claim quest')
+            // Error Animation State
+            setErrorData(prev => ({ ...prev, [questId]: e.message || 'Failed' }))
         } finally {
             setLoadingIds(prev => prev.filter(id => id !== questId))
         }
     }
 
-    // Filter out completed quests
-    const uncompletedQuests = quests.filter((q: any) =>
-        !userQuests.some((uq: any) => uq.quest_id === q.id)
-    )
+    // Filter logic: if includeCompleted is true, show all. Else show only uncompleted.
+    const filteredQuests = includeCompleted
+        ? quests
+        : quests.filter((q: any) => !userQuests.some((uq: any) => uq.quest_id === q.id))
 
-    // If no uncompleted quests, hide the entire section (as requested)
-    if (uncompletedQuests.length === 0) return null
-
-    // Show max 3 on dashboard
-    const visibleQuests = uncompletedQuests.slice(0, 3)
+    if (filteredQuests.length === 0) return null
+    const visibleQuests = showAll ? filteredQuests : filteredQuests.slice(0, 3)
 
     return (
         <section className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Gift className="text-[#FC4C02]" /> Daily Quests
-                </h2>
-                <button
-                    onClick={() => window.location.href = '/quests'}
-                    className="text-xs text-gray-400 hover:text-white transition-colors"
-                >
-                    View All
-                </button>
-            </div>
+            {!showAll && (
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                        <Gift className="text-[#FC4C02]" /> Daily Quests
+                    </h2>
+                    <button
+                        onClick={() => window.location.href = '/quests'}
+                        className="text-xs text-gray-400 hover:text-white transition-colors"
+                    >
+                        View All
+                    </button>
+                </div>
+            )}
 
             <div className="space-y-4">
-                {visibleQuests.map((quest: any) => {
-                    const isClaiming = loadingIds.includes(quest.id)
-                    const timeLeft = quest.expires_at ? getCountdown(quest.expires_at) : null
-                    const isExpired = timeLeft === 'Expired'
+                <AnimatePresence>
+                    {visibleQuests.map((quest: any) => {
+                        const isLoading = loadingIds.includes(quest.id)
+                        const isSuccess = successIds.includes(quest.id)
+                        const errorMessage = errorData[quest.id]
 
-                    if (isExpired) return null // Hide expired quests
+                        const timeLeft = quest.expires_at ? getCountdown(quest.expires_at) : null
+                        const isExpired = timeLeft === 'Expired'
 
-                    return (
-                        <div key={quest.id} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex items-center justify-between gap-4">
-                            <div>
-                                <h3 className="font-bold text-white mb-1 flex items-center gap-2">
-                                    {quest.title}
-                                    <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] px-2 py-0.5 rounded-full">
-                                        +{quest.points}
-                                    </span>
-                                </h3>
-                                <p className="text-gray-400 text-sm line-clamp-1 mb-1">{quest.description}</p>
-                                {timeLeft && (
-                                    <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5 mt-1">
-                                        <Timer className="w-3.5 h-3.5" />
-                                        {timeLeft}
-                                    </div>
-                                )}
-                            </div>
+                        if (isExpired) return null
 
-                            <button
-                                onClick={() => handleClaim(quest.id)}
-                                disabled={isClaiming}
-                                className="bg-white text-black px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-200 transition-colors disabled:opacity-50 min-w-[80px] flex justify-center"
+                        return (
+                            <motion.div
+                                key={quest.id}
+                                layout
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9 }}
+                                className={`relative overflow-hidden border p-6 rounded-2xl flex items-center justify-between gap-4 transition-colors ${errorMessage ? 'bg-red-500/10 border-red-500/50' : 'bg-[#1a1a1a] border-white/10'
+                                    }`}
                             >
-                                {isClaiming ? <Loader2 size={16} className="animate-spin" /> : 'Done'}
-                            </button>
-                        </div>
-                    )
-                })}
+                                <div className="z-10 flex-1">
+                                    <h3 className="font-bold text-white mb-1 flex items-center gap-2">
+                                        {quest.title}
+                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] px-2 py-0.5 rounded-full">
+                                            +{quest.points}
+                                        </span>
+                                    </h3>
+                                    <p className="text-gray-400 text-sm line-clamp-1 mb-1">{quest.description}</p>
+
+                                    {/* Footer Info: Timer or Error Message */}
+                                    <div className="h-5 flex items-center">
+                                        {errorMessage ? (
+                                            <motion.div
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                className="text-xs font-bold text-red-500 flex items-center gap-1"
+                                            >
+                                                <XCircle size={12} /> {errorMessage}
+                                            </motion.div>
+                                        ) : timeLeft ? (
+                                            <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5">
+                                                <Timer className="w-3.5 h-3.5" />
+                                                {timeLeft}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="z-10">
+                                    <motion.button
+                                        onClick={() => handleClaim(quest.id)}
+                                        disabled={isLoading || isSuccess}
+                                        animate={errorMessage ? { x: [0, -5, 5, -5, 5, 0] } : {}}
+                                        transition={{ duration: 0.4 }}
+                                        className={`px-4 py-2 rounded-full font-bold text-xs min-w-[100px] flex justify-center items-center overflow-hidden relative transition-all ${isSuccess
+                                            ? 'bg-green-500 text-white'
+                                            : errorMessage
+                                                ? 'bg-red-500 text-white'
+                                                : 'bg-white text-black hover:bg-gray-200'
+                                            }`}
+                                    >
+                                        <AnimatePresence mode="wait">
+                                            {isLoading ? (
+                                                <motion.div
+                                                    key="loading"
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                >
+                                                    <Loader2 size={16} className="animate-spin" />
+                                                </motion.div>
+                                            ) : isSuccess ? (
+                                                <motion.div
+                                                    key="success"
+                                                    initial={{ scale: 0.5, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="flex items-center gap-1"
+                                                >
+                                                    <Check size={16} /> Claimed
+                                                </motion.div>
+                                            ) : (
+                                                <motion.span
+                                                    key="idle"
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                >
+                                                    {errorMessage ? 'Retry' : 'Done'}
+                                                </motion.span>
+                                            )}
+                                        </AnimatePresence>
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        )
+                    })}
+                </AnimatePresence>
             </div>
         </section>
     )

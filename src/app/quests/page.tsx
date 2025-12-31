@@ -1,52 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Check, Target, Trophy } from 'lucide-react'
-import { motion } from 'framer-motion'
-import { supabase } from '@/lib/supabase/client'
-import { useToast } from '@/context/ToastContext'
-
+import { ArrowLeft, Target } from 'lucide-react'
 import { useQuests } from '@/hooks/use-swr-hooks'
+import DailyQuests from '@/components/DailyQuests'
 
 export default function QuestsPage() {
     const { quests, userQuests, isLoading, mutate } = useQuests()
     const router = useRouter()
-    const { success, error } = useToast()
-
-    // Auto-fetch handled by SWR
-
-    const handleClaim = async (questId: string) => {
-        // Optimistic UI update
-        const originalUserQuests = [...userQuests]
-        const mockEntry = { quest_id: questId, status: 'approved' }
-
-        // Mutate immediately with optimistic data
-        mutate({
-            quests,
-            userQuests: [...userQuests, mockEntry]
-        }, { revalidate: false })
-
-        try {
-            const res = await fetch('/api/quests/claim', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ questId })
-            })
-
-            if (!res.ok) throw new Error('Failed to claim')
-
-            if (!res.ok) throw new Error('Failed to claim')
-
-            // Refresh real data
-            mutate()
-            success('Quest claimed!')
-        } catch (e) {
-            // Revert on error
-            mutate({ quests, userQuests: originalUserQuests }, { revalidate: false })
-            error('Failed to claim quest')
-        }
-    }
 
     return (
         <div className="min-h-screen bg-black text-white p-4 pb-32">
@@ -74,59 +35,13 @@ export default function QuestsPage() {
                 {isLoading ? (
                     <div className="text-center py-12 text-gray-500">Loading quests...</div>
                 ) : (
-                    <div className="space-y-4">
-                        {quests.map((quest: any) => {
-                            const isCompleted = userQuests.some((uq: any) => uq.quest_id === quest.id)
-
-                            return (
-                                <motion.div
-                                    key={quest.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className={`relative p-6 rounded-2xl border flex items-center justify-between gap-4 transition-all
-                                        ${isCompleted
-                                            ? 'bg-green-500/10 border-green-500/20 opacity-70'
-                                            : 'bg-[#1a1a1a] border-white/10 hover:border-yellow-500/50'
-                                        }
-                                    `}
-                                >
-                                    <div className="flex-1">
-                                        <h3 className={`font-bold mb-1 ${isCompleted ? 'text-green-400 line-through' : 'text-white'}`}>
-                                            {quest.title}
-                                        </h3>
-                                        <p className="text-xs text-gray-400 line-clamp-2">
-                                            {quest.description}
-                                        </p>
-                                    </div>
-
-                                    <div className="flex flex-col items-end gap-2 shrink-0">
-                                        <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-lg font-mono text-xs font-bold">
-                                            +{quest.points} PTS
-                                        </span>
-
-                                        {isCompleted ? (
-                                            <div className="flex items-center gap-1 text-green-500 text-xs font-bold px-3 py-1.5 bg-green-500/10 rounded-full">
-                                                <Check size={14} /> Done
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => handleClaim(quest.id)}
-                                                className="px-4 py-1.5 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 transition-colors"
-                                            >
-                                                Complete
-                                            </button>
-                                        )}
-                                    </div>
-                                </motion.div>
-                            )
-                        })}
-
-                        {quests.length === 0 && (
-                            <div className="text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
-                                No active quests today.
-                            </div>
-                        )}
-                    </div>
+                    <DailyQuests
+                        quests={quests}
+                        userQuests={userQuests}
+                        onClaim={() => mutate()}
+                        showAll={true}
+                        includeCompleted={true}
+                    />
                 )}
             </div>
         </div>

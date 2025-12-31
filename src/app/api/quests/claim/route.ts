@@ -17,6 +17,24 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    const { data: quest } = await supabase
+        .from('quests')
+        .select('verification_type')
+        .eq('id', questId)
+        .single()
+
+    if (quest?.verification_type === 'instagram_username') {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('instagram_username')
+            .eq('id', currentUserId)
+            .single()
+        
+        if (!profile?.instagram_username) {
+            return NextResponse.json({ error: 'Please connect your Instagram username in Profile first.' }, { status: 400 })
+        }
+    }
+
     // Check if already claimed
     const { data: existing } = await supabase
         .from('user_quests')

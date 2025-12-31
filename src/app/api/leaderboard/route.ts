@@ -14,7 +14,7 @@ export async function GET() {
         // 1. Fetch Users
         const { data: profiles, error: profileError } = await supabase
             .from('profiles')
-            .select('id, full_name, avatar_url, instagram_username')
+            .select('id, full_name, avatar_url, instagram_username, username')
 
         if (profileError) throw profileError
 
@@ -45,6 +45,10 @@ export async function GET() {
 
         // Initialize stats
         profiles?.forEach(p => {
+             // Exclude Admins
+             const isExcluded = ['admin_wam'].includes(p.username) || ['Super Admin', 'pramuji arif'].includes(p.full_name);
+             if (isExcluded) return;
+
              // Handle BigInt by converting to string if needed, but JS numbers are usually fine for display unless > 2^53.
              // Supabase JS often returns BigInt as numbers if they fit.
             stats[p.id] = {

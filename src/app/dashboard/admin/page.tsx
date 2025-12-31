@@ -50,6 +50,8 @@ export default function AdminPage() {
     const [questDesc, setQuestDesc] = useState('')
     const [questPoints, setQuestPoints] = useState('')
     const [questExpiresAt, setQuestExpiresAt] = useState('')
+    const [questVerificationType, setQuestVerificationType] = useState('none') // New state
+
 
     // Form State (Survey Container)
     const [surveyContainerData, setSurveyContainerData] = useState({
@@ -340,7 +342,8 @@ export default function AdminPage() {
                     title: questTitle,
                     description: questDesc,
                     points: parseInt(questPoints) || 0,
-                    expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null
+                    expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null,
+                    verification_type: questVerificationType
                 }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
                 // Create Survey Container
@@ -379,6 +382,7 @@ export default function AdminPage() {
                     setQuestDesc('')
                     setQuestPoints('')
                     setQuestExpiresAt('')
+                    setQuestVerificationType('none')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
                     setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0 })
@@ -1038,6 +1042,17 @@ export default function AdminPage() {
                                                 onChange={(e) => setQuestExpiresAt(e.target.value)}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] [&::-webkit-calendar-picker-indicator]:invert"
                                             />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Verification Type</label>
+                                            <select
+                                                value={questVerificationType}
+                                                onChange={(e) => setQuestVerificationType(e.target.value)}
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            >
+                                                <option value="none">None (Instant Claim)</option>
+                                                <option value="instagram_username">Check Instagram Username</option>
+                                            </select>
                                         </div>
                                     </>
                                 ) : activeTab === 'rewards' ? (
