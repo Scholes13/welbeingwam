@@ -37,6 +37,8 @@ export default function AdminPage() {
     const [spots, setSpots] = useState<any[]>([])
     const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '' })
     const [selectedSpot, setSelectedSpot] = useState<any>(null)
+    const [spotClaims, setSpotClaims] = useState<any[]>([])
+    const [showSpotDetail, setShowSpotDetail] = useState(false)
     const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
     const router = useRouter()
@@ -312,10 +314,51 @@ export default function AdminPage() {
             if (res.ok) {
                 success('Spot deleted!')
                 fetchSpots()
+                // Close detail if currently viewing this spot
+                if (selectedSpot?.id === spotId) {
+                    setShowSpotDetail(false)
+                    setSelectedSpot(null)
+                }
             }
         } catch (e) {
             toastError('Failed to delete spot')
         }
+    }
+
+    const fetchSpotDetail = async (spotId: string) => {
+        try {
+            const res = await fetch(`/api/admin/spots/detail?id=${spotId}`)
+            const data = await res.json()
+            if (res.ok) {
+                setSelectedSpot(data.spot)
+                setSpotClaims(data.claims || [])
+                setShowSpotDetail(true)
+            }
+        } catch (e) {
+            toastError('Failed to fetch spot details')
+        }
+    }
+
+    const exportSpotClaims = () => {
+        if (!selectedSpot || spotClaims.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram', 'Claimed At']
+        const rows = spotClaims.map((claim, idx) => [
+            idx + 1,
+            claim.full_name || '-',
+            claim.username || '-',
+            claim.instagram_username || '-',
+            new Date(claim.claimed_at).toLocaleString('id-ID')
+        ])
+
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${selectedSpot.name}_claims_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
     }
 
     const copyToClipboard = (code: string) => {
@@ -1156,9 +1199,13 @@ export default function AdminPage() {
 
             {/* QR Spots Tab */}
             {activeTab === 'spots' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
                     {spots.map((spot) => (
-                        <div key={spot.id} className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden">
+                        <div
+                            key={spot.id}
+                            className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:border-[#FC4C02]/50 transition-colors group"
+                            onClick={() => fetchSpotDetail(spot.id)}
+                        >
                             {/* QR Code Preview */}
                             <div className="bg-white p-4 flex justify-center">
                                 <img
@@ -1191,14 +1238,14 @@ export default function AdminPage() {
 
                                 <div className="flex gap-2 mb-3">
                                     <button
-                                        onClick={() => copyToClipboard(spot.code)}
+                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(spot.code) }}
                                         className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
                                     >
                                         {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
                                         {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
                                     </button>
                                     <button
-                                        onClick={() => downloadQR(spot.code, spot.name)}
+                                        onClick={(e) => { e.stopPropagation(); downloadQR(spot.code, spot.name) }}
                                         className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
                                     >
                                         <Download size={14} />
@@ -1210,13 +1257,20 @@ export default function AdminPage() {
                                     {spot.code}
                                 </div>
 
-                                <button
-                                    onClick={() => handleDeleteSpot(spot.id)}
-                                    className="w-full flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 py-2 rounded-lg text-sm transition-colors"
-                                >
-                                    <Trash2 size={14} />
-                                    Delete
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); fetchSpotDetail(spot.id) }}
+                                        className="flex-1 flex items-center justify-center gap-1 bg-[#FC4C02]/10 text-[#FC4C02] hover:bg-[#FC4C02]/20 py-2 rounded-lg text-sm transition-colors font-medium"
+                                    >
+                                        View Claims
+                                    </button>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteSpot(spot.id) }}
+                                        className="flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm transition-colors"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -1314,6 +1368,90 @@ export default function AdminPage() {
                                     {createLoading ? <Loader2 className="animate-spin" /> : 'Create Spot'}
                                 </button>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Spot Detail Modal */}
+            <AnimatePresence>
+                {showSpotDetail && selectedSpot && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => { setShowSpotDetail(false); setSelectedSpot(null) }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-lg bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto"
+                        >
+                            <button onClick={() => { setShowSpotDetail(false); setSelectedSpot(null) }} className="absolute top-4 right-4 text-gray-500 hover:text-white">
+                                <X size={20} />
+                            </button>
+
+                            <div className="mb-6">
+                                <h3 className="text-2xl font-bold mb-1">{selectedSpot.name}</h3>
+                                <p className="text-gray-400 text-sm">{selectedSpot.description || 'No description'}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold text-[#FC4C02]">+{selectedSpot.points}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Points</p>
+                                </div>
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold">{spotClaims.length}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Total Claims</p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-sm font-bold text-gray-400 uppercase">Who Claimed</h4>
+                                {spotClaims.length > 0 && (
+                                    <button
+                                        onClick={exportSpotClaims}
+                                        className="flex items-center gap-1 text-[#FC4C02] text-sm hover:underline"
+                                    >
+                                        <Download size={14} />
+                                        Export CSV
+                                    </button>
+                                )}
+                            </div>
+
+                            {spotClaims.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 border border-dashed border-white/10 rounded-xl">
+                                    <p>No one has claimed this spot yet.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {spotClaims.map((claim, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 bg-black/30 rounded-xl p-3">
+                                            <img
+                                                src={claim.avatar_url || '/avatar-placeholder.png'}
+                                                alt={claim.full_name}
+                                                className="w-10 h-10 rounded-full object-cover"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium truncate">{claim.full_name || 'User'}</p>
+                                                <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-400">
+                                                    {new Date(claim.claimed_at).toLocaleDateString('id-ID')}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {new Date(claim.claimed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </motion.div>
                     </div>
                 )}
