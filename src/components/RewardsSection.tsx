@@ -16,6 +16,13 @@ export default function RewardsSection() {
     const [showPreview, setShowPreview] = useState(false) // Modal state
     const [previewAvatar, setPreviewAvatar] = useState<string | null>(null)
     const [claimSuccess, setClaimSuccess] = useState<string | null>(null)
+
+    // Background Gacha states
+    const [isBgGacha, setIsBgGacha] = useState(false)
+    const [showBgPreview, setShowBgPreview] = useState(false)
+    const [previewBackground, setPreviewBackground] = useState<any>(null)
+    const BACKGROUND_GACHA_PRICE = 300 // Can be fetched from API later
+
     const { success, error } = useToast()
 
     // Auto-fetch handled by SWR
@@ -79,6 +86,66 @@ export default function RewardsSection() {
     const closeModal = () => {
         setShowPreview(false)
         setPreviewAvatar(null)
+    }
+
+    // Background Gacha handlers
+    const handleBgGacha = async () => {
+        setIsBgGacha(true)
+        setShowBgPreview(true)
+        setPreviewBackground(null)
+
+        try {
+            const [res] = await Promise.all([
+                fetch('/api/rewards/background-gacha', { method: 'POST' }),
+                new Promise(resolve => setTimeout(resolve, 2000))
+            ])
+
+            const data = await res.json()
+
+            if (res.ok) {
+                setPreviewBackground(data.background)
+                mutate()
+            } else {
+                setShowBgPreview(false)
+                error(data.error || 'Failed to gacha')
+            }
+        } catch (e) {
+            setShowBgPreview(false)
+            error('Something went wrong')
+        } finally {
+            setIsBgGacha(false)
+        }
+    }
+
+    const handleEquipBackground = async () => {
+        if (!previewBackground) return
+        try {
+            const res = await fetch('/api/user/update-background', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ backgroundId: previewBackground.id })
+            })
+            if (res.ok) {
+                mutateProfile()
+                setShowBgPreview(false)
+                success('New background equipped!')
+                confetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#FC4C02', '#ffd700', '#ffffff']
+                })
+            } else {
+                error('Failed to equip')
+            }
+        } catch (e) {
+            error('Connection error')
+        }
+    }
+
+    const closeBgModal = () => {
+        setShowBgPreview(false)
+        setPreviewBackground(null)
     }
 
     const handleClaim = async (rewardId: string) => {
@@ -208,6 +275,93 @@ export default function RewardsSection() {
                 )}
             </AnimatePresence>
 
+            {/* Background Reroll Modal */}
+            <AnimatePresence>
+                {showBgPreview && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={!isBgGacha ? closeBgModal : undefined}
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-[#1a1a1a] border border-[#FC4C02] rounded-3xl p-6 w-full max-w-md relative z-10 shadow-[0_0_50px_rgba(252,76,2,0.3)]"
+                        >
+                            {!isBgGacha && (
+                                <button
+                                    onClick={closeBgModal}
+                                    className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                                >
+                                    <X size={24} />
+                                </button>
+                            )}
+
+                            <div className="text-center">
+                                <h3 className="text-2xl font-bold mb-6 flex items-center justify-center gap-2">
+                                    <Shuffle className="text-[#FC4C02]" />
+                                    {isBgGacha ? 'ROLLING...' : 'BACKGROUND RESULT'}
+                                </h3>
+
+                                <div className="mb-8">
+                                    <div className={`w-full h-48 rounded-2xl overflow-hidden border-2 border-[#FC4C02] shadow-[0_0_30px_rgba(252,76,2,0.4)] ${isBgGacha ? 'animate-pulse' : ''}`}>
+                                        {isBgGacha ? (
+                                            <div className="w-full h-full bg-[#FC4C02]/20 flex items-center justify-center">
+                                                <motion.div
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                                                >
+                                                    <Shuffle size={32} className="text-[#FC4C02]" />
+                                                </motion.div>
+                                            </div>
+                                        ) : previewBackground?.image ? (
+                                            <img
+                                                src={previewBackground.image}
+                                                alt={previewBackground.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            <div
+                                                className="w-full h-full"
+                                                style={{ background: previewBackground?.gradient || 'linear-gradient(180deg, #FC4C02 0%, #ff7043 100%)' }}
+                                            />
+                                        )}
+                                    </div>
+                                    {previewBackground && (
+                                        <p className="mt-3 text-lg font-bold text-[#FC4C02]">{previewBackground.name}</p>
+                                    )}
+                                </div>
+
+                                {!isBgGacha && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={closeBgModal}
+                                            className="py-3 rounded-xl font-bold border border-white/10 hover:bg-white/5 transition-colors text-gray-400"
+                                        >
+                                            Keep Old
+                                        </button>
+                                        <button
+                                            onClick={handleEquipBackground}
+                                            className="py-3 rounded-xl font-bold bg-[#FC4C02] hover:bg-[#e04402] text-white transition-colors shadow-lg shadow-[#FC4C02]/20 flex items-center justify-center gap-2"
+                                        >
+                                            Equip New <Check size={18} />
+                                        </button>
+                                    </div>
+                                )}
+
+                                {isBgGacha && (
+                                    <p className="text-sm text-gray-500 animate-pulse">Designing your new background...</p>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                     <Gift className="text-[#FC4C02]" /> Rewards
@@ -250,7 +404,35 @@ export default function RewardsSection() {
                         </div>
                     </div>
                 </div>
-                {rewards.map((reward: any) => (
+
+                {/* Background Reroll Card */}
+                <div className="relative bg-[#1a1a1a] border border-[#FC4C02] rounded-2xl overflow-hidden flex flex-col justify-between group shadow-[0_0_15px_rgba(252,76,2,0.15)]">
+                    <div className="h-32 bg-[#FC4C02]/10 flex items-center justify-center relative overflow-hidden">
+                        <span className="text-3xl">🎴</span>
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col">
+                        <h3 className="font-bold text-sm mb-1 text-white">ID Card Background</h3>
+                        <p className="text-xs text-gray-500 mb-3">Reroll your ID card look!</p>
+
+                        <div className="mt-auto">
+                            <div className="flex gap-2 mb-3 text-[10px] font-bold uppercase">
+                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= BACKGROUND_GACHA_PRICE ? 'text-yellow-500' : 'text-gray-600'}`}>
+                                    {BACKGROUND_GACHA_PRICE} COINS
+                                </span>
+                            </div>
+                            <button
+                                onClick={handleBgGacha}
+                                disabled={isBgGacha || (userStats.availableCoins ?? 0) < BACKGROUND_GACHA_PRICE}
+                                className="w-full py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-[#FC4C02] text-white hover:bg-[#e04402] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {isBgGacha ? <Loader2 className="animate-spin w-3 h-3" /> : <Shuffle className="w-3 h-3" />}
+                                {isBgGacha ? 'ROLLING...' : 'REROLL'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {rewards.filter((r: any) => r.title !== 'Background Reroll').map((reward: any) => (
                     <div
                         key={reward.id}
                         className={`relative bg-[#1a1a1a] border rounded-2xl overflow-hidden flex flex-col justify-between group

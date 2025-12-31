@@ -303,8 +303,23 @@ export default function ProfilePage() {
             {showIdCard && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setShowIdCard(false)}>
                     <div className="bg-white text-black p-8 rounded-3xl w-full max-w-sm relative overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {/* Card Background Pattern */}
-                        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-r from-[#FC4C02] to-orange-400" />
+                        {/* Card Background */}
+                        {(() => {
+                            const backgrounds: Record<string, { gradient: string, image?: string }> = {
+                                default: { gradient: 'linear-gradient(to right, #FC4C02, #ff7043)' },
+                                olympus: { gradient: 'linear-gradient(to right, #ffd700, #ffffff)', image: 'https://images.unsplash.com/photo-1503152394-c571994fd383?w=800&h=400&fit=crop&q=80' },
+                                christmas: { gradient: 'linear-gradient(to right, #c41e3a, #165b33)', image: 'https://images.unsplash.com/photo-1482517967863-00e15c9b44be?w=800&h=400&fit=crop&q=80' },
+                                newyear: { gradient: 'linear-gradient(to right, #0f0c29, #24243e)', image: 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&h=400&fit=crop&q=80' },
+                                bali: { gradient: 'linear-gradient(to right, #ff6b35, #9b4dca)', image: 'https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=800&h=400&fit=crop&q=80' },
+                                street: { gradient: 'linear-gradient(to right, #2b5876, #4e4376)', image: 'https://images.unsplash.com/photo-1528360983277-13d401cdc186?w=800&h=400&fit=crop&q=80' },
+                            }
+                            const bg = backgrounds[profile.card_background as string] || backgrounds.default
+                            return bg.image ? (
+                                <div className="absolute top-0 left-0 w-full h-32 bg-cover bg-center" style={{ backgroundImage: `url(${bg.image})` }} />
+                            ) : (
+                                <div className="absolute top-0 left-0 w-full h-32" style={{ background: bg.gradient }} />
+                            )
+                        })()}
 
                         <div className="relative flex flex-col items-center">
                             <div className="bg-white p-1.5 rounded-full mb-4 shadow-lg mt-8">
