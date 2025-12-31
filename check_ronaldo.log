@@ -1,0 +1,6 @@
+Users Found: [{"id":-1767144531414,"username":"ronaldo","full_name":"ronaldo","avatar_url":"https://api.dicebear.com/7.x/avataaars/svg?seed=ronaldo","access_token":null,"refresh_token":null,"expires_at":null,"created_at":"2025-12-31T01:28:51.914823+00:00","updated_at":null,"strava_client_id":null,"strava_client_secret":null,"access_code":"CODE-5617","is_manual":true,"password":"werkudara88","sync_key":"710d7c2f-957a-4aad-bed6-f08cbaaf52d5","is_admin":false,"gender":null,"instagram_username":null}]
+
+--- Checking User: ronaldo (-1767144531414) ---
+Attendance: [{"id":"89a45cc9-b95b-4525-bb07-4f7c7aeb61e4","activity_id":"4e1652cf-a69a-40ea-a76f-160710ad05f6","user_id":-1767144531414,"scanned_at":"2025-12-31T01:29:58.488263+00:00","admin_activities":{"title":"Yow","points":10}}]
+Adjustments: []
+Notifications: [{"id":"903fccfd-2207-4634-b559-2c2d81dee47c","user_id":-1767144531414,"title":"Activity Points Awarded","message":"You earned 10 points for attending Yow!","type":"info","is_read":false,"created_at":"2025-12-31T01:29:59.208505+00:00"}]
