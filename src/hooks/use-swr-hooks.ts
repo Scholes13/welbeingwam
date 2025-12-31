@@ -29,6 +29,7 @@ export function useRewards() {
 
     return {
         rewards: data?.rewards || [],
+        rerollPrice: data?.rerollPrice || 500, // Default 500
         userStats: data?.userStats || { totalPoints: 0, totalSteps: 0 },
         isLoading,
         isError: error,
@@ -76,6 +77,7 @@ export function useProfile() {
         userQuests: data?.userQuests || [],
         surveys: data?.surveys || [],
         totalPoints: data?.totalPoints || 0,
+        coins: data?.coins || 0,
         stats,
         isLoading,
         isError: error,

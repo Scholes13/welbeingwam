@@ -38,23 +38,41 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Steps must be a number' }, { status: 400 })
     }
 
-    // 2. Insert Manual Activity for Steps
-    const { error: actError } = await supabase
-        .from('activities')
-        .insert({
-            id: Date.now(), // Generate unique ID for manual adjustment
-            user_id: targetUserId,
-            name: `Manual Adjustment: ${reason}`,
-            type: 'Manual',
-            distance: 0,
-            steps: stepsInt,
-            start_date: new Date().toISOString(),
-            moving_time: 0
-        })
+    // Handle Integer Overflow (split into chunks of 2B)
+    const MAX_INT = 2000000000
+    const chunks = []
+    let remaining = stepsInt
 
-    if (actError) {
-        console.error('Points Adjustment (Steps Activity) Error:', actError)
-        throw actError
+    while (Math.abs(remaining) > 0) {
+        let chunk = remaining
+        if (chunk > MAX_INT) chunk = MAX_INT
+        if (chunk < -MAX_INT) chunk = -MAX_INT
+        
+        chunks.push(chunk)
+        remaining -= chunk
+    }
+
+    console.log(`[Admin] Splitting ${stepsInt} steps into ${chunks.length} chunks:`, chunks)
+
+    // 2. Insert Manual Activity for Steps (Loop through chunks)
+    for (const [index, stepChunk] of chunks.entries()) {
+        const { error: actError } = await supabase
+            .from('activities')
+            .insert({
+                id: Date.now() + index, // Ensure unique ID per chunk
+                user_id: targetUserId,
+                name: `Manual Adjustment: ${reason} ${chunks.length > 1 ? `(Part ${index + 1}/${chunks.length})` : ''}`,
+                type: 'Manual',
+                distance: 0,
+                steps: stepChunk,
+                start_date: new Date().toISOString(),
+                moving_time: 0
+            })
+
+        if (actError) {
+            console.error('Points Adjustment (Steps Activity) Error:', actError)
+            throw actError
+        }
     }
 
     return NextResponse.json({ success: true })

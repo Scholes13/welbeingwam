@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -89,6 +89,37 @@ export default function AdminPage() {
     const [showStepsModal, setShowStepsModal] = useState(false)
     const [stepsTarget, setStepsTarget] = useState<{ id: string, name: string } | null>(null)
     const [adjustStepsData, setAdjustStepsData] = useState<{ steps: string | number, reason: string }>({ steps: '', reason: '' })
+
+    // Reset Points State
+    const [showResetModal, setShowResetModal] = useState(false)
+    const [resetTarget, setResetTarget] = useState<{ id: string, name: string } | null>(null)
+    const [isResetting, setIsResetting] = useState(false)
+
+
+    // Search & Bulk Actions
+    const [searchTerm, setSearchTerm] = useState('')
+    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
+
+    const filteredUsers = users.filter(user =>
+        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.username?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
+    const toggleSelectAll = () => {
+        if (selectedUserIds.length === filteredUsers.length) {
+            setSelectedUserIds([])
+        } else {
+            setSelectedUserIds(filteredUsers.map(u => u.id))
+        }
+    }
+
+    const toggleSelectUser = (id: string) => {
+        if (selectedUserIds.includes(id)) {
+            setSelectedUserIds(selectedUserIds.filter(uid => uid !== id))
+        } else {
+            setSelectedUserIds([...selectedUserIds, id])
+        }
+    }
 
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
@@ -248,43 +279,61 @@ export default function AdminPage() {
         } catch (e) { console.error(e) }
     }
 
+    const openPointsModal = (user: { id: string, name: string }) => {
+        setPointsTarget(user)
+        setAdjustPointsData({ points: '', reason: '' })
+        setShowPointsModal(true)
+    }
+
+    const openBulkPointsModal = () => {
+        setPointsTarget({ id: 'bulk', name: `${selectedUserIds.length} Users` })
+        setAdjustPointsData({ points: '', reason: '' })
+        setShowPointsModal(true)
+    }
+
     const handleAdjustPoints = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!pointsTarget) return
 
         setIsAdjusting(true)
         try {
-            const res = await fetch('/api/admin/users/points', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targetUserId: pointsTarget.id,
-                    points: Number(adjustPointsData.points),
-                    reason: adjustPointsData.reason
+            if (pointsTarget.id === 'bulk') {
+                await Promise.all(selectedUserIds.map(uid =>
+                    fetch('/api/admin/users/points', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            targetUserId: uid,
+                            points: Number(adjustPointsData.points),
+                            reason: adjustPointsData.reason
+                        })
+                    }).then(res => { if (!res.ok) throw new Error('Failed') })
+                ))
+            } else {
+                const res = await fetch('/api/admin/users/points', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        targetUserId: pointsTarget.id,
+                        points: Number(adjustPointsData.points),
+                        reason: adjustPointsData.reason
+                    })
                 })
-            })
-
-            if (!res.ok) throw new Error('Failed to adjust points')
-
-            if (!res.ok) throw new Error('Failed to adjust points')
+                if (!res.ok) throw new Error('Failed to adjust points')
+            }
 
             success('Points adjusted successfully!')
             setShowPointsModal(false)
             setAdjustPointsData({ points: '', reason: '' })
             setPointsTarget(null)
-            fetchUsers() // Refresh list
+            setSelectedUserIds([]) // Clear selection
+            fetchUsers()
         } catch (err: any) {
             console.error(err)
             toastError(err.message || 'Error adjusting points')
         } finally {
             setIsAdjusting(false)
         }
-    }
-
-    const openPointsModal = (user: { id: string, name: string }) => {
-        setPointsTarget(user)
-        setAdjustPointsData({ points: '', reason: '' })
-        setShowPointsModal(true)
     }
 
     const handleAdjustSteps = async (e: React.FormEvent) => {
@@ -322,6 +371,58 @@ export default function AdminPage() {
         setStepsTarget(user)
         setAdjustStepsData({ steps: '', reason: '' })
         setShowStepsModal(true)
+    }
+
+    const openResetModal = (user: { id: string, name: string }) => {
+        setResetTarget(user)
+        setShowResetModal(true)
+    }
+
+    const openBulkResetModal = () => {
+        setResetTarget({ id: 'bulk', name: `${selectedUserIds.length} Users` })
+        setShowResetModal(true)
+    }
+
+    const handleResetPoints = async (type: 'steps' | 'quests' | 'all') => {
+        if (!resetTarget) return
+
+        // Removed native confirm. UI is explicit enough.
+
+        setIsResetting(true)
+        try {
+            if (resetTarget.id === 'bulk') {
+                await Promise.all(selectedUserIds.map(uid =>
+                    fetch('/api/admin/users/reset', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ targetUserId: uid, type })
+                    }).then(res => { if (!res.ok) throw new Error('Failed') })
+                ))
+            } else {
+                const res = await fetch('/api/admin/users/reset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        targetUserId: resetTarget.id,
+                        type
+                    })
+                })
+                if (!res.ok) throw new Error('Failed to reset')
+            }
+
+            const typeText = type === 'all' ? 'Semua Poin' : (type === 'steps' ? 'Steps' : 'Quests')
+            success(`Berhasil mereset ${typeText} untuk ${resetTarget.name}!`)
+
+            setShowResetModal(false)
+            setResetTarget(null)
+            setSelectedUserIds([]) // Clear selection
+            fetchUsers()
+        } catch (err: any) {
+            console.error(err)
+            toastError(err.message || 'Gagal mereset poin')
+        } finally {
+            setIsResetting(false)
+        }
     }
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -528,15 +629,48 @@ export default function AdminPage() {
                                 <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
                                 <input
                                     type="text"
-                                    placeholder="Search users..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Search users by name or username..."
                                     className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                 />
                             </div>
                         </div>
 
+                        {/* Bulk Actions Toolbar */}
+                        {selectedUserIds.length > 0 && (
+                            <div className="bg-[#FC4C02]/10 p-4 flex items-center justify-between border-b border-[#FC4C02]/20 animate-in fade-in slide-in-from-top-2">
+                                <div className="text-[#FC4C02] font-bold text-sm">
+                                    {selectedUserIds.length} Users Selected
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => openBulkPointsModal()} // Need to implement
+                                        className="px-4 py-2 bg-[#FC4C02] text-white rounded-lg text-sm font-bold hover:bg-orange-600 transition-colors flex items-center gap-2"
+                                    >
+                                        <Plus size={16} /> Bulk Add Points
+                                    </button>
+                                    <button
+                                        onClick={() => openBulkResetModal()} // Need to implement
+                                        className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-colors flex items-center gap-2"
+                                    >
+                                        <RotateCcw size={16} /> Bulk Reset
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <table className="w-full text-left">
                             <thead className="bg-black/50 text-gray-400 text-sm uppercase">
                                 <tr>
+                                    <th className="p-4 w-12 text-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length}
+                                            onChange={toggleSelectAll}
+                                            className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
+                                        />
+                                    </th>
                                     <th className="p-4">User</th>
                                     <th className="p-4">Username</th>
                                     <th className="p-4">Access Code</th>
@@ -547,8 +681,16 @@ export default function AdminPage() {
                             <tbody className="divide-y divide-white/10">
                                 {loading ? (
                                     <tr><td colSpan={5} className="p-8 text-center text-gray-500">Loading...</td></tr>
-                                ) : users.map((user) => (
+                                ) : filteredUsers.map((user) => (
                                     <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-4 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUserIds.includes(user.id)}
+                                                onChange={() => toggleSelectUser(user.id)}
+                                                className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
+                                            />
+                                        </td>
                                         <td className="p-4 flex items-center gap-3">
                                             <img src={user.avatar_url} className="w-10 h-10 rounded-full" alt="" />
                                             <span className="font-medium">{user.full_name}</span>
@@ -576,6 +718,13 @@ export default function AdminPage() {
                                                         className="p-2 bg-purple-500/10 text-purple-500 rounded-lg hover:bg-purple-500/20 transition-colors"
                                                     >
                                                         <Footprints size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
+                                                        title="Reset Points"
+                                                        className="p-2 bg-orange-500/10 text-orange-500 rounded-lg hover:bg-orange-500/20 transition-colors"
+                                                    >
+                                                        <RotateCcw size={14} />
                                                     </button>
                                                     <button
                                                         onClick={() => promptDeleteUser(user.id, user.username)}
@@ -622,6 +771,18 @@ export default function AdminPage() {
                                             className="p-2 text-purple-500 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg shrink-0 transition-colors"
                                         >
                                             <Footprints size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
+                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
+                                        >
+                                            <RotateCcw size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
+                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
+                                        >
+                                            <RotateCcw size={18} />
                                         </button>
                                         <button
                                             onClick={() => promptDeleteUser(user.id, user.username)}
@@ -1069,25 +1230,15 @@ export default function AdminPage() {
                                                 placeholder="e.g. Eco-Friendly Water Bottle"
                                             />
                                         </div>
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Required Points</label>
-                                                <input
-                                                    type="number"
-                                                    value={rewardData.required_points}
-                                                    onChange={(e) => setRewardData({ ...rewardData, required_points: parseInt(e.target.value) || 0 })}
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Required Steps</label>
-                                                <input
-                                                    type="number"
-                                                    value={rewardData.required_steps}
-                                                    onChange={(e) => setRewardData({ ...rewardData, required_steps: parseInt(e.target.value) || 0 })}
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                                />
-                                            </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Price (Coins)</label>
+                                            <input
+                                                type="number"
+                                                value={rewardData.required_points}
+                                                onChange={(e) => setRewardData({ ...rewardData, required_points: parseInt(e.target.value) || 0 })}
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                placeholder="0"
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase flex justify-between">
@@ -1310,6 +1461,70 @@ export default function AdminPage() {
                 }
 
             </AnimatePresence >
+
+            {/* Reset Points Modal */}
+            <AnimatePresence>
+                {showResetModal && resetTarget && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowResetModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                        >
+                            <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2">
+                                <RotateCcw className="text-[#FC4C02]" /> Reset Points
+                            </h3>
+                            <p className="text-gray-400 mb-6 text-sm">
+                                Resetting points for <span className="text-white font-bold">{resetTarget.name}</span>.
+                                <br />
+                                <span className="text-red-500 font-bold block mt-2">⚠️ This action cannot be undone.</span>
+                            </p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => handleResetPoints('steps')}
+                                    disabled={isResetting}
+                                    className="w-full py-3 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20 hover:bg-purple-500/20 font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isResetting ? <Loader2 size={16} className="animate-spin" /> : <Footprints size={16} />}
+                                    Reset Steps Only
+                                </button>
+                                <button
+                                    onClick={() => handleResetPoints('quests')}
+                                    disabled={isResetting}
+                                    className="w-full py-3 rounded-xl bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 hover:bg-yellow-500/20 font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isResetting ? <Loader2 size={16} className="animate-spin" /> : <Gift size={16} />}
+                                    Reset Quests Only
+                                </button>
+                                <button
+                                    onClick={() => handleResetPoints('all')}
+                                    disabled={isResetting}
+                                    className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isResetting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                    Reset EVERYTHING
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setShowResetModal(false)}
+                                className="w-full mt-4 text-gray-500 hover:text-white text-sm"
+                            >
+                                Cancel
+                            </button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             {/* Create Activity Modal */}
             <AnimatePresence>

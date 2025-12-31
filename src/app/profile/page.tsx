@@ -4,14 +4,14 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { LogOut, Settings, Award, Activity, Scan, Footprints, Trophy } from 'lucide-react'
+import { LogOut, Settings, Activity, Scan, Footprints, Trophy } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { useProfile } from '@/hooks/use-swr-hooks'
 
 import Loader from '@/components/ui/Loader'
 
 export default function ProfilePage() {
-    const { profile, stats, totalPoints, isLoading: loading } = useProfile()
+    const { profile, stats, totalPoints, coins, isLoading: loading } = useProfile()
     const [showIdCard, setShowIdCard] = useState(false)
     const router = useRouter()
 
@@ -45,7 +45,12 @@ export default function ProfilePage() {
                             className="w-28 h-28 rounded-full border-4 border-[#FC4C02]/20 object-cover shadow-[0_0_30px_rgba(252,76,2,0.2)]"
                         />
                         <div className="absolute bottom-0 right-0 bg-[#FC4C02] text-white p-1.5 rounded-full border-4 border-black">
-                            <Award className="w-5 h-5" />
+                            <div className="w-5 h-5 flex items-center justify-center">
+                                <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
+                                    <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
                         </div>
                     </div>
 
@@ -66,6 +71,25 @@ export default function ProfilePage() {
                         <span className="text-2xl font-bold font-mono">{totalPoints.toLocaleString()}</span>
                         <span className="text-xs text-gray-500 uppercase">Total Points</span>
                     </div>
+                </div>
+
+                {/* Coins Wallet */}
+                <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-md border border-[#FC4C02]/30 p-5 rounded-2xl flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-[#FC4C02]/20 rounded-xl text-[#FC4C02]">
+                            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
+                                <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </div>
+                        <div>
+                            <span className="block text-2xl font-bold font-mono text-white">{coins?.toLocaleString() || 0}</span>
+                            <span className="text-xs text-orange-400 font-bold uppercase tracking-wider">Available Coins</span>
+                        </div>
+                    </div>
+                    <Link href="/rewards" className="px-4 py-2 bg-[#FC4C02] hover:bg-orange-600 text-white text-xs font-bold uppercase rounded-lg transition-colors">
+                        Redeem
+                    </Link>
                 </div>
 
                 {/* Menu */}

@@ -19,12 +19,17 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 
 async function checkSchema() {
     const { data, error } = await supabase
-        .from('profiles')
+        .from('activities')
         .select('*')
         .limit(1)
 
+    // This just gets column names. I need types.
+    // Supabase-js doesn't give types easily via select.
+    // I will infer fail/success by running an insert with large number.
+    // OR I can use rpc if I had one.
+    // Actually, I'll just try to change it to BIGINT via SQL migration.
     if (error) console.error(error)
-    else console.log('Columns:', Object.keys(data[0]))
+    else console.log('Columns:', Object.keys(data[0] || {}))
 }
 
 checkSchema()

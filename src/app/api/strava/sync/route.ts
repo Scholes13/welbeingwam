@@ -87,6 +87,11 @@ export async function GET() {
         const totalAdjustments = adjustments?.reduce((sum, adj) => sum + adj.points, 0) || 0
         const totalPoints = totalSteps + totalQuestPoints + totalAdjustments
 
+        // Calculate Spent Coins
+        const { data: spentRewards } = await supabase.from('user_rewards').select('cost').eq('user_id', athleteId)
+        const totalSpent = spentRewards?.reduce((sum, ur) => sum + (ur.cost || 0), 0) || 0
+        const availableCoins = totalPoints - totalSpent
+
         return NextResponse.json({
             profile: {
                 ...profile,
@@ -98,7 +103,8 @@ export async function GET() {
             quests: quests || [],
             userQuests: userQuests || [],
             surveys: surveys || [],
-            totalPoints
+            totalPoints,
+            coins: availableCoins
         })
     }
     
@@ -310,6 +316,11 @@ export async function GET() {
 
     const totalPoints = totalSteps + totalQuestPoints + totalAdjustments
 
+    // Calculate Spent Coins
+    const { data: spentRewards } = await supabase.from('user_rewards').select('cost').eq('user_id', profileData.id)
+    const totalSpent = spentRewards?.reduce((sum, ur) => sum + (ur.cost || 0), 0) || 0
+    const availableCoins = totalPoints - totalSpent
+
     return NextResponse.json({
         profile: {
             ...profileData,
@@ -320,7 +331,8 @@ export async function GET() {
         quests: quests || [],
         userQuests: userQuests || [],
         surveys: surveys || [],
-        totalPoints // Returning calculated total points
+        totalPoints,
+        coins: availableCoins
     })
 
   } catch (error) {

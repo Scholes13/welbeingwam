@@ -55,16 +55,35 @@ export async function GET() {
 
     const totalAdjustments = adjustments?.reduce((sum, adj) => sum + (adj.points || 0), 0) || 0
 
-    const totalPoints = questPoints + totalAdjustments
+    // 3. Calculation of Coins
+    const totalEarned = totalSteps + questPoints + totalAdjustments
 
-    // 3. Fetch All Active Rewards
+    // Fetch Total Spent (Coins)
+    const { data: spentRewards } = await supabase.from('user_rewards').select('cost').eq('user_id', userId)
+    const totalSpent = spentRewards?.reduce((sum, ur) => sum + (ur.cost || 0), 0) || 0
+
+    const availableCoins = totalEarned - totalSpent
+    // Keep totalPoints as synonym for totalEarned for backward compat if needed, 
+    // BUT userStats.totalPoints should probably reflect "Available Coins" or "Lifetime Points"?
+    // The previous code had `const totalPoints = questPoints + totalAdjustments`. 
+    // That was WRONG based on Leaderboard logic (Steps + Quests + Adj).
+    // The previous code line 58: `const totalPoints = questPoints + totalAdjustments` ... missing Steps?
+    // Leaderboard says `overall_points = total_steps + quest_points`.
+    // So my previous code in `list/route.ts` line 58 was actually under-reporting points (missing steps).
+    // But `rewards/claim` checks `totalPoints < required_points`.
+    // If I fix `totalPoints` now to include steps, suddenly users have way MORE points.
+    // User requested "Overall > Coin". Overall implies Leaderboard score.
+    // So "Lifetime Points" = Steps + Quests + Adj.
+    // "Coins" = Lifetime - Spent.
+    
+    // 4. Fetch All Active Rewards
     const { data: rewards } = await supabase
         .from('rewards')
         .select('*')
         .eq('is_active', true)
         .order('required_points', { ascending: true })
 
-    // 4. Fetch User Claims (User's own claims)
+    // 5. Fetch User Claims (User's own claims)
     const { data: claims } = await supabase
         .from('user_rewards')
         .select(`
@@ -75,7 +94,7 @@ export async function GET() {
     
     const claimedIds = new Set(claims?.map(c => c.reward_id))
 
-    // 4b. Fetch Global Claims for Social Reveal (Get avatars of claimers)
+    // 4b. Fetch Global Claims for Social Reveal
     const { data: globalClaims, error: claimsError } = await supabase
         .from('user_rewards')
         .select('reward_id, user_id')
@@ -83,7 +102,7 @@ export async function GET() {
     
     if (claimsError) console.error('Claims Fetch Error:', claimsError)
 
-    // Manual Fetch Profiles to ensure we get avatars (avoiding potential foreign key Join issues)
+    // Manual Fetch Profiles
     const userIds = Array.from(new Set(globalClaims?.map(c => c.user_id) || []))
     
     let profileMap: Record<string, string> = {}
@@ -103,12 +122,8 @@ export async function GET() {
     if (globalClaims) {
         globalClaims.forEach((claim: any) => {
             if (!claimersMap[claim.reward_id]) claimersMap[claim.reward_id] = []
-             // Limit to 3 avatars per reward
             if (claimersMap[claim.reward_id].length < 3) {
                 const avatar = profileMap[claim.user_id]
-                // If avatar exists, use it. If not (and profile exists?), use default logic?
-                // If profile missing, fallback to 'default'.
-                // If profile exists but avatar_url is null? 'default'.
                 if (avatar) {
                      claimersMap[claim.reward_id].push(avatar)
                 } else {
@@ -118,27 +133,28 @@ export async function GET() {
         })
     }
 
-    // 5. Process Rewards (Mystery Logic)
-    const processedRewards = rewards?.map(reward => {
+    // 6. Separate System Rewards vs Listed Rewards
+    const listedRewards = rewards?.filter(r => !r.is_system) || []
+    const rerollReward = rewards?.find(r => r.title === 'Avatar Reroll')
+
+    // 7. Process Rewards (Mystery Logic)
+    const processedRewards = listedRewards.map(reward => {
         const isClaimed = claimedIds.has(reward.id)
         
         // Handle defaults
         const reqPoints = reward.required_points || 0
         const reqSteps = reward.required_steps || 0
         
-        // Check Conditions
-        const meetsPoints = totalPoints >= reqPoints
+        // Check Conditions (using Coins for Points check)
+        const meetsPoints = availableCoins >= reqPoints
         const meetsSteps = totalSteps >= reqSteps
         
         const isUnlocked = meetsPoints && meetsSteps
         const isSoldOut = (reward.max_claims || 0) > 0 && (reward.total_claimed || 0) >= reward.max_claims
         
-        // Social Reveal: If ANYONE has claimed it, it is revealed.
-        // We use total_claimed > 0 as the source of truth, as claimers array might be empty if users have no avatars.
         const rewardClaimers = claimersMap[reward.id] || []
         const hasBeenClaimedByAnyone = (reward.total_claimed || 0) > 0 || rewardClaimers.length > 0
 
-        // Reveal Condition: User Unlocked OR User Claimed OR Anyone Claimed
         const isRevealed = isUnlocked || isClaimed || hasBeenClaimedByAnyone
 
         // Mask content if NOT revealed
@@ -152,7 +168,7 @@ export async function GET() {
                  required_steps: reqSteps,
                  status: 'LOCKED',
                  progress: {
-                     userPoints: totalPoints,
+                     userPoints: availableCoins, // Show coins
                      userSteps: totalSteps
                  },
                  claimers: []
@@ -163,9 +179,9 @@ export async function GET() {
             ...reward,
             required_points: reqPoints,
             required_steps: reqSteps,
-            status: isClaimed ? 'CLAIMED' : (isSoldOut ? 'SOLD_OUT' : (isUnlocked ? 'AVAILABLE' : 'LOCKED_BUT_REVEALED')), // Distinguish locked but visible
+            status: isClaimed ? 'CLAIMED' : (isSoldOut ? 'SOLD_OUT' : (isUnlocked ? 'AVAILABLE' : 'LOCKED_BUT_REVEALED')), 
             progress: {
-                userPoints: totalPoints,
+                userPoints: availableCoins,
                 userSteps: totalSteps
             },
             claimers: rewardClaimers
@@ -174,7 +190,12 @@ export async function GET() {
 
     return NextResponse.json({ 
         rewards: processedRewards,
-        userStats: { totalPoints, totalSteps }
+        rerollPrice: rerollReward?.required_points || 500,
+        userStats: { 
+            totalPoints: totalEarned, // Report Lifetime Points
+            availableCoins: availableCoins, // New Field
+            totalSteps 
+        }
     })
 
   } catch (error) {
