@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { LogOut, Settings, Award, Activity, Scan } from 'lucide-react'
+import { LogOut, Settings, Award, Activity, Scan, Footprints, Trophy } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { useProfile } from '@/hooks/use-swr-hooks'
 
 export default function ProfilePage() {
-    const { profile, stats, isLoading: loading } = useProfile()
+    const { profile, stats, totalPoints, isLoading: loading } = useProfile()
     const [showIdCard, setShowIdCard] = useState(false)
     const router = useRouter()
 
@@ -59,13 +59,14 @@ export default function ProfilePage() {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 gap-4 mb-8">
                     <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
-                        <Activity className="w-6 h-6 text-[#FC4C02] mb-2" />
-                        <span className="text-2xl font-bold font-mono">{(stats.distance / 1000).toFixed(1)}</span>
-                        <span className="text-xs text-gray-500 uppercase">Kilometers</span>
+                        <Footprints className="w-6 h-6 text-[#FC4C02] mb-2" />
+                        <span className="text-2xl font-bold font-mono">{stats.steps.toLocaleString()}</span>
+                        <span className="text-xs text-gray-500 uppercase">Steps</span>
                     </div>
                     <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
-                        <span className="text-2xl font-bold font-mono">{stats.steps.toLocaleString()}</span>
-                        <span className="text-xs text-gray-500 uppercase">Estimated Steps</span>
+                        <Trophy className="w-6 h-6 text-yellow-500 mb-2" />
+                        <span className="text-2xl font-bold font-mono">{totalPoints.toLocaleString()}</span>
+                        <span className="text-xs text-gray-500 uppercase">Total Points</span>
                     </div>
                 </div>
 

@@ -56,8 +56,8 @@ export function useLeaderboard() {
 // Hook for Profile (Shares cache with Quests via /api/strava/sync)
 export function useProfile() {
     const { data, error, isLoading, mutate } = useSWR('/api/strava/sync', fetcher, {
-        revalidateOnFocus: false,
-        dedupingInterval: 60000,
+        revalidateOnFocus: true, // Enable revalidation to sync points with leaderboard immediately
+        dedupingInterval: 5000, // Reduced from 60000 to 5000 to allow fresher updates
     })
 
     const activities = data?.activities || []
@@ -71,7 +71,27 @@ export function useProfile() {
 
     return {
         profile: data?.profile || null,
+        activities,
+        quests: data?.quests || [],
+        userQuests: data?.userQuests || [],
+        surveys: data?.surveys || [],
+        totalPoints: data?.totalPoints || 0,
         stats,
+        isLoading,
+        isError: error,
+        mutate
+    }
+}
+
+// Hook for Notifications
+export function useNotifications() {
+    const { data, error, isLoading, mutate } = useSWR('/api/notifications?count_only=true', fetcher, {
+        revalidateOnFocus: true,
+        refreshInterval: 60000, // Check every minute
+    })
+
+    return {
+        unreadCount: typeof data?.count === 'number' ? data.count : 0,
         isLoading,
         isError: error,
         mutate

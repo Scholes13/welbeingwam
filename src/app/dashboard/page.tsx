@@ -1,62 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useProfile, useNotifications } from '@/hooks/use-swr-hooks'
 import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
-import { Plus, Users, Award, Zap, Activity, Bell } from 'lucide-react'
+import { Plus, Users, Award, Zap, Activity, Bell, Footprints, Trophy } from 'lucide-react'
+
 export default function Dashboard() {
-    const [profile, setProfile] = useState<any>(null)
-    const [activities, setActivities] = useState<any[]>([])
-    const [quests, setQuests] = useState<any[]>([])
-    const [userQuests, setUserQuests] = useState<any[]>([])
-    const [surveys, setSurveys] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
-    const [unreadCount, setUnreadCount] = useState(0)
+    const { profile, activities, quests, userQuests, surveys, isLoading: profileLoading, mutate: mutateProfile } = useProfile()
+    const { unreadCount } = useNotifications()
     const router = useRouter()
 
-    useEffect(() => {
-        fetchData()
-        fetchUnreadCount()
-    }, [])
-
-    const fetchUnreadCount = async () => {
-        try {
-            const res = await fetch('/api/notifications?count_only=true')
-            const data = await res.json()
-            if (typeof data.count === 'number') {
-                setUnreadCount(data.count)
-            }
-        } catch (error) {
-            console.error('Error fetching notifications:', error)
-        }
+    const handleRefresh = () => {
+        mutateProfile()
     }
 
-    const fetchData = async () => {
-        try {
-            const res = await fetch('/api/strava/sync')
-            if (res.status === 401) {
-                // If unauthorized, redirect to logout to clear cookies
-                router.push('/api/auth/logout')
-                return
-            }
-
-            const data = await res.json()
-            if (data.profile) {
-                setProfile(data.profile)
-                setActivities(data.activities || [])
-                setQuests(data.quests || [])
-                setUserQuests(data.userQuests || [])
-                setSurveys(data.surveys || [])
-            }
-        } catch (error) {
-            console.error('Error loading dashboard:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    if (loading) {
+    if (profileLoading && !profile) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
                 Loading...
@@ -133,7 +92,7 @@ export default function Dashboard() {
                     <DailyQuests
                         quests={quests}
                         userQuests={userQuests}
-                        onClaim={fetchData}
+                        onClaim={handleRefresh}
                     />
 
                     <div className="grid gap-6">
@@ -143,48 +102,30 @@ export default function Dashboard() {
                         {activities.map((activity) => (
                             <div
                                 key={activity.id}
-                                className="bg-gray-900 p-6 rounded-xl hover:bg-gray-800 transition-colors border border-gray-800"
+                                className="bg-gray-900 p-6 rounded-xl hover:bg-gray-800 transition-colors border border-gray-800 flex items-center justify-between"
                             >
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="text-xl font-bold text-[#FC4C02]">
-                                            {activity.name}
-                                        </h3>
-                                        <p className="text-sm text-gray-400 mt-1">
-                                            {new Date(activity.start_date).toLocaleDateString()}
-                                        </p>
+                                <div>
+                                    <h3 className={`text-xl font-bold mb-1 ${activity.type === 'Event' ? 'text-yellow-500' : 'text-[#FC4C02]'}`}>
+                                        {activity.name}
+                                    </h3>
+                                    <div className="flex gap-4 text-sm text-gray-400">
+                                        <span>{new Date(activity.start_date).toLocaleDateString()}</span>
+                                        <span className="bg-gray-800 px-2 py-0.5 rounded text-xs border border-gray-700">
+                                            {activity.type}
+                                        </span>
                                     </div>
-                                    <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">
-                                        {activity.type}
-                                    </span>
                                 </div>
-                                <div className="mt-4 flex gap-8">
-                                    <div>
-                                        <span className="block text-gray-500 text-xs uppercase">
-                                            Distance
-                                        </span>
-                                        <span className="text-lg font-mono">
-                                            {(activity.distance / 1000).toFixed(2)} km
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <span className="block text-gray-500 text-xs uppercase">
-                                            Time
-                                        </span>
-                                        <span className="text-lg font-mono">
-                                            {Math.floor(activity.moving_time / 60)}m {activity.moving_time % 60}s
+
+                                <div className="text-right">
+                                    <div className={`flex items-center gap-2 ${activity.type === 'Event' ? 'text-yellow-500' : 'text-[#FC4C02]'}`}>
+                                        {activity.type === 'Event' ? <Trophy size={20} /> : <Footprints size={20} />}
+                                        <span className="text-2xl font-mono font-bold">
+                                            {activity.steps > 0 ? activity.steps.toLocaleString() : '-'}
                                         </span>
                                     </div>
-                                    {activity.steps > 0 && (
-                                        <div>
-                                            <span className="block text-gray-500 text-xs uppercase">
-                                                Steps
-                                            </span>
-                                            <span className="text-lg font-mono">
-                                                {activity.steps}
-                                            </span>
-                                        </div>
-                                    )}
+                                    <span className="text-xs text-gray-500 uppercase tracking-widest block mt-1">
+                                        {activity.type === 'Event' ? 'Points' : 'Steps'}
+                                    </span>
                                 </div>
                             </div>
                         ))}

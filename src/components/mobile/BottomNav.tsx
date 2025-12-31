@@ -31,12 +31,7 @@ export default function BottomNav() {
                             href={link.href}
                             className="relative flex flex-col items-center gap-1 min-w-[50px] md:min-w-[64px]"
                         >
-                            {isActive && (
-                                <motion.div
-                                    layoutId="active-nav"
-                                    className="absolute -top-10 w-12 h-1 bg-[#FC4C02] rounded-full shadow-[0_0_10px_#FC4C02]"
-                                />
-                            )}
+
 
                             <div className="relative">
                                 <link.icon
