@@ -14,6 +14,8 @@ interface LeaderboardEntry {
 
 import { useLeaderboard } from '@/hooks/use-swr-hooks'
 
+import Loader from '@/components/ui/Loader'
+
 export default function Leaderboard() {
     const { leaderboard: leaders, isLoading: loading } = useLeaderboard()
     const [activeTab, setActiveTab] = useState<'overall' | 'steps' | 'quests'>('overall')
@@ -26,11 +28,7 @@ export default function Leaderboard() {
     })
 
     if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-black text-white">
-                <div className="animate-pulse text-[#FC4C02]">Loading Leaderboard...</div>
-            </div>
-        )
+        return <Loader text="LOADING LEADERBOARD..." />
     }
 
     return (

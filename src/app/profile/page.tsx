@@ -8,6 +8,8 @@ import { LogOut, Settings, Award, Activity, Scan, Footprints, Trophy } from 'luc
 import QRCode from 'react-qr-code'
 import { useProfile } from '@/hooks/use-swr-hooks'
 
+import Loader from '@/components/ui/Loader'
+
 export default function ProfilePage() {
     const { profile, stats, totalPoints, isLoading: loading } = useProfile()
     const [showIdCard, setShowIdCard] = useState(false)
@@ -20,11 +22,7 @@ export default function ProfilePage() {
     }
 
     if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-black text-white">
-                <div className="animate-pulse text-[#FC4C02]">Loading Profile...</div>
-            </div>
-        )
+        return <Loader text="LOADING PROFILE..." />
     }
 
     if (!profile) return null

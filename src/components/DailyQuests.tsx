@@ -2,9 +2,12 @@
 
 import { useState } from 'react'
 import { Check, Gift, Loader2 } from 'lucide-react'
+import { useToast } from '@/context/ToastContext'
 
 export default function DailyQuests({ quests = [], userQuests = [], onClaim }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
+
+    const { success, error } = useToast()
 
     const handleClaim = async (questId: string) => {
         setLoadingIds(prev => [...prev, questId])
@@ -14,10 +17,14 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim }: a
                 body: JSON.stringify({ questId })
             })
             if (res.ok) {
+                success('Quest Claimed! Points added.')
                 onClaim() // Refresh parent data
+            } else {
+                throw new Error('Failed to claim')
             }
         } catch (e) {
             console.error(e)
+            error('Failed to claim quest')
         } finally {
             setLoadingIds(prev => prev.filter(id => id !== questId))
         }

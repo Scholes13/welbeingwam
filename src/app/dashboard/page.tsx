@@ -6,6 +6,8 @@ import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
 import { Plus, Users, Award, Zap, Activity, Bell, Footprints, Trophy } from 'lucide-react'
 
+import Loader from '@/components/ui/Loader'
+
 export default function Dashboard() {
     const { profile, activities, quests, userQuests, surveys, isLoading: profileLoading, mutate: mutateProfile } = useProfile()
     const { unreadCount } = useNotifications()
@@ -16,35 +18,31 @@ export default function Dashboard() {
     }
 
     if (profileLoading && !profile) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-                Loading...
-            </div>
-        )
+        return <Loader text="LOADING DASHBOARD..." />
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-8 pb-32">
+        <div className="h-[100dvh] overflow-y-auto bg-black text-white pb-32 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {profile && (
-                <div className="max-w-4xl mx-auto space-y-8">
-                    <div className="flex items-center justify-between">
+                <div className="max-w-4xl mx-auto space-y-8 px-8 pt-8">
+                    <div className="sticky top-0 z-50 flex items-center justify-between bg-black/80 backdrop-blur-xl -mx-8 px-8 py-4 -mt-8 mb-4 border-b border-white/5">
                         <div className="flex items-center gap-4">
                             <img
                                 src={profile.profile}
                                 alt={profile.username}
-                                className="w-20 h-20 rounded-full border-2 border-[#FC4C02]"
+                                className="w-16 h-16 rounded-full border-2 border-[#FC4C02]"
                             />
                             <div>
-                                <h1 className="text-3xl font-bold">
+                                <h1 className="text-2xl font-bold">
                                     {profile.firstname} {profile.lastname}
                                 </h1>
-                                <p className="text-gray-400">@{profile.username}</p>
+                                <p className="text-gray-400 text-sm">@{profile.username}</p>
                                 {profile.username === 'admin_wam' && (
                                     <button
                                         onClick={() => router.push('/dashboard/admin')}
-                                        className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white mt-2 transition-colors flex items-center gap-1"
+                                        className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-full text-xs font-bold text-white mt-1 transition-colors flex items-center gap-1"
                                     >
-                                        🛡️ Admin Panel
+                                        🛡️ Admin
                                     </button>
                                 )}
                             </div>
