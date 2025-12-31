@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, Check, Smartphone, Link as LinkIcon, Lock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -12,22 +11,21 @@ export default function IntegrationsPage() {
     const router = useRouter()
 
     useEffect(() => {
+        const fetchKey = async () => {
+            try {
+                const res = await fetch('/api/integrations/get-key')
+                const data = await res.json()
+                if (data.sync_key) {
+                    setSyncKey(data.sync_key)
+                }
+            } catch (e) {
+                console.error(e)
+            } finally {
+                setLoading(false)
+            }
+        }
         fetchKey()
     }, [])
-
-    const fetchKey = async () => {
-        try {
-            const res = await fetch('/api/integrations/get-key')
-            const data = await res.json()
-            if (data.sync_key) {
-                setSyncKey(data.sync_key)
-            }
-        } catch (e) {
-            console.error(e)
-        } finally {
-            setLoading(false)
-        }
-    }
 
     const handleCopy = () => {
         navigator.clipboard.writeText(syncKey)

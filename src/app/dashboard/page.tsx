@@ -6,7 +6,22 @@ import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
 import { Plus, Users, Award, Zap, Activity, Bell, Footprints, Trophy } from 'lucide-react'
 
+import Link from 'next/link'
 import Loader from '@/components/ui/Loader'
+
+interface Survey {
+    id: string
+    title: string
+    description?: string
+}
+
+interface Activity {
+    id: string
+    type: string
+    name: string
+    start_date: string
+    steps: number
+}
 
 export default function Dashboard() {
     const { profile, activities, quests, userQuests, surveys, isLoading: profileLoading, mutate: mutateProfile } = useProfile()
@@ -64,7 +79,7 @@ export default function Dashboard() {
                     {/* Dynamic Surveys Section */}
                     {surveys.length > 0 && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {surveys.map((survey) => (
+                            {surveys.map((survey: Survey) => (
                                 <div key={survey.id} className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/0 p-8 backdrop-blur-xl group hover:border-[#FC4C02]/50 transition-colors">
                                     <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-[#FC4C02] rounded-full blur-[80px] opacity-10 group-hover:opacity-20 transition-opacity" />
 
@@ -97,7 +112,7 @@ export default function Dashboard() {
                         <h2 className="text-2xl font-semibold border-b border-gray-800 pb-2">
                             Recent Activities
                         </h2>
-                        {activities.map((activity) => (
+                        {activities.map((activity: Activity) => (
                             <div
                                 key={activity.id}
                                 className="bg-gray-900 p-6 rounded-xl hover:bg-gray-800 transition-colors border border-gray-800 flex items-center justify-between"
