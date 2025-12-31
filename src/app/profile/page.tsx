@@ -6,48 +6,14 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { LogOut, Settings, Award, Activity, Scan } from 'lucide-react'
 import QRCode from 'react-qr-code'
+import { useProfile } from '@/hooks/use-swr-hooks'
 
 export default function ProfilePage() {
-    const [profile, setProfile] = useState<any>(null)
-    const [stats, setStats] = useState({ count: 0, distance: 0, steps: 0 })
-    const [loading, setLoading] = useState(true)
+    const { profile, stats, isLoading: loading } = useProfile()
     const [showIdCard, setShowIdCard] = useState(false)
     const router = useRouter()
 
-    useEffect(() => {
-        fetchProfile()
-    }, [])
-
-    const fetchProfile = async () => {
-        try {
-            // 1. Get Auth Session (or use Strava token check from server if needed, but client-side is fine for display)
-            // We'll fetch from our API to ensure we have the latest synced data
-            const res = await fetch('/api/strava/sync')
-            if (res.status === 401) {
-                router.push('/')
-                return
-            }
-
-            const data = await res.json()
-            setProfile(data.profile)
-
-            // Calculate stats from activities
-            if (data.activities) {
-                const totalDistance = data.activities.reduce((acc: number, curr: any) => acc + curr.distance, 0)
-                const totalSteps = data.activities.reduce((acc: number, curr: any) => acc + (curr.steps || 0), 0)
-                setStats({
-                    count: data.activities.length,
-                    distance: totalDistance,
-                    steps: totalSteps
-                })
-            }
-
-        } catch (error) {
-            console.error('Error loading profile:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Auto-fetched by SWR
 
     const handleLogout = () => {
         router.push('/api/auth/logout')

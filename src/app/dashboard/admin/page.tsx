@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2 } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
+import { useToast } from '@/context/ToastContext'
 
 export default function AdminPage() {
+    const { success, error: toastError, info } = useToast()
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -81,6 +83,11 @@ export default function AdminPage() {
     const [pointsTarget, setPointsTarget] = useState<{ id: string, name: string } | null>(null)
     const [adjustPointsData, setAdjustPointsData] = useState<{ points: string | number, reason: string }>({ points: '', reason: '' })
     const [isAdjusting, setIsAdjusting] = useState(false)
+
+    // Step Adjustment State
+    const [showStepsModal, setShowStepsModal] = useState(false)
+    const [stepsTarget, setStepsTarget] = useState<{ id: string, name: string } | null>(null)
+    const [adjustStepsData, setAdjustStepsData] = useState<{ steps: string | number, reason: string }>({ steps: '', reason: '' })
 
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
@@ -258,14 +265,16 @@ export default function AdminPage() {
 
             if (!res.ok) throw new Error('Failed to adjust points')
 
-            alert('Points adjusted successfully!')
+            if (!res.ok) throw new Error('Failed to adjust points')
+
+            success('Points adjusted successfully!')
             setShowPointsModal(false)
             setAdjustPointsData({ points: '', reason: '' })
             setPointsTarget(null)
             fetchUsers() // Refresh list
-        } catch (error) {
-            console.error(error)
-            alert('Error adjusting points')
+        } catch (err: any) {
+            console.error(err)
+            toastError(err.message || 'Error adjusting points')
         } finally {
             setIsAdjusting(false)
         }
@@ -275,6 +284,43 @@ export default function AdminPage() {
         setPointsTarget(user)
         setAdjustPointsData({ points: '', reason: '' })
         setShowPointsModal(true)
+    }
+
+    const handleAdjustSteps = async (e: React.FormEvent) => {
+        e.preventDefault()
+        if (!stepsTarget) return
+
+        setIsAdjusting(true)
+        try {
+            const res = await fetch('/api/admin/users/steps', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetUserId: stepsTarget.id,
+                    steps: Number(adjustStepsData.steps),
+                    reason: adjustStepsData.reason
+                })
+            })
+
+            if (!res.ok) throw new Error('Failed to adjust steps')
+
+            success('Steps adjusted successfully!')
+            setShowStepsModal(false)
+            setAdjustStepsData({ steps: '', reason: '' })
+            setStepsTarget(null)
+            fetchUsers()
+        } catch (err: any) {
+            console.error(err)
+            toastError(err.message || 'Error adjusting steps')
+        } finally {
+            setIsAdjusting(false)
+        }
+    }
+
+    const openStepsModal = (user: { id: string, name: string }) => {
+        setStepsTarget(user)
+        setAdjustStepsData({ steps: '', reason: '' })
+        setShowStepsModal(true)
     }
 
     const handleCreate = async (e: React.FormEvent) => {
@@ -394,7 +440,7 @@ export default function AdminPage() {
             setDeleteTarget(null)
         } catch (e) {
             console.error('Delete failed', e)
-            alert(e instanceof Error ? e.message : 'Failed to delete item')
+            toastError(e instanceof Error ? e.message : 'Failed to delete item')
         } finally {
             setDeleteLoading(false)
         }
@@ -514,6 +560,13 @@ export default function AdminPage() {
                                                         <Target size={14} />
                                                     </button>
                                                     <button
+                                                        onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
+                                                        title="Adjust Steps"
+                                                        className="p-2 bg-purple-500/10 text-purple-500 rounded-lg hover:bg-purple-500/20 transition-colors"
+                                                    >
+                                                        <Footprints size={14} />
+                                                    </button>
+                                                    <button
                                                         onClick={() => promptDeleteUser(user.id, user.username)}
                                                         className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors"
                                                     >
@@ -552,6 +605,12 @@ export default function AdminPage() {
                                             className="p-2 text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg shrink-0 transition-colors"
                                         >
                                             <Target size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
+                                            className="p-2 text-purple-500 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg shrink-0 transition-colors"
+                                        >
+                                            <Footprints size={18} />
                                         </button>
                                         <button
                                             onClick={() => promptDeleteUser(user.id, user.username)}
@@ -1465,6 +1524,67 @@ export default function AdminPage() {
                     )
                 }
             </AnimatePresence >
+
+            {/* Adjust Steps Modal */}
+            <AnimatePresence>
+                {showStepsModal && stepsTarget && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowStepsModal(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                        >
+                            <h3 className="text-xl font-bold mb-4 text-white">Adjust Steps</h3>
+                            <p className="text-gray-400 text-sm mb-6">
+                                Adjusting steps for <span className="text-white font-bold">{stepsTarget.name}</span>.
+                                <br />Positive value adds steps, negative subtracts.
+                            </p>
+
+                            <form onSubmit={handleAdjustSteps} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Steps Adjustment</label>
+                                    <input
+                                        type="number"
+                                        required
+                                        value={adjustStepsData.steps}
+                                        onChange={(e) => setAdjustStepsData({ ...adjustStepsData, steps: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
+                                        placeholder="e.g. 500 or -200"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reason</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={adjustStepsData.reason}
+                                        onChange={(e) => setAdjustStepsData({ ...adjustStepsData, reason: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
+                                        placeholder="e.g. Bonus challenge, Correction"
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={isAdjusting}
+                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                                >
+                                    {isAdjusting ? <Loader2 className="animate-spin" /> : <Footprints size={18} />}
+                                    {isAdjusting ? 'Adjusting...' : 'Confirm Adjustment'}
+                                </button>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div >
     )
 }

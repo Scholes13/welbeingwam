@@ -12,29 +12,11 @@ interface LeaderboardEntry {
     overall_points: number
 }
 
+import { useLeaderboard } from '@/hooks/use-swr-hooks'
+
 export default function Leaderboard() {
-    const [leaders, setLeaders] = useState<LeaderboardEntry[]>([])
-    const [loading, setLoading] = useState(true)
+    const { leaderboard: leaders, isLoading: loading } = useLeaderboard()
     const [activeTab, setActiveTab] = useState<'overall' | 'steps' | 'quests'>('overall')
-
-    useEffect(() => {
-        fetchLeaderboard()
-    }, [])
-
-    const fetchLeaderboard = async () => {
-        try {
-            const res = await fetch('/api/leaderboard', { cache: 'no-store' })
-            const data = await res.json()
-
-            if (data.leaderboard) {
-                setLeaders(data.leaderboard)
-            }
-        } catch (error) {
-            console.error('Error fetching leaderboard:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
 
     // Sort Logic
     const sortedLeaders = [...leaders].sort((a, b) => {

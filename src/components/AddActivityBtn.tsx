@@ -14,7 +14,7 @@ export default function AddActivityBtn() {
     const router = useRouter()
 
     const handleSubmit = async () => {
-        if (!steps || !distance) return
+        if (!steps) return
         setLoading(true)
 
         try {
@@ -22,7 +22,7 @@ export default function AddActivityBtn() {
                 method: 'POST',
                 body: JSON.stringify({
                     steps: parseInt(steps),
-                    distance: parseFloat(distance) * 1000, // Convert km to meters
+                    distance: 0, // No distance for manual step entries
                     date,
                     type: 'Manual'
                 })
@@ -101,21 +101,6 @@ export default function AddActivityBtn() {
                                             value={steps}
                                             onChange={(e) => setSteps(e.target.value)}
                                             placeholder="e.g. 5000"
-                                            className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Distance (KM)</label>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={distance}
-                                            onChange={(e) => setDistance(e.target.value)}
-                                            placeholder="e.g. 3.5"
                                             className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                         />
                                     </div>

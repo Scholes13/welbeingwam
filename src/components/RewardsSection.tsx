@@ -3,28 +3,16 @@
 import { useEffect, useState } from 'react'
 import { Gift, Lock, Footprints, Flame, Check, Loader2, User } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRewards } from '@/hooks/use-swr-hooks'
+import { useToast } from '@/context/ToastContext'
 
 export default function RewardsSection() {
-    const [rewards, setRewards] = useState<any[]>([])
-    const [stats, setStats] = useState({ totalPoints: 0, totalSteps: 0 })
-    const [loading, setLoading] = useState(true)
+    const { rewards, userStats, isLoading, mutate } = useRewards()
     const [claimingId, setClaimingId] = useState<string | null>(null)
     const [claimSuccess, setClaimSuccess] = useState<string | null>(null)
+    const { success, error } = useToast()
 
-    useEffect(() => {
-        fetchRewards()
-    }, [])
-
-    const fetchRewards = async () => {
-        try {
-            const res = await fetch('/api/rewards/list')
-            const data = await res.json()
-            if (data.rewards) {
-                setRewards(data.rewards)
-                setStats(data.userStats)
-            }
-        } catch (e) { console.error('Failed to fetch rewards') } finally { setLoading(false) }
-    }
+    // Auto-fetch handled by SWR
 
     const handleClaim = async (rewardId: string) => {
         setClaimingId(rewardId)
@@ -37,14 +25,15 @@ export default function RewardsSection() {
 
             if (res.ok) {
                 setClaimSuccess(rewardId)
-                fetchRewards() // Refresh to update status
+                mutate() // Refresh to update status
                 setTimeout(() => setClaimSuccess(null), 3000)
+                success('Reward claimed!')
             } else {
                 const err = await res.json()
-                alert(err.error || 'Failed to claim')
+                error(err.error || 'Failed to claim')
             }
         } catch (e) {
-            alert('Something went wrong')
+            error('Something went wrong')
         } finally {
             setClaimingId(null)
         }
@@ -58,19 +47,19 @@ export default function RewardsSection() {
                 </h2>
                 <div className="flex gap-4 text-xs font-mono font-bold">
                     <div className="flex items-center gap-1 text-yellow-500">
-                        <Flame size={14} /> {stats.totalPoints} PTS
+                        <Flame size={14} /> {userStats.totalPoints} PTS
                     </div>
                     <div className="flex items-center gap-1 text-blue-500">
-                        <Footprints size={14} /> {stats.totalSteps} STEPS
+                        <Footprints size={14} /> {userStats.totalSteps} STEPS
                     </div>
                 </div>
             </div>
 
-            {loading ? (
+            {isLoading ? (
                 <div className="text-center py-8 text-gray-500">Loading rewards...</div>
             ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {rewards.map((reward) => (
+                    {rewards.map((reward: any) => (
                         <div
                             key={reward.id}
                             className={`relative bg-[#1a1a1a] border rounded-2xl overflow-hidden flex flex-col justify-between group
@@ -134,12 +123,12 @@ export default function RewardsSection() {
                                     {(reward.status === 'LOCKED' || reward.status === 'AVAILABLE' || reward.status === 'LOCKED_BUT_REVEALED') && (
                                         <div className="flex gap-2 mb-3 text-[10px] font-bold uppercase">
                                             {reward.required_points > 0 && (
-                                                <span className={`${stats.totalPoints >= reward.required_points ? 'text-yellow-500' : 'text-gray-600'}`}>
+                                                <span className={`${userStats.totalPoints >= reward.required_points ? 'text-yellow-500' : 'text-gray-600'}`}>
                                                     {reward.required_points} PTS
                                                 </span>
                                             )}
                                             {reward.required_steps > 0 && (
-                                                <span className={`${stats.totalSteps >= reward.required_steps ? 'text-blue-500' : 'text-gray-600'}`}>
+                                                <span className={`${userStats.totalSteps >= reward.required_steps ? 'text-blue-500' : 'text-gray-600'}`}>
                                                     {reward.required_steps} STEPS
                                                 </span>
                                             )}

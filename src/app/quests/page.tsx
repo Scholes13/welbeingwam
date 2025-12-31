@@ -5,57 +5,27 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Target, Trophy } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase/client'
+import { useToast } from '@/context/ToastContext'
+
+import { useQuests } from '@/hooks/use-swr-hooks'
 
 export default function QuestsPage() {
-    const [quests, setQuests] = useState<any[]>([])
-    const [userQuests, setUserQuests] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
+    const { quests, userQuests, isLoading, mutate } = useQuests()
     const router = useRouter()
+    const { success, error } = useToast()
 
-    useEffect(() => {
-        fetchData()
-    }, [])
-
-    const fetchData = async () => {
-        try {
-            // Fetch Active Quests
-            const { data: questsData } = await supabase
-                .from('quests')
-                .select('*')
-                .eq('is_active', true)
-                .order('points', { ascending: true })
-
-            // Fetch User Progress
-            const { data: { user } } = await supabase.auth.getUser()
-            // Note: Since we use custom auth (cookies), we might need to fetch user ID differently if not using supabase auth context.
-            // But previous components used pure fetch to API to get context.
-            // To be consistent and safe with "manual" auth which relies on cookies, we should probably use the API endpoint '/api/strava/sync' or similar to get data, 
-            // OR use client-side supabase if we are sure the session is there. 
-            // However, the `DailyQuests` component used props passed from Dashboard.
-            // Here we are a standalone page.
-            // Let's use the same pattern as `RewardsPage` (which used `RewardsSection` that fetches from `/api/rewards/list`).
-            // I should create an API for `/api/quests/list` OR just reuse `/api/strava/sync`?
-            // `/api/strava/sync` returns everything. Let's use that for simplicity and consistency with Auth.
-
-            const res = await fetch('/api/strava/sync')
-            const data = await res.json()
-
-            if (data.quests) setQuests(data.quests)
-            if (data.userQuests) setUserQuests(data.userQuests)
-
-        } catch (e) {
-            console.error(e)
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Auto-fetch handled by SWR
 
     const handleClaim = async (questId: string) => {
         // Optimistic UI update
         const originalUserQuests = [...userQuests]
-        // Mock a completed entry
-        const mockEntry = { quest_id: questId, status: 'approved' } // Simplified
-        setUserQuests([...userQuests, mockEntry])
+        const mockEntry = { quest_id: questId, status: 'approved' }
+
+        // Mutate immediately with optimistic data
+        mutate({
+            quests,
+            userQuests: [...userQuests, mockEntry]
+        }, { revalidate: false })
 
         try {
             const res = await fetch('/api/quests/claim', {
@@ -66,12 +36,15 @@ export default function QuestsPage() {
 
             if (!res.ok) throw new Error('Failed to claim')
 
+            if (!res.ok) throw new Error('Failed to claim')
+
             // Refresh real data
-            fetchData()
+            mutate()
+            success('Quest claimed!')
         } catch (e) {
-            // Revert
-            setUserQuests(originalUserQuests)
-            alert('Failed to claim quest')
+            // Revert on error
+            mutate({ quests, userQuests: originalUserQuests }, { revalidate: false })
+            error('Failed to claim quest')
         }
     }
 
@@ -98,11 +71,11 @@ export default function QuestsPage() {
                     </p>
                 </header>
 
-                {loading ? (
+                {isLoading ? (
                     <div className="text-center py-12 text-gray-500">Loading quests...</div>
                 ) : (
                     <div className="space-y-4">
-                        {quests.map((quest) => {
+                        {quests.map((quest: any) => {
                             const isCompleted = userQuests.some((uq: any) => uq.quest_id === quest.id)
 
                             return (
