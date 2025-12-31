@@ -35,6 +35,25 @@ export default function ProfilePage() {
         if (scannedUser) return
 
         try {
+            // Check if it's a SPOT code (starts with SPOT-)
+            if (code.startsWith('SPOT-')) {
+                const res = await fetch('/api/spots/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                })
+                const data = await res.json()
+
+                if (res.ok) {
+                    success(data.message || `🎯 +${data.points} poin dari ${data.spotName}!`)
+                } else {
+                    error(data.error || 'QR Code tidak valid')
+                }
+                setIsScannerOpen(false)
+                return
+            }
+
+            // Otherwise it's a user QR code
             const res = await fetch('/api/user/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -44,7 +63,7 @@ export default function ProfilePage() {
 
             if (res.ok) {
                 setScannedUser(data.user)
-                setIsScannerOpen(false) // Close scanner, open message modal
+                setIsScannerOpen(false)
             } else {
                 error(data.error || 'Invalid QR')
                 setIsScannerOpen(false)

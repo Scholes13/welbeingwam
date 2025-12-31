@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -12,7 +12,7 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
-    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities'>('users')
+    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots'>('users')
 
     // Activity & Scanner State
     // Activity & Scanner State
@@ -34,6 +34,10 @@ export default function AdminPage() {
     const [surveys, setSurveys] = useState<any[]>([])
     const [questions, setQuestions] = useState<any[]>([])
     const [rewards, setRewards] = useState<any[]>([])
+    const [spots, setSpots] = useState<any[]>([])
+    const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '' })
+    const [selectedSpot, setSelectedSpot] = useState<any>(null)
+    const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
     const router = useRouter()
 
@@ -127,6 +131,7 @@ export default function AdminPage() {
         else if (activeTab === 'surveys') fetchSurveys()
         else if (activeTab === 'rewards') fetchRewards()
         else if (activeTab === 'activities') fetchActivities()
+        else if (activeTab === 'spots') fetchSpots()
     }, [activeTab])
 
     useEffect(() => {
@@ -266,6 +271,65 @@ export default function AdminPage() {
             const data = await res.json()
             if (data.rewards) setRewards(data.rewards)
         } catch (e) { console.error(e) }
+    }
+
+    const fetchSpots = async () => {
+        try {
+            const res = await fetch('/api/admin/spots')
+            const data = await res.json()
+            if (data.spots) setSpots(data.spots)
+        } catch (e) { console.error(e) }
+    }
+
+    const handleCreateSpot = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setCreateLoading(true)
+        try {
+            const res = await fetch('/api/admin/spots', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(spotForm)
+            })
+            const data = await res.json()
+            if (res.ok) {
+                success('QR Spot created!')
+                setIsModalOpen(false)
+                setSpotForm({ name: '', description: '', points: '', maxClaims: '', expiresAt: '' })
+                fetchSpots()
+            } else {
+                toastError(data.error || 'Failed to create spot')
+            }
+        } catch (e) {
+            toastError('Error creating spot')
+        } finally {
+            setCreateLoading(false)
+        }
+    }
+
+    const handleDeleteSpot = async (spotId: string) => {
+        try {
+            const res = await fetch(`/api/admin/spots?id=${spotId}`, { method: 'DELETE' })
+            if (res.ok) {
+                success('Spot deleted!')
+                fetchSpots()
+            }
+        } catch (e) {
+            toastError('Failed to delete spot')
+        }
+    }
+
+    const copyToClipboard = (code: string) => {
+        navigator.clipboard.writeText(code)
+        setCopiedCode(code)
+        setTimeout(() => setCopiedCode(null), 2000)
+    }
+
+    const downloadQR = (code: string, name: string) => {
+        const url = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(code)}&size=400x400`
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `qr-spot-${name.replace(/\s+/g, '-').toLowerCase()}.png`
+        link.click()
     }
 
     const fetchQuestions = async (surveyId: string) => {
@@ -581,7 +645,7 @@ export default function AdminPage() {
                     className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
                 >
                     <Plus size={20} />
-                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : (!selectedSurvey ? 'Survey' : 'Question')}
+                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : activeTab === 'spots' ? 'QR Spot' : (!selectedSurvey ? 'Survey' : 'Question')}
                 </button>
             </div>
 
@@ -616,6 +680,12 @@ export default function AdminPage() {
                     className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'activities' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
                 >
                     <Calendar size={18} /> Activities
+                </button>
+                <button
+                    onClick={() => { setActiveTab('spots'); setSelectedSurvey(null) }}
+                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'spots' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
+                >
+                    <MapPin size={18} /> QR Spots
                 </button>
             </div>
 
@@ -1081,12 +1151,178 @@ export default function AdminPage() {
                         )}
                     </div>
                 </div>
+            )
+            }
+
+            {/* QR Spots Tab */}
+            {activeTab === 'spots' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {spots.map((spot) => (
+                        <div key={spot.id} className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden">
+                            {/* QR Code Preview */}
+                            <div className="bg-white p-4 flex justify-center">
+                                <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(spot.code)}&size=150x150`}
+                                    alt={`QR Code for ${spot.name}`}
+                                    className="w-32 h-32"
+                                />
+                            </div>
+
+                            <div className="p-4">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-bold text-lg">{spot.name}</h3>
+                                    <span className="bg-[#FC4C02]/20 text-[#FC4C02] px-2 py-1 rounded-lg text-xs font-bold">
+                                        +{spot.points} PTS
+                                    </span>
+                                </div>
+
+                                {spot.description && (
+                                    <p className="text-gray-400 text-sm mb-3 line-clamp-2">{spot.description}</p>
+                                )}
+
+                                <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-500">
+                                    <span className="bg-white/5 px-2 py-1 rounded">
+                                        Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
+                                    </span>
+                                    <span className={`px-2 py-1 rounded ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                                        {spot.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+
+                                <div className="flex gap-2 mb-3">
+                                    <button
+                                        onClick={() => copyToClipboard(spot.code)}
+                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                    >
+                                        {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                                        {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
+                                    </button>
+                                    <button
+                                        onClick={() => downloadQR(spot.code, spot.name)}
+                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                    >
+                                        <Download size={14} />
+                                        Download
+                                    </button>
+                                </div>
+
+                                <div className="text-xs text-gray-600 font-mono mb-3 text-center bg-black py-2 rounded">
+                                    {spot.code}
+                                </div>
+
+                                <button
+                                    onClick={() => handleDeleteSpot(spot.id)}
+                                    className="w-full flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 py-2 rounded-lg text-sm transition-colors"
+                                >
+                                    <Trash2 size={14} />
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+
+                    {spots.length === 0 && (
+                        <div className="col-span-full text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
+                            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <p>No QR Spots yet.</p>
+                            <p className="text-sm">Create one to let users earn points by scanning!</p>
+                        </div>
+                    )}
+                </div>
             )}
+
+            {/* Create Spot Modal */}
+            <AnimatePresence>
+                {isModalOpen && activeTab === 'spots' && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsModalOpen(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-md bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 shadow-2xl"
+                        >
+                            <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white">
+                                <X size={20} />
+                            </button>
+                            <h3 className="text-xl font-bold mb-6">Create QR Spot</h3>
+                            <form onSubmit={handleCreateSpot} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Spot Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={spotForm.name}
+                                        onChange={(e) => setSpotForm({ ...spotForm, name: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. Main Entrance"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Points</label>
+                                    <input
+                                        type="number"
+                                        required
+                                        value={spotForm.points}
+                                        onChange={(e) => setSpotForm({ ...spotForm, points: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="10"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description (Optional)</label>
+                                    <textarea
+                                        value={spotForm.description}
+                                        onChange={(e) => setSpotForm({ ...spotForm, description: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] h-20 resize-none"
+                                        placeholder="Scan this QR at the main entrance..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase flex justify-between">
+                                        <span>Max Claims</span>
+                                        <span className="text-gray-600 normal-case font-normal">(0 = Unlimited)</span>
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={spotForm.maxClaims}
+                                        onChange={(e) => setSpotForm({ ...spotForm, maxClaims: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="0"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Expires At (Optional)</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={spotForm.expiresAt}
+                                        onChange={(e) => setSpotForm({ ...spotForm, expiresAt: e.target.value })}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] [&::-webkit-calendar-picker-indicator]:invert"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={createLoading}
+                                    className="w-full bg-[#FC4C02] text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex justify-center"
+                                >
+                                    {createLoading ? <Loader2 className="animate-spin" /> : 'Create Spot'}
+                                </button>
+                            </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
 
             {/* Create Modal */}
             <AnimatePresence>
-                {isModalOpen && activeTab !== 'activities' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                {isModalOpen && activeTab !== 'activities' && activeTab !== 'spots' && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -1213,6 +1449,7 @@ export default function AdminPage() {
                                             >
                                                 <option value="none">None (Instant Claim)</option>
                                                 <option value="instagram_username">Check Instagram Username</option>
+                                                <option value="positive_message">Send Positive Message (AI Check)</option>
                                             </select>
                                         </div>
                                     </>

@@ -109,14 +109,22 @@ export default function NotificationsPage() {
             const res = await fetch('/api/user/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetUserId: replyTarget.id, message: replyMessage })
+                body: JSON.stringify({ targetUserId: replyTarget.id, message: replyMessage, isReply: true })
             })
 
+            const data = await res.json()
+
             if (res.ok) {
-                success('Reply sent!')
+                // Check if bonus points were awarded
+                if (data.bonusPoints) {
+                    success(`${data.message}`)
+                } else {
+                    success('Reply sent!')
+                }
                 setReplyTarget(null)
+                fetchNotifications() // Refresh to see bonus notification
             } else {
-                error('Failed to send reply')
+                error(data.error || 'Failed to send reply')
             }
         } catch (e) {
             error('Error sending reply')
