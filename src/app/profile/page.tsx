@@ -293,8 +293,7 @@ export default function ProfilePage() {
 
                 <div className="mt-12 text-center">
                     <p className="text-xs text-gray-600">
-                        WAM25 v0.1.0 Beta<br />
-                        Connected to Strava
+                        ScalingImpact v1.0 Beta
                     </p>
                 </div>
             </div>
