@@ -62,7 +62,56 @@ export async function POST(request: Request) {
       }
     })
 
-    // 3. Score Products against User Profile (Vector Dot Product)
+    // 3. User Level Check (Q6: Experience)
+    // Order Index 6: 0=Pemula, 1=Casual, 2=Berpengalaman
+    const q6 = questions.find((q: any) => q.order_index === 6)
+    const xpAnswer = q6 ? answers.find((a: SurveyAnswer) => a.questionId === q6.id) : null
+    const isBeginnerOrCasual = xpAnswer && (xpAnswer.selectedOptionIndex === 0 || xpAnswer.selectedOptionIndex === 1)
+
+    // --- NEW: SAVE SUBMISSION TO DB ---
+    const { data: { session } } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    const surveyId = answers[0]?.surveyId || request.headers.get('x-survey-id') // Fallback or passed in body
+
+    if (answers.length > 0) {
+        // We need survey_id. If it wasn't passed, we might need to find it from the question.
+        // For now, let's assume the body passed 'surveyId' alongside 'answers', 
+        // OR we look it up from the first question.
+        
+        let targetSurveyId = null
+        // Try getting from body if available (need to update request parsing above)
+        // OR get from the question's survey_id relation if we fetched it.
+        if (questions.length > 0) {
+            targetSurveyId = questions[0].survey_id
+        }
+
+        if (targetSurveyId) {
+            const { data: submission, error: subError } = await supabase
+                .from('survey_submissions')
+                .insert({
+                    survey_id: targetSurveyId,
+                    user_id: userId, // Link to user if logged in
+                    created_at: new Date().toISOString()
+                })
+                .select()
+                .single()
+
+            if (!subError && submission) {
+                const answerRows = answers.map((ans: any) => ({
+                    submission_id: submission.id,
+                    question_id: ans.questionId,
+                    selected_option_index: ans.selectedOptionIndex
+                }))
+
+                await supabase.from('survey_answers').insert(answerRows)
+            } else {
+                console.error('Failed to save submission:', subError)
+            }
+        }
+    }
+    // ----------------------------------
+
+    // 4. Score Products against User Profile (Vector Dot Product)
     const scoredProducts = products?.map((product: any) => {
       let totalScore = 0
       const reasons: string[] = []
@@ -85,6 +134,12 @@ export async function POST(request: Request) {
         }
       })
       
+      // LOGIC: Penalize "Flow" classes for Beginners/Casuals
+      // User Rule: "Yang ada kata 'Flow' itu untuk expert"
+      if (isBeginnerOrCasual && product.name.toLowerCase().includes('flow')) {
+        totalScore -= 50 // HARD BLOCK: -50 ensures it never wins
+      }
+      
       // Add "Discovery Factor" (Random Jitter 0-5 points)
       // This prevents the exact same 3 classes from always winning if scores are close
       // and gives a chance for other relevant classes to appear.
@@ -93,7 +148,7 @@ export async function POST(request: Request) {
       return { ...product, score: totalScore + discoveryFactor, matchReasons: reasons }
     }) || []
 
-    // 4. Sort & Pick Top 3
+    // 5. Sort & Pick Top 3
     const recommendations = scoredProducts
       .sort((a: any, b: any) => b.score - a.score)
       .slice(0, 3)

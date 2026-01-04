@@ -17,11 +17,19 @@ export async function GET(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     )
     
-    // Test connection
-    const { data: questions, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const surveyId = searchParams.get('id')
+
+    let query = supabase
       .from('survey_questions')
       .select('*')
       .order('order_index', { ascending: true })
+
+    if (surveyId) {
+      query = query.eq('survey_id', surveyId)
+    }
+
+    const { data: questions, error } = await query
 
     if (error) {
       console.error('Error fetching questions:', error)

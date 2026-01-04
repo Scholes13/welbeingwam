@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2 } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -12,7 +12,30 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
+    const [isEditingSurvey, setIsEditingSurvey] = useState(false)
+    const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
+
     const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots'>('users')
+
+    // ... (keep existing state) ...
+
+    const openCreateModal = () => {
+        setIsEditingSurvey(false)
+        setEditingSurveyId(null)
+        setSurveyContainerData({ title: '', description: '', is_active: true })
+        setIsModalOpen(true)
+    }
+
+    const openEditSurveyModal = (survey: any) => {
+        setIsEditingSurvey(true)
+        setEditingSurveyId(survey.id)
+        setSurveyContainerData({
+            title: survey.title,
+            description: survey.description,
+            is_active: survey.is_active
+        })
+        setIsModalOpen(true)
+    }
 
     // Activity & Scanner State
     // Activity & Scanner State
@@ -62,7 +85,8 @@ export default function AdminPage() {
     // Form State (Survey Container)
     const [surveyContainerData, setSurveyContainerData] = useState({
         title: '',
-        description: ''
+        description: '',
+        is_active: true
     })
 
     // Form State (Survey Question)
@@ -554,9 +578,14 @@ export default function AdminPage() {
                     verification_type: questVerificationType
                 }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
-                // Create Survey Container
-                url = '/api/admin/surveys/create'
-                body = surveyContainerData
+                // Create OR Update Survey Container
+                if (isEditingSurvey && editingSurveyId) {
+                    url = '/api/admin/surveys/update'
+                    body = { id: editingSurveyId, ...surveyContainerData }
+                } else {
+                    url = '/api/admin/surveys/create'
+                    body = surveyContainerData
+                }
             } else if (activeTab === 'surveys' && selectedSurvey) {
                 // Create Question
                 url = '/api/admin/surveys/questions/create'
@@ -596,8 +625,9 @@ export default function AdminPage() {
                     setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0 })
                     fetchRewards()
                 } else if (!selectedSurvey) {
-                    setSurveyContainerData({ title: '', description: '' })
+                    setSurveyContainerData({ title: '', description: '', is_active: true })
                     fetchSurveys()
+                    success(isEditingSurvey ? 'Survey updated!' : 'Survey created!')
                 } else {
                     setQuestionData({ questionText: '', orderIndex: questions.length + 1, options: [{ label: '', tags: '' }] })
                     fetchQuestions(selectedSurvey.id)
@@ -1042,6 +1072,30 @@ export default function AdminPage() {
                                                         onClick={(e) => {
                                                             e.preventDefault()
                                                             e.stopPropagation()
+                                                            router.push(`/dashboard/admin/survey/${survey.id}/report`)
+                                                        }}
+                                                        className="p-2 text-gray-500 hover:text-blue-400 rounded-lg hover:bg-white/10 transition-colors z-20"
+                                                        title="View Report"
+                                                    >
+                                                        <BarChart2 size={18} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault()
+                                                            e.stopPropagation()
+                                                            openEditSurveyModal(survey)
+                                                        }}
+                                                        className="p-2 text-gray-500 hover:text-white rounded-lg hover:bg-white/10 transition-colors z-20"
+                                                        title="Edit Survey"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault()
+                                                            e.stopPropagation()
                                                             promptDeleteSurvey(survey.id, survey.title)
                                                         }}
                                                         className="p-2 text-gray-500 hover:text-red-500 rounded-lg hover:bg-white/10 transition-colors z-20"
@@ -1049,9 +1103,20 @@ export default function AdminPage() {
                                                     >
                                                         <Trash2 size={18} />
                                                     </button>
-                                                    <div className="p-2 text-gray-500 group-hover:text-white transition-colors">
-                                                        <ClipboardList size={20} />
-                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault()
+                                                            e.stopPropagation()
+                                                            const link = `${window.location.origin}/survey/${survey.id}`
+                                                            navigator.clipboard.writeText(link)
+                                                            success('Survey link copied!')
+                                                        }}
+                                                        className="p-2 text-gray-500 hover:text-blue-400 rounded-lg hover:bg-white/10 transition-colors z-20"
+                                                        title="Copy Survey Link"
+                                                    >
+                                                        <Share2 size={20} />
+                                                    </button>
                                                 </div>
                                             </div>
                                             <p className="text-gray-400 text-sm mb-6 line-clamp-2 min-h-[2.5rem]">{survey.description}</p>
@@ -1672,6 +1737,18 @@ export default function AdminPage() {
                                                 placeholder="Briefly describe the purpose of this survey..."
                                             />
                                         </div>
+                                        <div className="flex items-center gap-2 pt-2">
+                                            <input
+                                                type="checkbox"
+                                                id="survey-active"
+                                                checked={surveyContainerData.is_active}
+                                                onChange={(e) => setSurveyContainerData({ ...surveyContainerData, is_active: e.target.checked })}
+                                                className="w-5 h-5 rounded border-gray-600 bg-black text-[#FC4C02] focus:ring-[#FC4C02]"
+                                            />
+                                            <label htmlFor="survey-active" className="text-sm font-medium text-gray-300 cursor-pointer select-none">
+                                                Active Status
+                                            </label>
+                                        </div>
                                     </>
                                 ) : (
                                     /* CREATE QUESTION FORM */
@@ -1756,7 +1833,7 @@ export default function AdminPage() {
                                     disabled={createLoading}
                                     className="w-full bg-[#FC4C02] text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex justify-center"
                                 >
-                                    {createLoading ? <Loader2 className="animate-spin" /> : 'Create'}
+                                    {createLoading ? <Loader2 className="animate-spin" /> : (isEditingSurvey && !selectedSurvey ? 'Update Survey' : 'Create')}
                                 </button>
                             </form>
                         </motion.div>
