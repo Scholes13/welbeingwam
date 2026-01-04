@@ -58,11 +58,12 @@ export default function AdminPage() {
     const [questions, setQuestions] = useState<any[]>([])
     const [rewards, setRewards] = useState<any[]>([])
     const [spots, setSpots] = useState<any[]>([])
-    const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '' })
+    const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '', clue: '' })
     const [selectedSpot, setSelectedSpot] = useState<any>(null)
     const [spotClaims, setSpotClaims] = useState<any[]>([])
     const [showSpotDetail, setShowSpotDetail] = useState(false)
     const [copiedCode, setCopiedCode] = useState<string | null>(null)
+    const [toggleLoadingSpotId, setToggleLoadingSpotId] = useState<string | null>(null)
 
     const router = useRouter()
 
@@ -320,7 +321,7 @@ export default function AdminPage() {
             if (res.ok) {
                 success('QR Spot created!')
                 setIsModalOpen(false)
-                setSpotForm({ name: '', description: '', points: '', maxClaims: '', expiresAt: '' })
+                setSpotForm({ name: '', description: '', points: '', maxClaims: '', expiresAt: '', clue: '' })
                 fetchSpots()
             } else {
                 toastError(data.error || 'Failed to create spot')
@@ -1296,9 +1297,38 @@ export default function AdminPage() {
                                     <span className="bg-white/5 px-2 py-1 rounded">
                                         Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
                                     </span>
-                                    <span className={`px-2 py-1 rounded ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                                        {spot.is_active ? 'Active' : 'Inactive'}
-                                    </span>
+                                    <button
+                                        disabled={toggleLoadingSpotId === spot.id}
+                                        onClick={async (e) => {
+                                            e.stopPropagation()
+                                            setToggleLoadingSpotId(spot.id)
+                                            try {
+                                                const res = await fetch('/api/admin/spots', {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ id: spot.id, is_active: !spot.is_active })
+                                                })
+                                                if (res.ok) {
+                                                    // Refresh spots list
+                                                    const spotsRes = await fetch('/api/admin/spots')
+                                                    const spotsData = await spotsRes.json()
+                                                    setSpots(spotsData.spots || [])
+                                                    success(spot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                                }
+                                            } catch (err) {
+                                                toastError('Failed to toggle spot')
+                                            } finally {
+                                                setToggleLoadingSpotId(null)
+                                            }
+                                        }}
+                                        className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
+                                    >
+                                        {toggleLoadingSpotId === spot.id ? (
+                                            <Loader2 size={14} className="animate-spin" />
+                                        ) : (
+                                            spot.is_active ? 'Active' : 'Inactive'
+                                        )}
+                                    </button>
                                 </div>
 
                                 <div className="flex gap-2 mb-3">
@@ -1348,7 +1378,8 @@ export default function AdminPage() {
                         </div>
                     )}
                 </div>
-            )}
+            )
+            }
 
             {/* Create Spot Modal */}
             <AnimatePresence>
@@ -1425,6 +1456,16 @@ export default function AdminPage() {
                                         className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] [&::-webkit-calendar-picker-indicator]:invert"
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Clue (Optional)</label>
+                                    <textarea
+                                        value={spotForm.clue}
+                                        onChange={(e) => setSpotForm({ ...spotForm, clue: e.target.value })}
+                                        placeholder="Hint to help users find this spot..."
+                                        rows={2}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02] resize-none"
+                                    />
+                                </div>
                                 <button
                                     type="submit"
                                     disabled={createLoading}
@@ -1462,9 +1503,15 @@ export default function AdminPage() {
                             <div className="mb-6">
                                 <h3 className="text-2xl font-bold mb-1">{selectedSpot.name}</h3>
                                 <p className="text-gray-400 text-sm">{selectedSpot.description || 'No description'}</p>
+                                {selectedSpot.clue && (
+                                    <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                                        <p className="text-xs text-yellow-500 uppercase font-bold mb-1">Clue</p>
+                                        <p className="text-yellow-200 text-sm">{selectedSpot.clue}</p>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="grid grid-cols-3 gap-4 mb-6">
                                 <div className="bg-black/50 rounded-xl p-4 text-center">
                                     <p className="text-2xl font-bold text-[#FC4C02]">+{selectedSpot.points}</p>
                                     <p className="text-xs text-gray-500 uppercase">Points</p>
@@ -1473,6 +1520,42 @@ export default function AdminPage() {
                                     <p className="text-2xl font-bold">{spotClaims.length}</p>
                                     <p className="text-xs text-gray-500 uppercase">Total Claims</p>
                                 </div>
+                                <button
+                                    disabled={toggleLoadingSpotId === selectedSpot.id}
+                                    onClick={async () => {
+                                        setToggleLoadingSpotId(selectedSpot.id)
+                                        try {
+                                            const res = await fetch('/api/admin/spots', {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ id: selectedSpot.id, is_active: !selectedSpot.is_active })
+                                            })
+                                            if (res.ok) {
+                                                // Update local state
+                                                setSelectedSpot({ ...selectedSpot, is_active: !selectedSpot.is_active })
+                                                // Refresh spots list
+                                                const spotsRes = await fetch('/api/admin/spots')
+                                                const spotsData = await spotsRes.json()
+                                                setSpots(spotsData.spots || [])
+                                                success(selectedSpot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                            }
+                                        } catch (err) {
+                                            toastError('Failed to toggle spot')
+                                        } finally {
+                                            setToggleLoadingSpotId(null)
+                                        }
+                                    }}
+                                    className={`rounded-xl p-4 text-center transition-colors disabled:opacity-50 ${selectedSpot.is_active ? 'bg-green-500/20 hover:bg-green-500/30' : 'bg-red-500/20 hover:bg-red-500/30'}`}
+                                >
+                                    {toggleLoadingSpotId === selectedSpot.id ? (
+                                        <Loader2 size={24} className="animate-spin mx-auto" />
+                                    ) : (
+                                        <p className={`text-2xl font-bold ${selectedSpot.is_active ? 'text-green-500' : 'text-red-500'}`}>
+                                            {selectedSpot.is_active ? 'ON' : 'OFF'}
+                                        </p>
+                                    )}
+                                    <p className="text-xs text-gray-500 uppercase">Status</p>
+                                </button>
                             </div>
 
                             <div className="flex justify-between items-center mb-4">

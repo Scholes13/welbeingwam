@@ -27,7 +27,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { name, description, points, maxClaims, expiresAt } = await request.json()
+    const { name, description, points, maxClaims, expiresAt, clue } = await request.json()
 
     if (!name || points === undefined) {
         return NextResponse.json({ error: 'Name and points are required' }, { status: 400 })
@@ -46,7 +46,8 @@ export async function POST(request: Request) {
                 points: parseInt(points) || 0,
                 max_claims: parseInt(maxClaims) || 0,
                 expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-                created_by: userId
+                created_by: userId,
+                clue: clue || null
             })
             .select()
             .single()
@@ -151,5 +152,50 @@ export async function DELETE(request: Request) {
     } catch (error) {
         console.error('Delete spot error:', error)
         return NextResponse.json({ error: 'Failed to delete spot' }, { status: 500 })
+    }
+}
+
+export async function PATCH(request: Request) {
+    const cookieStore = await cookies()
+    const userId = cookieStore.get('strava_athlete_id')?.value
+
+    if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    // Check if admin
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single()
+
+    if (!profile?.is_admin) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { id, is_active } = await request.json()
+
+    if (!id || is_active === undefined) {
+        return NextResponse.json({ error: 'ID and is_active are required' }, { status: 400 })
+    }
+
+    try {
+        const { error } = await supabase
+            .from('qr_spots')
+            .update({ is_active })
+            .eq('id', id)
+
+        if (error) throw error
+
+        return NextResponse.json({ success: true })
+    } catch (error) {
+        console.error('Toggle spot error:', error)
+        return NextResponse.json({ error: 'Failed to toggle spot' }, { status: 500 })
     }
 }

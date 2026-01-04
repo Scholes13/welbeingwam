@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Gift, Lock, Footprints, Coins, Check, Loader2, User, Shuffle, X, ArrowRight } from 'lucide-react'
+import { Gift, Lock, Footprints, Coins, Check, Loader2, User, Shuffle, X, ArrowRight, MapPin } from 'lucide-react'
 import { useRewards, useProfile } from '@/hooks/use-swr-hooks'
 import { useToast } from '@/context/ToastContext'
 import Loader from '@/components/ui/Loader'
@@ -22,6 +22,12 @@ export default function RewardsSection() {
     const [showBgPreview, setShowBgPreview] = useState(false)
     const [previewBackground, setPreviewBackground] = useState<any>(null)
     const BACKGROUND_GACHA_PRICE = 300 // Can be fetched from API later
+
+    // Clue Reveal states
+    const [isClueLoading, setIsClueLoading] = useState(false)
+    const [showClueModal, setShowClueModal] = useState(false)
+    const [spotClues, setSpotClues] = useState<Array<{ name: string; clue: string }>>([])
+    const CLUE_REVEAL_PRICE = 200
 
     const { success, error } = useToast()
 
@@ -146,6 +152,50 @@ export default function RewardsSection() {
     const closeBgModal = () => {
         setShowBgPreview(false)
         setPreviewBackground(null)
+    }
+
+    // Clue Reveal handlers
+    const handleRevealClues = async () => {
+        setIsClueLoading(true)
+        setShowClueModal(true)
+        setSpotClues([])
+
+        try {
+            // Deduct coins first via API
+            const purchaseRes = await fetch('/api/rewards/reveal-clues', { method: 'POST' })
+
+            const [cluesRes] = await Promise.all([
+                fetch('/api/spots/clues'),
+                new Promise(resolve => setTimeout(resolve, 1500)) // Animation delay
+            ])
+
+            const purchaseData = await purchaseRes.json()
+            const cluesData = await cluesRes.json()
+
+            if (purchaseRes.ok && cluesData.clues) {
+                setSpotClues(cluesData.clues)
+                mutate() // Refresh coins
+                confetti({
+                    particleCount: 60,
+                    spread: 50,
+                    origin: { y: 0.6 },
+                    colors: ['#ffd700', '#ffcc00', '#FC4C02']
+                })
+            } else {
+                setShowClueModal(false)
+                error(purchaseData.error || 'Failed to reveal clues')
+            }
+        } catch (e) {
+            setShowClueModal(false)
+            error('Something went wrong')
+        } finally {
+            setIsClueLoading(false)
+        }
+    }
+
+    const closeClueModal = () => {
+        setShowClueModal(false)
+        setSpotClues([])
     }
 
     const handleClaim = async (rewardId: string) => {
@@ -362,12 +412,96 @@ export default function RewardsSection() {
                 )}
             </AnimatePresence>
 
+            {/* Clue Reveal Modal */}
+            <AnimatePresence>
+                {showClueModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            onClick={!isClueLoading ? closeClueModal : undefined}
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-[#1a1a1a] border border-[#FC4C02] rounded-3xl p-6 w-full max-w-md relative z-10 shadow-[0_0_50px_rgba(252,76,2,0.3)] max-h-[80vh] overflow-hidden"
+                        >
+                            {!isClueLoading && (
+                                <button
+                                    onClick={closeClueModal}
+                                    className="absolute top-4 right-4 text-gray-400 hover:text-white z-10"
+                                >
+                                    <X size={24} />
+                                </button>
+                            )}
+
+                            <div className="text-center">
+                                <h3 className="text-2xl font-bold mb-2 flex items-center justify-center gap-2">
+                                    <MapPin className="text-[#FC4C02]" />
+                                    {isClueLoading ? 'REVEALING...' : 'SPOT CLUES'}
+                                </h3>
+                                <p className="text-gray-500 text-sm mb-6">
+                                    {isClueLoading ? 'Decoding hidden locations...' : 'Hints to find hidden QR spots!'}
+                                </p>
+
+                                {isClueLoading ? (
+                                    <div className="py-16">
+                                        <motion.div
+                                            animate={{ rotate: 360 }}
+                                            transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                                            className="w-16 h-16 mx-auto border-4 border-[#FC4C02]/20 border-t-[#FC4C02] rounded-full"
+                                        />
+                                        <p className="mt-4 text-[#FC4C02] animate-pulse">Unlocking secrets...</p>
+                                    </div>
+                                ) : spotClues.length === 0 ? (
+                                    <div className="py-12 text-gray-500">
+                                        <MapPin size={48} className="mx-auto mb-4 opacity-30" />
+                                        <p>No active spots with clues right now.</p>
+                                        <p className="text-sm">Check back later!</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-2">
+                                        {spotClues.map((clue, idx) => (
+                                            <motion.div
+                                                key={idx}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: idx * 0.15 }}
+                                                className="bg-gradient-to-r from-[#FC4C02]/10 to-orange-500/10 border border-[#FC4C02]/30 rounded-xl p-4 text-left"
+                                            >
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <MapPin size={14} className="text-[#FC4C02]" />
+                                                    <span className="font-bold text-[#FC4C02] text-sm">{clue.name}</span>
+                                                </div>
+                                                <p className="text-gray-300 text-sm italic">"{clue.clue}"</p>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {!isClueLoading && spotClues.length > 0 && (
+                                    <button
+                                        onClick={closeClueModal}
+                                        className="mt-6 w-full py-3 rounded-xl font-bold bg-[#FC4C02] hover:bg-orange-600 text-white transition-colors"
+                                    >
+                                        Got it!
+                                    </button>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                     <Gift className="text-[#FC4C02]" /> Rewards
                 </h2>
                 <div className="flex gap-4 text-xs font-mono font-bold">
-                    <div className="flex items-center gap-1 text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-full border border-yellow-500/20">
+                    <div className="flex items-center gap-1 text-[#FC4C02] bg-[#FC4C02]/10 px-3 py-1 rounded-full border border-[#FC4C02]/20">
                         <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
                             <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
                             <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -389,7 +523,7 @@ export default function RewardsSection() {
 
                         <div className="mt-auto">
                             <div className="flex gap-2 mb-3 text-[10px] font-bold uppercase">
-                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= rerollPrice ? 'text-yellow-500' : 'text-gray-600'}`}>
+                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= rerollPrice ? 'text-[#FC4C02]' : 'text-gray-600'}`}>
                                     {rerollPrice} COINS
                                 </span>
                             </div>
@@ -416,7 +550,7 @@ export default function RewardsSection() {
 
                         <div className="mt-auto">
                             <div className="flex gap-2 mb-3 text-[10px] font-bold uppercase">
-                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= BACKGROUND_GACHA_PRICE ? 'text-yellow-500' : 'text-gray-600'}`}>
+                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= BACKGROUND_GACHA_PRICE ? 'text-[#FC4C02]' : 'text-gray-600'}`}>
                                     {BACKGROUND_GACHA_PRICE} COINS
                                 </span>
                             </div>
@@ -432,7 +566,34 @@ export default function RewardsSection() {
                     </div>
                 </div>
 
-                {rewards.filter((r: any) => r.title !== 'Background Reroll').map((reward: any) => (
+                {/* Clue Reveal Card */}
+                <div className="relative bg-[#1a1a1a] border border-[#FC4C02] rounded-2xl overflow-hidden flex flex-col justify-between group shadow-[0_0_15px_rgba(252,76,2,0.15)]">
+                    <div className="h-32 bg-[#FC4C02]/10 flex items-center justify-center relative overflow-hidden">
+                        <MapPin size={32} className="text-[#FC4C02]" />
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col">
+                        <h3 className="font-bold text-sm mb-1 text-white">Reveal Spot Clues</h3>
+                        <p className="text-xs text-gray-500 mb-3">Unlock hints to find QR spots!</p>
+
+                        <div className="mt-auto">
+                            <div className="flex gap-2 mb-3 text-[10px] font-bold uppercase">
+                                <span className={`${(userStats.availableCoins ?? userStats.totalPoints) >= CLUE_REVEAL_PRICE ? 'text-[#FC4C02]' : 'text-gray-600'}`}>
+                                    {CLUE_REVEAL_PRICE} COINS
+                                </span>
+                            </div>
+                            <button
+                                onClick={handleRevealClues}
+                                disabled={isClueLoading || (userStats.availableCoins ?? 0) < CLUE_REVEAL_PRICE}
+                                className="w-full py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all bg-[#FC4C02] text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {isClueLoading ? <Loader2 className="animate-spin w-3 h-3" /> : <MapPin className="w-3 h-3" />}
+                                {isClueLoading ? 'REVEALING...' : 'REVEAL'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {rewards.filter((r: any) => r.title !== 'Background Reroll' && !r.title.toLowerCase().includes('clue')).map((reward: any) => (
                     <div
                         key={reward.id}
                         className={`relative bg-[#1a1a1a] border rounded-2xl overflow-hidden flex flex-col justify-between group
