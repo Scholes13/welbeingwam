@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import useSWR from 'swr'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Download, Users, BarChart2, Calendar, FileText } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { ArrowLeft, Download, Users, BarChart2, Calendar, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 // Custom Toast Hook
 import { useToast } from '@/context/ToastContext'
 
@@ -14,6 +14,7 @@ export default function SurveyReportPage() {
     const params = useParams()
     const router = useRouter()
     const surveyId = params?.id as string
+    const [expandedRow, setExpandedRow] = useState<string | null>(null)
 
     const { data, error, isLoading } = useSWR(surveyId ? `/api/admin/surveys/analytics?surveyId=${surveyId}` : null, fetcher)
 
@@ -163,31 +164,68 @@ export default function SurveyReportPage() {
                                     <th className="px-6 py-3">Participant</th>
                                     <th className="px-6 py-3">Status</th>
                                     <th className="px-6 py-3">Date</th>
+                                    <th className="px-6 py-3"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-800">
                                 {recent.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-8 text-center text-gray-500">No submissions yet.</td>
+                                        <td colSpan={4} className="px-6 py-8 text-center text-gray-500">No submissions yet.</td>
                                     </tr>
                                 ) : (
                                     recent.map((r: any) => (
-                                        <tr key={r.id} className="hover:bg-neutral-800/50 transition-colors">
-                                            <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
-                                                    {r.name.substring(0, 1).toUpperCase()}
-                                                </div>
-                                                {r.name}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-2 py-1 rounded-full bg-green-500/20 text-green-400 text-xs font-bold">
-                                                    Completed
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {new Date(r.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                            </td>
-                                        </tr>
+                                        <>
+                                            <tr
+                                                key={r.id}
+                                                onClick={() => setExpandedRow(expandedRow === r.id ? null : r.id)}
+                                                className="hover:bg-neutral-800/50 transition-colors cursor-pointer"
+                                            >
+                                                <td className="px-6 py-4 font-medium text-white flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">
+                                                        {r.name.substring(0, 1).toUpperCase()}
+                                                    </div>
+                                                    {r.name}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="px-2 py-1 rounded-full bg-green-500/20 text-green-400 text-xs font-bold">
+                                                        Completed
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {new Date(r.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {expandedRow === r.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                </td>
+                                            </tr>
+                                            {/* EXPANDED DETAILS */}
+                                            <AnimatePresence>
+                                                {expandedRow === r.id && (
+                                                    <motion.tr
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        className="bg-neutral-950/30"
+                                                    >
+                                                        <td colSpan={4} className="px-6 py-4">
+                                                            <div className="space-y-3 pl-11">
+                                                                <p className="text-xs font-bold text-gray-500 uppercase mb-2">Detailed Responses</p>
+                                                                {r.answers && r.answers.length > 0 ? (
+                                                                    r.answers.map((ans: any, idx: number) => (
+                                                                        <div key={idx} className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-2 py-2 border-b border-neutral-800 last:border-0">
+                                                                            <p className="text-gray-400 text-sm font-medium">{ans.questionText}</p>
+                                                                            <p className="text-white text-sm bg-neutral-800/50 px-3 py-1 rounded-lg inline-block w-fit">{ans.answer}</p>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <p className="text-gray-500 italic">No details available.</p>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </motion.tr>
+                                                )}
+                                            </AnimatePresence>
+                                        </>
                                     ))
                                 )}
                             </tbody>

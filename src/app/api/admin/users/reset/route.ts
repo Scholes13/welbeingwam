@@ -65,6 +65,15 @@ export async function POST(request: Request) {
         }
     }
 
+    if (type === 'rewards' || type === 'all') {
+         // Delete all reward claims (resets spending history)
+         const { error: rewardError } = await supabase
+            .from('user_rewards')
+            .delete()
+            .eq('user_id', targetUserId)
+         if (rewardError) throw rewardError
+    }
+
     return NextResponse.json({ success: true })
 
   } catch (error) {

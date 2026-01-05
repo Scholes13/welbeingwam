@@ -17,14 +17,38 @@ export async function GET(request: Request) {
             process.env.SUPABASE_SERVICE_ROLE_KEY!
         )
 
-        // 1. Get Totals
-        const { count: totalSubmissions, error: countError } = await supabase
+        // 1. Get Totals from submissions
+        const { count: submissionCount, error: countError } = await supabase
             .from('survey_submissions')
             .select('*', { count: 'exact', head: true })
             .eq('survey_id', surveyId)
 
+        // Also count unique submission_ids from survey_answers as fallback
+        // (for older data that may not have proper submissions)
+        const { data: answerSubmissions } = await supabase
+            .from('survey_answers')
+            .select('submission_id')
+            .not('submission_id', 'is', null)
+
+        // Get question IDs for this survey to filter answers
+        const { data: surveyQuestions } = await supabase
+            .from('survey_questions')
+            .select('id')
+            .eq('survey_id', surveyId)
+
+        const questionIds = surveyQuestions?.map(q => q.id) || []
+
+        // Count unique submissions from answers for this survey's questions
+        const { data: answersForSurvey } = await supabase
+            .from('survey_answers')
+            .select('submission_id')
+            .in('question_id', questionIds)
+
+        const uniqueSubmissionIds = new Set(answersForSurvey?.map(a => a.submission_id).filter(Boolean) || [])
+        const totalSubmissions = (submissionCount || 0) > 0 ? submissionCount : uniqueSubmissionIds.size
+
         if (countError) {
-            return NextResponse.json({ error: countError.message }, { status: 500 })
+            console.error('Count error:', countError)
         }
 
         // 2. Get Questions for this survey
@@ -87,7 +111,29 @@ export async function GET(request: Request) {
             `)
             .eq('survey_id', surveyId)
             .order('created_at', { ascending: false })
-            .limit(10) // Last 10
+            .limit(20) // Increased limit
+
+        // 5. Get Answers for these submissions
+        const submissionIds = recentSubmissions?.map(s => s.id) || []
+        const { data: submissionAnswers } = await supabase
+            .from('survey_answers')
+            .select('submission_id, question_id, selected_option_index')
+            .in('submission_id', submissionIds)
+
+        // Helper to get Answer Details
+        const getAnswerDetails = (subId: string) => {
+            const answers = submissionAnswers?.filter(a => a.submission_id === subId) || []
+            return answers.map(a => {
+                const question = questions.find(q => q.id === a.question_id)
+                if (!question) return null
+                const option = question.options[a.selected_option_index]
+                return {
+                    questionId: question.id,
+                    questionText: question.question_text,
+                    answer: option?.label || option?.text || 'Unknown'
+                }
+            }).filter(Boolean)
+        }
 
         return NextResponse.json({
             meta: {
@@ -97,7 +143,8 @@ export async function GET(request: Request) {
             recent: recentSubmissions?.map((s: any) => ({
                 id: s.id,
                 date: s.created_at,
-                name: s.custom_name || s.users?.raw_user_meta_data?.full_name || s.users?.email || 'Anonymous'
+                name: s.custom_name || s.users?.raw_user_meta_data?.full_name || s.users?.email || 'Anonymous',
+                answers: getAnswerDetails(s.id)
             }))
         })
 

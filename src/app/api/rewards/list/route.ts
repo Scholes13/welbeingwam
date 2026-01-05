@@ -155,20 +155,30 @@ export async function GET() {
         const rewardClaimers = claimersMap[reward.id] || []
         const hasBeenClaimedByAnyone = (reward.total_claimed || 0) > 0 || rewardClaimers.length > 0
 
-        const isRevealed = isUnlocked || isClaimed || hasBeenClaimedByAnyone
+        // Visibility Logic Based on Type
+        let isVisible = true
+        if (reward.type === 'progress') {
+            // Reveal only if user has enough coins (or already claimed it)
+            isVisible = availableCoins >= reqPoints || isClaimed
+        } else if (reward.type === 'mystery') {
+             // Reveal only if someone (anyone) has claimed it (or user claimed it)
+             isVisible = hasBeenClaimedByAnyone || isClaimed
+        }
+        // 'reveal' type is always visible (default)
 
         // Mask content if NOT revealed
-        if (!isRevealed) {
+        if (!isVisible) {
              return {
                  id: reward.id,
                  title: '???',
-                 description: 'Mystery Reward. Complete more quests to reveal!',
+                 description: reward.type === 'progress' ? 'Earn more coins to reveal this reward!' : 'Be the first to claim to reveal this mystery reward!',
                  image_url: null, 
                  required_points: reqPoints,
-                 required_steps: reqSteps,
-                 status: 'LOCKED',
+                 required_steps: reqSteps, // Keep steps invisible if needed? User didn't specify. I'll show requirements so they know target.
+                 status: isUnlocked ? 'AVAILABLE' : 'LOCKED',
+                 type: reward.type,
                  progress: {
-                     userPoints: availableCoins, // Show coins
+                     userPoints: availableCoins,
                      userSteps: totalSteps
                  },
                  claimers: []

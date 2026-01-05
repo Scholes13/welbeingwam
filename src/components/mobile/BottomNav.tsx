@@ -17,7 +17,7 @@ export default function BottomNav() {
     ]
 
     // Don't show on login page or survey
-    if (pathname === '/' || pathname === '/survey') return null
+    if (pathname === '/' || pathname?.startsWith('/survey')) return null
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-6">

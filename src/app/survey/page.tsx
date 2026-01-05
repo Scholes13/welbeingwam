@@ -9,8 +9,10 @@ import useSWR from 'swr'
 import { useToast } from '@/context/ToastContext'
 
 interface Option {
-    label: string
-    impact: Record<string, number>
+    label?: string
+    text?: string
+    value?: string
+    impact?: Record<string, number>
 }
 
 interface Question {
@@ -70,6 +72,17 @@ export default function SurveyPage() {
     }
 
     const questions: Question[] = data?.questions || []
+
+    // Parse options if they are strings (from database)
+    questions.forEach((q: any) => {
+        if (typeof q.options === 'string') {
+            try {
+                q.options = JSON.parse(q.options)
+            } catch (e) {
+                q.options = []
+            }
+        }
+    })
 
     // Empty State Handling
     if (questions.length === 0) {
@@ -246,7 +259,7 @@ export default function SurveyPage() {
                                         >
                                             <div className="flex items-center justify-between relative z-10">
                                                 <span className={`text-base md:text-lg font-medium pr-4 ${isSelected ? 'text-blue-400' : 'text-neutral-200 group-hover:text-white'}`}>
-                                                    {option.label}
+                                                    {option.label || option.text}
                                                 </span>
                                                 {isSelected && <Check className="w-5 h-5 text-blue-400 flex-shrink-0" />}
                                             </div>

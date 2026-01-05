@@ -57,10 +57,6 @@ export async function POST(request: Request) {
     if (availableCoins < reward.required_points) {
         return NextResponse.json({ error: `Not enough coins. Need ${reward.required_points}, have ${availableCoins}` }, { status: 403 })
     }
-    if (totalSteps < reward.required_steps) {
-        return NextResponse.json({ error: `Steps milestone not reached. Need ${reward.required_steps} lifetime steps.` }, { status: 403 })
-    }
-
     // 9. Check Stock
     if (reward.max_claims > 0 && reward.total_claimed >= reward.max_claims) {
         return NextResponse.json({ error: 'Reward sold out' }, { status: 400 })

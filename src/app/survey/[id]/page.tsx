@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Sparkles, ArrowRight } from 'lucide-react'
+import { Check, Sparkles, ArrowRight, Heart, ThumbsUp } from 'lucide-react'
 import { useRouter, useParams } from 'next/navigation'
 import useSWR from 'swr'
 // Custom Toast Hook
 import { useToast } from '@/context/ToastContext'
 
 interface Option {
-    label: string
-    impact: Record<string, number>
+    label?: string
+    text?: string
+    value?: string
+    impact?: Record<string, number>
 }
 
 interface Question {
@@ -32,11 +34,31 @@ export default function DynamicSurveyPage() {
     // Pass surveyID to API
     const { data, error, isLoading } = useSWR(surveyId ? `/api/survey?id=${surveyId}` : null, fetcher)
 
+    // Survey metadata
+    const [surveyTitle, setSurveyTitle] = useState('')
+    const [isFeedbackSurvey, setIsFeedbackSurvey] = useState(false)
+
     const [currentIndex, setCurrentIndex] = useState(0)
     const [answers, setAnswers] = useState<{ questionId: string; selectedOptionIndex: number }[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [recommendations, setRecommendations] = useState<any[]>([])
     const [showResults, setShowResults] = useState(false)
+
+    // Fetch survey metadata to determine type
+    useEffect(() => {
+        if (surveyId) {
+            fetch(`/api/surveys/${surveyId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data?.survey) {
+                        setSurveyTitle(data.survey.title || '')
+                        // Check if this is a feedback survey (title contains "Feedback")
+                        setIsFeedbackSurvey(data.survey.title?.toLowerCase().includes('feedback'))
+                    }
+                })
+                .catch(() => { })
+        }
+    }, [surveyId])
 
     // Loading State with Premium Animation
     if (isLoading) return (
@@ -112,13 +134,34 @@ export default function DynamicSurveyPage() {
             // Submit
             setIsSubmitting(true)
             try {
-                const res = await fetch('/api/recommendations', {
+                // First, fetch survey metadata to determine type
+                const surveyMetaRes = await fetch(`/api/surveys/${surveyId}`)
+                const surveyMeta = await surveyMetaRes.json()
+                const surveyTitle = surveyMeta?.survey?.title?.toLowerCase() || ''
+
+                // Only "Corporate Wellbeing" survey shows recommendations
+                // All other surveys show thank you message
+                const isRecommendationSurvey = surveyTitle.includes('wellbeing') || surveyTitle.includes('wellness')
+                setIsFeedbackSurvey(!isRecommendationSurvey)
+
+                // ALWAYS save survey responses first (for all surveys)
+                await fetch('/api/surveys/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ answers, surveyId }), // Pass surveyId just in case
+                    body: JSON.stringify({ surveyId, answers }),
                 })
-                const result = await res.json()
-                setRecommendations(result.recommendations)
+
+                // Only fetch recommendations for recommendation surveys
+                if (isRecommendationSurvey) {
+                    const res = await fetch('/api/recommendations', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ answers, surveyId }),
+                    })
+                    const result = await res.json()
+                    setRecommendations(result.recommendations || [])
+                }
+
                 setShowResults(true)
             } catch (err) {
                 showError('Failed to calculate results.')
@@ -134,6 +177,59 @@ export default function DynamicSurveyPage() {
 
     // --- RESULT VIEW ---
     if (showResults) {
+        // FEEDBACK SURVEY - Show Thank You
+        if (isFeedbackSurvey) {
+            return (
+                <div className="min-h-screen bg-neutral-900 text-white p-6 overflow-y-auto">
+                    <div className="max-w-md mx-auto space-y-8 pt-20 pb-20">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="text-center space-y-6"
+                        >
+                            <motion.div
+                                animate={{ scale: [1, 1.1, 1] }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                                className="w-24 h-24 mx-auto bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(52,211,153,0.4)]"
+                            >
+                                <ThumbsUp className="w-12 h-12 text-white" />
+                            </motion.div>
+
+                            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-300 to-emerald-400 bg-clip-text text-transparent">
+                                Terima Kasih!
+                            </h1>
+
+                            <p className="text-neutral-300 text-lg leading-relaxed">
+                                Feedback kamu sangat berarti bagi kami untuk terus meningkatkan pengalaman wellness kamu.
+                            </p>
+
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.5 }}
+                                className="bg-neutral-800/50 rounded-2xl p-6 border border-neutral-700"
+                            >
+                                <Heart className="w-8 h-8 text-pink-500 mx-auto mb-3" />
+                                <p className="text-neutral-400 text-sm">
+                                    Setiap jawaban membantu kami memahami kebutuhan wellness kamu dengan lebih baik.
+                                </p>
+                            </motion.div>
+                        </motion.div>
+
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => router.push('/dashboard')}
+                            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg mt-8 flex items-center justify-center gap-2"
+                        >
+                            Kembali ke Dashboard <ArrowRight className="w-4 h-4" />
+                        </motion.button>
+                    </div>
+                </div>
+            )
+        }
+
+        // RECOMMENDATION SURVEY - Show Matches
         return (
             <div className="min-h-screen bg-neutral-900 text-white p-6 overflow-y-auto">
                 <div className="max-w-md mx-auto space-y-8 pt-12 pb-20">

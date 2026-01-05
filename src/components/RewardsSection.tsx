@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Gift, Lock, Footprints, Coins, Check, Loader2, User, Shuffle, X, ArrowRight, MapPin } from 'lucide-react'
+import { Gift, Lock, Footprints, Coins, Check, Loader2, User, Shuffle, X, ArrowRight, MapPin, HelpCircle } from 'lucide-react'
 import { useRewards, useProfile } from '@/hooks/use-swr-hooks'
 import { useToast } from '@/context/ToastContext'
 import Loader from '@/components/ui/Loader'
@@ -606,9 +606,11 @@ export default function RewardsSection() {
                         {/* Image / Icon Area */}
                         <div className="h-32 bg-black/50 flex items-center justify-center relative overflow-hidden">
                             {reward.status === 'LOCKED' ? (
-                                <Lock size={32} className="text-gray-600" />
+                                reward.type === 'mystery' ? <HelpCircle size={32} className="text-gray-500 animate-pulse" /> : <Lock size={32} className="text-gray-600" />
                             ) : reward.image_url ? (
                                 <img src={reward.image_url} alt={reward.title} className="w-full h-full object-cover" />
+                            ) : reward.title === '???' ? (
+                                <HelpCircle size={32} className="text-[#FC4C02] animate-pulse" />
                             ) : (
                                 <Gift size={32} className={reward.status === 'CLAIMED' ? 'text-green-500' : 'text-[#FC4C02]'} />
                             )}

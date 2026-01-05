@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2 } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, Pencil, BarChart2 } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -103,8 +103,8 @@ export default function AdminPage() {
         description: '',
         image_url: '',
         required_points: 0,
-        required_steps: 0,
-        max_claims: 0
+        max_claims: 0,
+        type: 'reveal'
     })
 
     const [createLoading, setCreateLoading] = useState(false)
@@ -386,6 +386,13 @@ export default function AdminPage() {
         URL.revokeObjectURL(url)
     }
 
+    // Reward Detail State
+    const [selectedReward, setSelectedReward] = useState<any>(null)
+    const [rewardClaims, setRewardClaims] = useState<any[]>([])
+    const [showRewardDetail, setShowRewardDetail] = useState(false)
+    const [isEditingReward, setIsEditingReward] = useState(false)
+    const [editingRewardId, setEditingRewardId] = useState<string | null>(null)
+
     const copyToClipboard = (code: string) => {
         navigator.clipboard.writeText(code)
         setCopiedCode(code)
@@ -398,6 +405,67 @@ export default function AdminPage() {
         link.href = url
         link.download = `qr-spot-${name.replace(/\s+/g, '-').toLowerCase()}.png`
         link.click()
+    }
+
+    const fetchRewardDetail = async (rewardId: string) => {
+        try {
+            // Find reward info from existing list first
+            const reward = rewards.find(r => r.id === rewardId)
+            if (reward) setSelectedReward(reward)
+
+            // Show loading or just open modal
+            setShowRewardDetail(true)
+
+            // Fetch claims
+            const res = await fetch(`/api/admin/rewards/claims?rewardId=${rewardId}`)
+            const data = await res.json()
+            if (res.ok) {
+                setRewardClaims(data.claims || [])
+            } else {
+                toastError('Failed to load claims history')
+            }
+        } catch (e) {
+            toastError('Error fetching reward details')
+            console.error(e)
+        }
+    }
+
+    const handleEditReward = (reward: any) => {
+        setRewardData({
+            title: reward.title,
+            description: reward.description,
+            image_url: reward.image_url || '',
+            required_points: reward.required_points,
+            max_claims: reward.max_claims,
+            type: reward.type || 'reveal'
+        })
+        setIsEditingReward(true)
+        setEditingRewardId(reward.id)
+        setActiveTab('rewards')
+        setIsModalOpen(true)
+    }
+
+    const exportRewardClaims = () => {
+        if (!selectedReward || rewardClaims.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram', 'Cost', 'Claimed At']
+        const rows = rewardClaims.map((claim, idx) => [
+            idx + 1,
+            claim.full_name || '-',
+            claim.username || '-',
+            claim.instagram_username || '-',
+            claim.cost || selectedReward.required_points || 0,
+            new Date(claim.claimed_at).toLocaleString('id-ID')
+        ])
+
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${selectedReward.title}_claims_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
     }
 
     const fetchQuestions = async (surveyId: string) => {
@@ -515,7 +583,7 @@ export default function AdminPage() {
         setShowResetModal(true)
     }
 
-    const handleResetPoints = async (type: 'steps' | 'quests' | 'all') => {
+    const handleResetPoints = async (type: 'steps' | 'quests' | 'rewards' | 'all') => {
         if (!resetTarget) return
 
         // Removed native confirm. UI is explicit enough.
@@ -542,7 +610,7 @@ export default function AdminPage() {
                 if (!res.ok) throw new Error('Failed to reset')
             }
 
-            const typeText = type === 'all' ? 'Semua Poin' : (type === 'steps' ? 'Steps' : 'Quests')
+            const typeText = type === 'all' ? 'Semua Poin' : (type === 'steps' ? 'Steps' : (type === 'rewards' ? 'Rewards' : 'Quests'))
             success(`Berhasil mereset ${typeText} untuk ${resetTarget.name}!`)
 
             setShowResetModal(false)
@@ -599,8 +667,13 @@ export default function AdminPage() {
                     }))
                 }
             } else if (activeTab === 'rewards') {
-                url = '/api/admin/rewards/create'
-                body = rewardData
+                if (isEditingReward && editingRewardId) {
+                    url = '/api/admin/rewards/update'
+                    body = { id: editingRewardId, ...rewardData }
+                } else {
+                    url = '/api/admin/rewards/create'
+                    body = rewardData
+                }
             }
 
             const res = await fetch(url, {
@@ -623,7 +696,9 @@ export default function AdminPage() {
                     setQuestVerificationType('none')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
-                    setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0 })
+                    setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0, type: 'reveal' })
+                    setIsEditingReward(false)
+                    setEditingRewardId(null)
                     fetchRewards()
                 } else if (!selectedSurvey) {
                     setSurveyContainerData({ title: '', description: '', is_active: true })
@@ -985,10 +1060,14 @@ export default function AdminPage() {
                 activeTab === 'rewards' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {rewards.map((reward) => (
-                            <div key={reward.id} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between">
+                            <div
+                                key={reward.id}
+                                onClick={() => fetchRewardDetail(reward.id)}
+                                className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between cursor-pointer hover:border-[#FC4C02] transition-colors group"
+                            >
                                 <div>
                                     <div className="flex justify-between items-start mb-4 gap-4">
-                                        <h3 className="text-xl font-bold flex-1 break-words">{reward.title}</h3>
+                                        <h3 className="text-xl font-bold flex-1 break-words group-hover:text-[#FC4C02] transition-colors">{reward.title}</h3>
                                         <div className="flex flex-col items-end gap-2">
                                             <div className="flex flex-col items-end">
                                                 {reward.required_points > 0 && (
@@ -1002,18 +1081,32 @@ export default function AdminPage() {
                                                     </span>
                                                 )}
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault()
-                                                    e.stopPropagation()
-                                                    promptDeleteReward(reward.id, reward.title)
-                                                }}
-                                                className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
-                                                title="Delete Reward"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                            <div className="flex gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault()
+                                                        e.stopPropagation()
+                                                        handleEditReward(reward)
+                                                    }}
+                                                    className="text-gray-500 hover:text-blue-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
+                                                    title="Edit Reward"
+                                                >
+                                                    <Pencil size={18} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault()
+                                                        e.stopPropagation()
+                                                        promptDeleteReward(reward.id, reward.title)
+                                                    }}
+                                                    className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
+                                                    title="Delete Reward"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <p className="text-gray-400 text-sm mb-4 line-clamp-3">{reward.description}</p>
@@ -1605,6 +1698,93 @@ export default function AdminPage() {
                 )}
             </AnimatePresence>
 
+            {/* Reward Detail Modal */}
+            <AnimatePresence>
+                {showRewardDetail && selectedReward && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowRewardDetail(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-2xl bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+                        >
+                            <button
+                                onClick={() => setShowRewardDetail(false)}
+                                className="absolute top-4 right-4 text-gray-500 hover:text-white"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <div className="mb-6">
+                                <h3 className="text-2xl font-bold mb-1">{selectedReward.title}</h3>
+                                <p className="text-gray-400 text-sm">{selectedReward.description || 'No description'}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold text-[#FC4C02]">{selectedReward.required_points}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Points Cost</p>
+                                </div>
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold">{rewardClaims.length}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Total Claims</p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-sm font-bold text-gray-400 uppercase">Claims History</h4>
+                                {rewardClaims.length > 0 && (
+                                    <button
+                                        onClick={exportRewardClaims}
+                                        className="flex items-center gap-1 text-[#FC4C02] text-sm hover:underline"
+                                    >
+                                        <Download size={14} />
+                                        Export CSV
+                                    </button>
+                                )}
+                            </div>
+
+                            {rewardClaims.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 border border-dashed border-white/10 rounded-xl">
+                                    <p>No one has claimed this reward yet.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {rewardClaims.map((claim, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 bg-black/30 rounded-xl p-3">
+                                            <img
+                                                src={claim.avatar_url || '/avatar-placeholder.png'}
+                                                alt={claim.full_name}
+                                                className="w-10 h-10 rounded-full object-cover"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium truncate">{claim.full_name || 'User'}</p>
+                                                <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-400">
+                                                    {new Date(claim.claimed_at).toLocaleDateString('id-ID')}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {new Date(claim.claimed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* Create Modal */}
             <AnimatePresence>
                 {isModalOpen && activeTab !== 'activities' && activeTab !== 'spots' && (
@@ -1742,6 +1922,25 @@ export default function AdminPage() {
                                 ) : activeTab === 'rewards' ? (
                                     /* CREATE REWARD FORM */
                                     <>
+                                        {isEditingReward && (
+                                            <div className="flex justify-between items-center mb-4 bg-blue-500/10 p-3 rounded-lg border border-blue-500/20">
+                                                <div className="text-blue-500 text-sm font-bold flex items-center gap-2">
+                                                    <Edit size={16} />
+                                                    Editing: {rewardData.title}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setIsEditingReward(false)
+                                                        setEditingRewardId(null)
+                                                        setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0, type: 'reveal' })
+                                                    }}
+                                                    className="text-xs text-blue-400 hover:text-white underline"
+                                                >
+                                                    Cancel Edit
+                                                </button>
+                                            </div>
+                                        )}
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reward Title</label>
                                             <input
@@ -1752,6 +1951,18 @@ export default function AdminPage() {
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                                 placeholder="e.g. Eco-Friendly Water Bottle"
                                             />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reward Type</label>
+                                            <select
+                                                value={rewardData.type}
+                                                onChange={(e) => setRewardData({ ...rewardData, type: e.target.value })}
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            >
+                                                <option value="reveal">Reveal (Always Visible)</option>
+                                                <option value="progress">Progress (Hidden until Coins Enough)</option>
+                                                <option value="mystery">Mystery (Hidden until Someone Claims)</option>
+                                            </select>
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Price (Coins)</label>
@@ -1916,7 +2127,11 @@ export default function AdminPage() {
                                     disabled={createLoading}
                                     className="w-full bg-[#FC4C02] text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex justify-center"
                                 >
-                                    {createLoading ? <Loader2 className="animate-spin" /> : (isEditingSurvey && !selectedSurvey ? 'Update Survey' : 'Create')}
+                                    {createLoading ? <Loader2 className="animate-spin" /> : (
+                                        isEditingSurvey && !selectedSurvey ? 'Update Survey'
+                                            : isEditingReward && activeTab === 'rewards' ? 'Update Reward'
+                                                : isEditingReward ? 'Update' : 'Create'
+                                    )}
                                 </button>
                             </form>
                         </motion.div>
@@ -2041,12 +2256,20 @@ export default function AdminPage() {
                                     Reset Quests Only
                                 </button>
                                 <button
+                                    onClick={() => handleResetPoints('rewards')}
+                                    disabled={isResetting}
+                                    className="w-full bg-[#FC4C02]/10 hover:bg-[#FC4C02]/20 text-[#FC4C02] font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Gift size={20} />
+                                    Reset Rewards (Fix Negative)
+                                </button>
+                                <button
                                     onClick={() => handleResetPoints('all')}
                                     disabled={isResetting}
-                                    className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                                    className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
                                 >
-                                    {isResetting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                    Reset EVERYTHING
+                                    {isResetting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={20} />}
+                                    Reset Everything (All Data)
                                 </button>
                             </div>
 
@@ -2058,207 +2281,214 @@ export default function AdminPage() {
                             </button>
                         </motion.div>
                     </div>
-                )}
-            </AnimatePresence>
+                )
+                }
+            </AnimatePresence >
 
             {/* Create Activity Modal */}
             <AnimatePresence>
-                {isModalOpen && activeTab === 'activities' && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-                    >
+                {
+                    isModalOpen && activeTab === 'activities' && (
                         <motion.div
-                            initial={{ scale: 0.95 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0.95 }}
-                            className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
                         >
-                            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                                <h2 className="text-xl font-bold">New Activity</h2>
-                                <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <form onSubmit={handleCreateActivity} className="p-6 space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-1">Activity Title</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={activityForm.title}
-                                        onChange={e => setActivityForm({ ...activityForm, title: e.target.value })}
-                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
-                                        placeholder="e.g. Morning Run"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-1">Date</label>
-                                    <input
-                                        type="date"
-                                        required
-                                        value={activityForm.date}
-                                        onChange={e => setActivityForm({ ...activityForm, date: e.target.value })}
-                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-400 mb-1">Points Reward (Optional)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={activityForm.points}
-                                        onChange={e => setActivityForm({ ...activityForm, points: parseInt(e.target.value) || 0 })}
-                                        className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
-                                        placeholder="0"
-                                    />
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    className="w-full bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl transition-colors"
-                                >
-                                    Create Activity
-                                </button>
-                            </form>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* QR Scanner Modal */}
-            <AnimatePresence>
-                {isScannerOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
-                    >
-                        <div className="w-full max-w-md bg-[#121212] rounded-3xl overflow-hidden border border-white/10 relative">
-                            <button
-                                onClick={() => setIsScannerOpen(false)}
-                                className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white"
+                            <motion.div
+                                initial={{ scale: 0.95 }}
+                                animate={{ scale: 1 }}
+                                exit={{ scale: 0.95 }}
+                                className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden"
                             >
-                                <X className="w-6 h-6" />
-                            </button>
-
-                            <div className="p-6 text-center">
-                                <h2 className="text-2xl font-bold mb-2">Scan QR Code</h2>
-                                <p className="text-gray-400 text-sm mb-6">Point camera at user's ID Card</p>
-
-                                <div className="rounded-xl overflow-hidden border-2 border-[#FC4C02]/50 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-6">
-                                    <Scanner
-                                        onScan={handleScan}
-                                    />
-                                </div>
-
-                                {scanResult && (
-                                    <div className={`p-4 rounded-xl border ${scanResult.success ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
-                                        <div className="font-bold flex items-center justify-center gap-2 mb-1">
-                                            {scanResult.success ? <Shield className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                                            {scanResult.success ? 'Success!' : 'Error'}
-                                        </div>
-                                        <p className="text-sm">{scanResult.message}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Activity Detail Modal */}
-            <AnimatePresence>
-                {showActivityDetail && activityDetail && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.95 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0.95 }}
-                            className="bg-[#121212] border border-white/10 w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                        >
-                            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1a1a]">
-                                <div>
-                                    <h2 className="text-xl font-bold">{activityDetail.activity.title}</h2>
-                                    <p className="text-gray-400 text-sm">{new Date(activityDetail.activity.activity_date).toLocaleDateString()}</p>
-                                </div>
-                                <button onClick={() => setShowActivityDetail(false)} className="text-gray-400 hover:text-white">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <div className="p-6 overflow-y-auto flex-1">
-                                <div className="flex justify-between items-center mb-6">
-                                    <div className="flex gap-4">
-                                        <div className="bg-gray-800 px-4 py-2 rounded-lg">
-                                            <span className="block text-xs text-gray-500 uppercase">Attendees</span>
-                                            <span className="font-bold text-lg">{activityDetail.attendance.length}</span>
-                                        </div>
-                                        <div className="bg-gray-800 px-4 py-2 rounded-lg">
-                                            <span className="block text-xs text-gray-500 uppercase">Points</span>
-                                            <span className="font-bold text-lg text-[#FC4C02]">{activityDetail.activity.points}</span>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={exportAttendance}
-                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
-                                    >
-                                        <Share2 size={16} /> Export to CSV
+                                <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                                    <h2 className="text-xl font-bold">New Activity</h2>
+                                    <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
+                                        <X className="w-5 h-5" />
                                     </button>
                                 </div>
 
-                                <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
-                                    <table className="w-full text-left text-sm">
-                                        <thead className="bg-white/5 text-gray-400 uppercase font-medium">
-                                            <tr>
-                                                <th className="p-4">User</th>
-                                                <th className="p-4">Instagram</th>
-                                                <th className="p-4 text-right">Scanned At</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {activityDetail.attendance.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={3} className="p-8 text-center text-gray-500">No attendance records yet.</td>
-                                                </tr>
-                                            ) : (
-                                                activityDetail.attendance.map((att: any, i: number) => (
-                                                    <tr key={i} className="hover:bg-white/5">
-                                                        <td className="p-4 flex items-center gap-3">
-                                                            <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden">
-                                                                {att.avatar_url && <img src={att.avatar_url} className="w-full h-full object-cover" />}
-                                                            </div>
-                                                            <div>
-                                                                <div className="font-bold">{att.full_name}</div>
-                                                                <div className="text-gray-500 text-xs">@{att.username}</div>
-                                                            </div>
-                                                        </td>
-                                                        <td className="p-4 text-gray-300">
-                                                            {att.instagram_username ? <span className="text-[#FC4C02]">@{att.instagram_username}</span> : '-'}
-                                                        </td>
-                                                        <td className="p-4 text-right text-gray-400 font-mono">
-                                                            {new Date(att.scanned_at).toLocaleTimeString()}
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            )}
-                                        </tbody>
-                                    </table>
+                                <form onSubmit={handleCreateActivity} className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Activity Title</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={activityForm.title}
+                                            onChange={e => setActivityForm({ ...activityForm, title: e.target.value })}
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            placeholder="e.g. Morning Run"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Date</label>
+                                        <input
+                                            type="date"
+                                            required
+                                            value={activityForm.date}
+                                            onChange={e => setActivityForm({ ...activityForm, date: e.target.value })}
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Points Reward (Optional)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={activityForm.points}
+                                            onChange={e => setActivityForm({ ...activityForm, points: parseInt(e.target.value) || 0 })}
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            placeholder="0"
+                                        />
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        className="w-full bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl transition-colors"
+                                    >
+                                        Create Activity
+                                    </button>
+                                </form>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* QR Scanner Modal */}
+            <AnimatePresence>
+                {
+                    isScannerOpen && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+                        >
+                            <div className="w-full max-w-md bg-[#121212] rounded-3xl overflow-hidden border border-white/10 relative">
+                                <button
+                                    onClick={() => setIsScannerOpen(false)}
+                                    className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white"
+                                >
+                                    <X className="w-6 h-6" />
+                                </button>
+
+                                <div className="p-6 text-center">
+                                    <h2 className="text-2xl font-bold mb-2">Scan QR Code</h2>
+                                    <p className="text-gray-400 text-sm mb-6">Point camera at user's ID Card</p>
+
+                                    <div className="rounded-xl overflow-hidden border-2 border-[#FC4C02]/50 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-6">
+                                        <Scanner
+                                            onScan={handleScan}
+                                        />
+                                    </div>
+
+                                    {scanResult && (
+                                        <div className={`p-4 rounded-xl border ${scanResult.success ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
+                                            <div className="font-bold flex items-center justify-center gap-2 mb-1">
+                                                {scanResult.success ? <Shield className="w-5 h-5" /> : <X className="w-5 h-5" />}
+                                                {scanResult.success ? 'Success!' : 'Error'}
+                                            </div>
+                                            <p className="text-sm">{scanResult.message}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* Activity Detail Modal */}
+            <AnimatePresence>
+                {
+                    showActivityDetail && activityDetail && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                        >
+                            <motion.div
+                                initial={{ scale: 0.95 }}
+                                animate={{ scale: 1 }}
+                                exit={{ scale: 0.95 }}
+                                className="bg-[#121212] border border-white/10 w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                            >
+                                <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1a1a]">
+                                    <div>
+                                        <h2 className="text-xl font-bold">{activityDetail.activity.title}</h2>
+                                        <p className="text-gray-400 text-sm">{new Date(activityDetail.activity.activity_date).toLocaleDateString()}</p>
+                                    </div>
+                                    <button onClick={() => setShowActivityDetail(false)} className="text-gray-400 hover:text-white">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                <div className="p-6 overflow-y-auto flex-1">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <div className="flex gap-4">
+                                            <div className="bg-gray-800 px-4 py-2 rounded-lg">
+                                                <span className="block text-xs text-gray-500 uppercase">Attendees</span>
+                                                <span className="font-bold text-lg">{activityDetail.attendance.length}</span>
+                                            </div>
+                                            <div className="bg-gray-800 px-4 py-2 rounded-lg">
+                                                <span className="block text-xs text-gray-500 uppercase">Points</span>
+                                                <span className="font-bold text-lg text-[#FC4C02]">{activityDetail.activity.points}</span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={exportAttendance}
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
+                                        >
+                                            <Share2 size={16} /> Export to CSV
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
+                                        <table className="w-full text-left text-sm">
+                                            <thead className="bg-white/5 text-gray-400 uppercase font-medium">
+                                                <tr>
+                                                    <th className="p-4">User</th>
+                                                    <th className="p-4">Instagram</th>
+                                                    <th className="p-4 text-right">Scanned At</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {activityDetail.attendance.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={3} className="p-8 text-center text-gray-500">No attendance records yet.</td>
+                                                    </tr>
+                                                ) : (
+                                                    activityDetail.attendance.map((att: any, i: number) => (
+                                                        <tr key={i} className="hover:bg-white/5">
+                                                            <td className="p-4 flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden">
+                                                                    {att.avatar_url && <img src={att.avatar_url} className="w-full h-full object-cover" />}
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-bold">{att.full_name}</div>
+                                                                    <div className="text-gray-500 text-xs">@{att.username}</div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="p-4 text-gray-300">
+                                                                {att.instagram_username ? <span className="text-[#FC4C02]">@{att.instagram_username}</span> : '-'}
+                                                            </td>
+                                                            <td className="p-4 text-right text-gray-400 font-mono">
+                                                                {new Date(att.scanned_at).toLocaleTimeString()}
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
 
             {/* Delete Confirmation Modal */}
             <AnimatePresence>
@@ -2308,64 +2538,66 @@ export default function AdminPage() {
 
             {/* Adjust Steps Modal */}
             <AnimatePresence>
-                {showStepsModal && stepsTarget && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setShowStepsModal(false)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
-                        >
-                            <h3 className="text-xl font-bold mb-4 text-white">Adjust Steps</h3>
-                            <p className="text-gray-400 text-sm mb-6">
-                                Adjusting steps for <span className="text-white font-bold">{stepsTarget.name}</span>.
-                                <br />Positive value adds steps, negative subtracts.
-                            </p>
+                {
+                    showStepsModal && stepsTarget && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setShowStepsModal(false)}
+                                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            />
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                            >
+                                <h3 className="text-xl font-bold mb-4 text-white">Adjust Steps</h3>
+                                <p className="text-gray-400 text-sm mb-6">
+                                    Adjusting steps for <span className="text-white font-bold">{stepsTarget.name}</span>.
+                                    <br />Positive value adds steps, negative subtracts.
+                                </p>
 
-                            <form onSubmit={handleAdjustSteps} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Steps Adjustment</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        value={adjustStepsData.steps}
-                                        onChange={(e) => setAdjustStepsData({ ...adjustStepsData, steps: e.target.value })}
-                                        className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
-                                        placeholder="e.g. 500 or -200"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reason</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={adjustStepsData.reason}
-                                        onChange={(e) => setAdjustStepsData({ ...adjustStepsData, reason: e.target.value })}
-                                        className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
-                                        placeholder="e.g. Bonus challenge, Correction"
-                                    />
-                                </div>
+                                <form onSubmit={handleAdjustSteps} className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Steps Adjustment</label>
+                                        <input
+                                            type="number"
+                                            required
+                                            value={adjustStepsData.steps}
+                                            onChange={(e) => setAdjustStepsData({ ...adjustStepsData, steps: e.target.value })}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
+                                            placeholder="e.g. 500 or -200"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Reason</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={adjustStepsData.reason}
+                                            onChange={(e) => setAdjustStepsData({ ...adjustStepsData, reason: e.target.value })}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-purple-500"
+                                            placeholder="e.g. Bonus challenge, Correction"
+                                        />
+                                    </div>
 
-                                <button
-                                    type="submit"
-                                    disabled={isAdjusting}
-                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
-                                >
-                                    {isAdjusting ? <Loader2 className="animate-spin" /> : <Footprints size={18} />}
-                                    {isAdjusting ? 'Adjusting...' : 'Confirm Adjustment'}
-                                </button>
-                            </form>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
+                                    <button
+                                        type="submit"
+                                        disabled={isAdjusting}
+                                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
+                                    >
+                                        {isAdjusting ? <Loader2 className="animate-spin" /> : <Footprints size={18} />}
+                                        {isAdjusting ? 'Adjusting...' : 'Confirm Adjustment'}
+                                    </button>
+                                </form>
+                            </motion.div>
+                        </div>
+                    )
+                }
+            </AnimatePresence >
         </div >
     )
 }
