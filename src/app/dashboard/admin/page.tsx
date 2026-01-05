@@ -696,7 +696,7 @@ export default function AdminPage() {
                     setQuestVerificationType('none')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
-                    setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0, type: 'reveal' })
+                    setRewardData({ title: '', description: '', image_url: '', required_points: 0, max_claims: 0, type: 'reveal' })
                     setIsEditingReward(false)
                     setEditingRewardId(null)
                     fetchRewards()
@@ -1933,7 +1933,7 @@ export default function AdminPage() {
                                                     onClick={() => {
                                                         setIsEditingReward(false)
                                                         setEditingRewardId(null)
-                                                        setRewardData({ title: '', description: '', image_url: '', required_points: 0, required_steps: 0, max_claims: 0, type: 'reveal' })
+                                                        setRewardData({ title: '', description: '', image_url: '', required_points: 0, max_claims: 0, type: 'reveal' })
                                                     }}
                                                     className="text-xs text-blue-400 hover:text-white underline"
                                                 >

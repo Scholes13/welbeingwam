@@ -3,10 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const surveyId = params.id
+        const { id: surveyId } = await params
 
         if (!surveyId) {
             return NextResponse.json({ error: 'Survey ID required' }, { status: 400 })
