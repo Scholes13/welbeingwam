@@ -97,7 +97,9 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                         const timeLeft = quest.expires_at ? getCountdown(quest.expires_at) : null
                         const isExpired = timeLeft === 'Expired'
 
-                        if (isExpired) return null
+                        const isCompleted = userQuests.some((uq: any) => uq.quest_id === quest.id)
+
+                        if (isExpired && !isCompleted) return null
 
                         return (
                             <motion.div
@@ -138,10 +140,10 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
 
                                 <div className="z-10 shrink-0 self-center">
                                     <motion.button
-                                        onClick={() => handleClaim(quest.id)}
-                                        disabled={isLoading || isSuccess}
+                                        onClick={() => !isCompleted && handleClaim(quest.id)}
+                                        disabled={isLoading || isSuccess || isCompleted}
                                         whileTap={{ scale: 0.95 }}
-                                        className={`px-5 py-2.5 rounded-xl font-bold text-xs min-w-[90px] flex justify-center items-center overflow-hidden relative transition-all shadow-lg ${isSuccess
+                                        className={`px-5 py-2.5 rounded-xl font-bold text-xs min-w-[90px] flex justify-center items-center overflow-hidden relative transition-all shadow-lg ${isSuccess || isCompleted
                                             ? 'bg-green-500 text-white shadow-green-500/20'
                                             : errorMessage
                                                 ? 'bg-red-500 text-white'
@@ -158,7 +160,7 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                                                 >
                                                     <Loader2 size={16} className="animate-spin" />
                                                 </motion.div>
-                                            ) : isSuccess ? (
+                                            ) : isSuccess || isCompleted ? (
                                                 <motion.div
                                                     key="success"
                                                     initial={{ scale: 0.5, opacity: 0 }}
