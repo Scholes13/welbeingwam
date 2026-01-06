@@ -390,6 +390,9 @@ export default function AdminPage() {
     const [selectedReward, setSelectedReward] = useState<any>(null)
     const [rewardClaims, setRewardClaims] = useState<any[]>([])
     const [showRewardDetail, setShowRewardDetail] = useState(false)
+    const [selectedQuest, setSelectedQuest] = useState<any>(null)
+    const [questClaims, setQuestClaims] = useState<any[]>([])
+    const [showQuestDetail, setShowQuestDetail] = useState(false)
     const [isEditingReward, setIsEditingReward] = useState(false)
     const [editingRewardId, setEditingRewardId] = useState<string | null>(null)
 
@@ -464,6 +467,49 @@ export default function AdminPage() {
         const a = document.createElement('a')
         a.href = url
         a.download = `${selectedReward.title}_claims_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    const fetchQuestClaims = async (questId: string) => {
+        try {
+            const quest = quests.find(q => q.id === questId)
+            if (quest) setSelectedQuest(quest)
+
+            setShowQuestDetail(true)
+
+            const res = await fetch(`/api/admin/quests/claims?questId=${questId}`)
+            const data = await res.json()
+            if (res.ok) {
+                setQuestClaims(data.claims || [])
+            } else {
+                toastError('Failed to load quest claims')
+            }
+        } catch (e) {
+            toastError('Error fetching quest details')
+            console.error(e)
+        }
+    }
+
+    const exportQuestClaims = () => {
+        if (!selectedQuest || questClaims.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram', 'Points', 'Completed At']
+        const rows = questClaims.map((claim, idx) => [
+            idx + 1,
+            claim.full_name || '-',
+            claim.username || '-',
+            claim.instagram_username || '-',
+            claim.points || selectedQuest.points || 0,
+            new Date(claim.completed_at).toLocaleString('id-ID')
+        ])
+
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${selectedQuest.title}_completions_${new Date().toISOString().split('T')[0]}.csv`
         a.click()
         URL.revokeObjectURL(url)
     }
@@ -1022,7 +1068,11 @@ export default function AdminPage() {
                 activeTab === 'quests' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {quests.map((quest) => (
-                            <div key={quest.id} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between">
+                            <div
+                                key={quest.id}
+                                onClick={() => fetchQuestClaims(quest.id)}
+                                className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between cursor-pointer hover:border-[#FC4C02] transition-colors group"
+                            >
                                 <div>
                                     <div className="flex justify-between items-start mb-4 gap-4">
                                         <h3 className="text-xl font-bold flex-1 break-words">{quest.title}</h3>
@@ -1774,6 +1824,93 @@ export default function AdminPage() {
                                                 </p>
                                                 <p className="text-xs text-gray-500">
                                                     {new Date(claim.claimed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Quest Detail Modal */}
+            <AnimatePresence>
+                {showQuestDetail && selectedQuest && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowQuestDetail(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="relative w-full max-w-2xl bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]"
+                        >
+                            <button
+                                onClick={() => setShowQuestDetail(false)}
+                                className="absolute top-4 right-4 text-gray-500 hover:text-white"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <div className="mb-6">
+                                <h3 className="text-2xl font-bold mb-1">{selectedQuest.title}</h3>
+                                <p className="text-gray-400 text-sm">{selectedQuest.description || 'No description'}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold text-yellow-500">{selectedQuest.points}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Points Reward</p>
+                                </div>
+                                <div className="bg-black/50 rounded-xl p-4 text-center">
+                                    <p className="text-2xl font-bold">{questClaims.length}</p>
+                                    <p className="text-xs text-gray-500 uppercase">Total Completions</p>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-sm font-bold text-gray-400 uppercase">Completion History</h4>
+                                {questClaims.length > 0 && (
+                                    <button
+                                        onClick={exportQuestClaims}
+                                        className="flex items-center gap-1 text-[#FC4C02] text-sm hover:underline"
+                                    >
+                                        <Download size={14} />
+                                        Export CSV
+                                    </button>
+                                )}
+                            </div>
+
+                            {questClaims.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500 border border-dashed border-white/10 rounded-xl">
+                                    <p>No one has completed this quest yet.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {questClaims.map((claim, idx) => (
+                                        <div key={idx} className="flex items-center gap-3 bg-black/30 rounded-xl p-3">
+                                            <img
+                                                src={claim.avatar_url || '/avatar-placeholder.png'}
+                                                alt={claim.full_name}
+                                                className="w-10 h-10 rounded-full object-cover"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium truncate">{claim.full_name || 'User'}</p>
+                                                <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-xs text-gray-400">
+                                                    {new Date(claim.completed_at).toLocaleDateString('id-ID')}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    {new Date(claim.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
                                         </div>

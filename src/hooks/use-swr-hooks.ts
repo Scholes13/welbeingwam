@@ -29,7 +29,7 @@ export function useRewards() {
 
     return {
         rewards: data?.rewards || [],
-        rerollPrice: data?.rerollPrice || 500, // Default 500
+        rerollPrice: data?.rerollPrice || 10, // Default 10
         userStats: data?.userStats || { totalPoints: 0, totalSteps: 0 },
         isLoading,
         isError: error,
