@@ -141,7 +141,7 @@ export default function DynamicSurveyPage() {
 
                 // Only "Corporate Wellbeing" survey shows recommendations
                 // All other surveys show thank you message
-                const isRecommendationSurvey = surveyTitle.includes('wellbeing') || surveyTitle.includes('wellness')
+                const isRecommendationSurvey = surveyTitle.includes('wellbeing') || surveyTitle.includes('wellness') || surveyTitle.includes('recommendation')
                 setIsFeedbackSurvey(!isRecommendationSurvey)
 
                 // ALWAYS save survey responses first (for all surveys)
