@@ -48,6 +48,7 @@ export default function AdminPage() {
     // Activity Detail State
     const [showActivityDetail, setShowActivityDetail] = useState(false)
     const [activityDetail, setActivityDetail] = useState<any>(null)
+    const [activeDetailTab, setActiveDetailTab] = useState<'completed' | 'pending'>('completed')
 
     // Survey State for Navigation
     const [selectedSurvey, setSelectedSurvey] = useState<any | null>(null)
@@ -239,42 +240,7 @@ export default function AdminPage() {
         }
     }
 
-    const fetchActivityDetail = async (id: string) => {
-        try {
-            setLoading(true)
-            const res = await fetch(`/api/admin/activities/detail?id=${id}`)
-            const data = await res.json()
-            setActivityDetail(data)
-            setShowActivityDetail(true)
-        } catch (error) {
-            console.error(error)
-        } finally {
-            setLoading(false)
-        }
-    }
 
-    const exportAttendance = () => {
-        if (!activityDetail?.attendance) return
-
-        const headers = ['Name', 'Username', 'Instagram', 'Scanned At']
-        const rows = activityDetail.attendance.map((att: any) => [
-            att.full_name,
-            att.username,
-            att.instagram_username || '-',
-            new Date(att.scanned_at).toLocaleString()
-        ])
-
-        const csvContent = "data:text/csv;charset=utf-8,"
-            + [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
-
-        const encodedUri = encodeURI(csvContent)
-        const link = document.createElement("a")
-        link.setAttribute("href", encodedUri)
-        link.setAttribute("download", `attendance_${activityDetail.activity.title}.csv`)
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-    }
 
     const fetchQuests = async () => {
         try {
@@ -408,6 +374,45 @@ export default function AdminPage() {
         link.href = url
         link.download = `qr-spot-${name.replace(/\s+/g, '-').toLowerCase()}.png`
         link.click()
+    }
+
+    const fetchActivityDetail = async (activityId: string) => {
+        try {
+            setActiveDetailTab('completed')
+            setShowActivityDetail(true)
+            const res = await fetch(`/api/admin/activities/detail?id=${activityId}`)
+            const data = await res.json()
+
+            if (res.ok) {
+                setActivityDetail(data)
+            } else {
+                toastError('Failed to fetch activity details')
+            }
+        } catch (e) {
+            console.error(e)
+            toastError('Error fetching activity details')
+        }
+    }
+
+    const exportActivityPending = () => {
+        if (!activityDetail || !activityDetail.pending || activityDetail.pending.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram']
+        const rows = activityDetail.pending.map((u: any, idx: number) => [
+            idx + 1,
+            u.full_name || '-',
+            u.username || '-',
+            u.instagram || '-'
+        ])
+
+        const csv = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${activityDetail.activity.title}_PENDING_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
     }
 
     const fetchRewardDetail = async (rewardId: string) => {
@@ -2536,96 +2541,8 @@ export default function AdminPage() {
                 }
             </AnimatePresence >
 
-            {/* Activity Detail Modal */}
-            <AnimatePresence>
-                {
-                    showActivityDetail && activityDetail && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-                        >
-                            <motion.div
-                                initial={{ scale: 0.95 }}
-                                animate={{ scale: 1 }}
-                                exit={{ scale: 0.95 }}
-                                className="bg-[#121212] border border-white/10 w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
-                            >
-                                <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#1a1a1a]">
-                                    <div>
-                                        <h2 className="text-xl font-bold">{activityDetail.activity.title}</h2>
-                                        <p className="text-gray-400 text-sm">{new Date(activityDetail.activity.activity_date).toLocaleDateString()}</p>
-                                    </div>
-                                    <button onClick={() => setShowActivityDetail(false)} className="text-gray-400 hover:text-white">
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
 
-                                <div className="p-6 overflow-y-auto flex-1">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <div className="flex gap-4">
-                                            <div className="bg-gray-800 px-4 py-2 rounded-lg">
-                                                <span className="block text-xs text-gray-500 uppercase">Attendees</span>
-                                                <span className="font-bold text-lg">{activityDetail.attendance.length}</span>
-                                            </div>
-                                            <div className="bg-gray-800 px-4 py-2 rounded-lg">
-                                                <span className="block text-xs text-gray-500 uppercase">Points</span>
-                                                <span className="font-bold text-lg text-[#FC4C02]">{activityDetail.activity.points}</span>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={exportAttendance}
-                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
-                                        >
-                                            <Share2 size={16} /> Export to CSV
-                                        </button>
-                                    </div>
 
-                                    <div className="bg-black/30 rounded-xl border border-white/5 overflow-hidden">
-                                        <table className="w-full text-left text-sm">
-                                            <thead className="bg-white/5 text-gray-400 uppercase font-medium">
-                                                <tr>
-                                                    <th className="p-4">User</th>
-                                                    <th className="p-4">Instagram</th>
-                                                    <th className="p-4 text-right">Scanned At</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-white/5">
-                                                {activityDetail.attendance.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={3} className="p-8 text-center text-gray-500">No attendance records yet.</td>
-                                                    </tr>
-                                                ) : (
-                                                    activityDetail.attendance.map((att: any, i: number) => (
-                                                        <tr key={i} className="hover:bg-white/5">
-                                                            <td className="p-4 flex items-center gap-3">
-                                                                <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden">
-                                                                    {att.avatar_url && <img src={att.avatar_url} className="w-full h-full object-cover" />}
-                                                                </div>
-                                                                <div>
-                                                                    <div className="font-bold">{att.full_name}</div>
-                                                                    <div className="text-gray-500 text-xs">@{att.username}</div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-gray-300">
-                                                                {att.instagram_username ? <span className="text-[#FC4C02]">@{att.instagram_username}</span> : '-'}
-                                                            </td>
-                                                            <td className="p-4 text-right text-gray-400 font-mono">
-                                                                {new Date(att.scanned_at).toLocaleTimeString()}
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )
-                }
-            </AnimatePresence >
 
             {/* Delete Confirmation Modal */}
             <AnimatePresence>
@@ -2730,6 +2647,207 @@ export default function AdminPage() {
                                         {isAdjusting ? 'Adjusting...' : 'Confirm Adjustment'}
                                     </button>
                                 </form>
+                            </motion.div>
+                        </div>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* Activity Detail Modal */}
+            <AnimatePresence>
+                {
+                    showActivityDetail && activityDetail && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-md">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className="bg-[#121212] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+                            >
+                                {/* Header */}
+                                <div className="p-6 border-b border-white/5 flex justify-between items-start bg-[#121212]">
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white mb-1">{activityDetail.activity.title}</h2>
+                                        <div className="flex items-center gap-4 text-sm text-gray-400">
+                                            <span className="flex items-center gap-1"><Calendar size={14} /> {activityDetail.activity.activity_date}</span>
+                                            <span className="text-[#FC4C02] font-bold">+{activityDetail.activity.points} PTS</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowActivityDetail(false)}
+                                        className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
+                                    >
+                                        <X size={20} />
+                                    </button>
+                                </div>
+
+                                {/* Compact Stats (No Cards) */}
+                                <div className="flex items-center gap-8 px-6 py-4 border-b border-white/5 bg-black/20">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Completed</span>
+                                        <span className="text-xl font-bold text-green-500 flex items-center gap-2">
+                                            {activityDetail.stats.attended} <Check size={14} />
+                                        </span>
+                                    </div>
+                                    <div className="w-px h-8 bg-white/10" />
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Pending</span>
+                                        <span className="text-xl font-bold text-[#FC4C02] flex items-center gap-2">
+                                            {activityDetail.stats.pending} <Target size={14} />
+                                        </span>
+                                    </div>
+                                    <div className="w-px h-8 bg-white/10" />
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Rate</span>
+                                        <span className="text-xl font-bold text-blue-500">
+                                            {activityDetail.stats.attendance_rate}%
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Navigation Tabs & Export */}
+                                <div className="flex items-center justify-between border-b border-white/10 bg-[#121212] px-2">
+                                    <div className="flex">
+                                        <button
+                                            onClick={() => setActiveDetailTab('completed')}
+                                            className={`py-4 px-6 text-sm font-bold transition-colors relative flex items-center gap-2 ${activeDetailTab === 'completed' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                                        >
+                                            <Check size={16} /> Completed
+                                            {activeDetailTab === 'completed' && (
+                                                <motion.div layoutId="detailTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FC4C02]" />
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={() => setActiveDetailTab('pending')}
+                                            className={`py-4 px-6 text-sm font-bold transition-colors relative flex items-center gap-2 ${activeDetailTab === 'pending' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                                        >
+                                            <Target size={16} /> Pending
+                                            {activeDetailTab === 'pending' && (
+                                                <motion.div layoutId="detailTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FC4C02]" />
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Export Button (Visible for Pending Tab) */}
+                                    {activeDetailTab === 'pending' && (
+                                        <button
+                                            onClick={exportActivityPending}
+                                            className="mr-4 flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04502] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-[#FC4C02]/20"
+                                        >
+                                            <Download size={14} /> Export CSV
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Content Area */}
+                                <div className="flex-1 overflow-y-auto bg-black/40 relative">
+                                    {activeDetailTab === 'completed' ? (
+                                        // COMPLETED VIEW (TABLE)
+                                        <div className="min-w-full pb-6">
+                                            {activityDetail.attendees.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+                                                    <Scan size={48} className="mb-4 opacity-50" />
+                                                    <p>No attendees yet.</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full">
+                                                    {/* Table Header */}
+                                                    <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider bg-[#1a1a1a]/95 sticky top-0 backdrop-blur-md z-10 border-b border-white/5">
+                                                        <div className="col-span-5 md:col-span-6">User</div>
+                                                        <div className="col-span-4 md:col-span-3">Instagram</div>
+                                                        <div className="col-span-3 text-right">Scanned At</div>
+                                                    </div>
+
+                                                    {/* Table Rows */}
+                                                    <div className="divide-y divide-white/5">
+                                                        {activityDetail.attendees.map((user: any) => (
+                                                            <div key={user.user_id} className="grid grid-cols-12 gap-4 px-6 py-3 hover:bg-white/5 transition-colors items-center group">
+                                                                <div className="col-span-5 md:col-span-6 flex items-center gap-3 overflow-hidden">
+                                                                    <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex-shrink-0 border border-white/10 group-hover:border-[#FC4C02]/50 transition-colors">
+                                                                        {user.avatar_url ? (
+                                                                            <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
+                                                                        ) : (
+                                                                            <User size={16} className="w-full h-full p-1.5 text-gray-400" />
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="overflow-hidden min-w-0">
+                                                                        <div className="text-sm font-bold text-white truncate group-hover:text-[#FC4C02] transition-colors">{user.full_name}</div>
+                                                                        <div className="text-xs text-gray-500 truncate">@{user.username}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="col-span-4 md:col-span-3 overflow-hidden">
+                                                                    {user.instagram ? (
+                                                                        <a href={`https://instagram.com/${user.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 truncate block hover:underline">
+                                                                            {user.instagram.startsWith('@') ? user.instagram : `@${user.instagram}`}
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-gray-600 text-xs">-</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="col-span-3 text-right text-xs text-gray-400 font-mono">
+                                                                    {new Date(user.joined_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        // PENDING VIEW (TABLE)
+                                        <div className="min-w-full pb-6">
+                                            {activityDetail.pending.length === 0 ? (
+                                                <div className="flex flex-col items-center justify-center py-20 text-green-500">
+                                                    <Check size={48} className="mb-4 opacity-50" />
+                                                    <p className="font-bold">All Users Completed!</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full">
+                                                    {/* Table Header */}
+                                                    <div className="grid grid-cols-12 gap-4 px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider bg-[#1a1a1a]/95 sticky top-0 backdrop-blur-md z-10 border-b border-white/5">
+                                                        <div className="col-span-5 md:col-span-6">User</div>
+                                                        <div className="col-span-4 md:col-span-3">Instagram</div>
+                                                        <div className="col-span-3 text-right">Status</div>
+                                                    </div>
+
+                                                    <div className="divide-y divide-white/5">
+                                                        {activityDetail.pending.map((user: any) => (
+                                                            <div key={user.user_id} className="grid grid-cols-12 gap-4 px-6 py-3 hover:bg-white/5 transition-colors items-center group">
+                                                                <div className="col-span-5 md:col-span-6 flex items-center gap-3 overflow-hidden">
+                                                                    <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex-shrink-0 border border-white/10 group-hover:border-[#FC4C02]/50 transition-colors">
+                                                                        {user.avatar_url ? (
+                                                                            <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
+                                                                        ) : (
+                                                                            <User size={16} className="w-full h-full p-1.5 text-gray-400" />
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="overflow-hidden min-w-0">
+                                                                        <div className="text-sm font-bold text-white truncate group-hover:text-[#FC4C02] transition-colors">{user.full_name}</div>
+                                                                        <div className="text-xs text-gray-500 truncate">@{user.username}</div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="col-span-4 md:col-span-3 overflow-hidden">
+                                                                    {user.instagram ? (
+                                                                        <a href={`https://instagram.com/${user.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:text-blue-300 truncate block hover:underline">
+                                                                            {user.instagram.startsWith('@') ? user.instagram : `@${user.instagram}`}
+                                                                        </a>
+                                                                    ) : (
+                                                                        <span className="text-gray-600 text-xs">-</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="col-span-3 text-right">
+                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FC4C02] bg-[#FC4C02]/10 px-2 py-1 rounded-full border border-[#FC4C02]/20">
+                                                                        Pending
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </motion.div>
                         </div>
                     )
