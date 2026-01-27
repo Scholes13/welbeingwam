@@ -5,7 +5,45 @@ import { NextResponse } from 'next/server'
 export async function POST(request: Request) {
     try {
         const cookieStore = await cookies()
-        const userId = cookieStore.get('strava_athlete_id')?.value
+        
+        // Setup Supabase Client with Cookies for Auth
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+        
+        const supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                persistSession: false
+            }
+        })
+
+        // Try to get authenticated user from session cookies
+        // APPS USE CUSTOM AUTH: Cookie 'strava_athlete_id' holds the profiles.id (UUID or BigInt)
+        
+        let userId: string | null = null
+        let customName: string | null = null
+
+        const authCookie = cookieStore.get('strava_athlete_id')?.value
+        
+        if (authCookie) {
+            userId = authCookie
+            
+            // Fetch User Details from PROFILES table (not auth.users)
+            try {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('username, full_name, firstname, lastname')
+                    .eq('id', userId)
+                    .single()
+                
+                if (profile) {
+                    customName = profile.full_name || 
+                                 (profile.firstname ? `${profile.firstname} ${profile.lastname || ''}`.trim()) : 
+                                 profile.username
+                }
+            } catch (ignore) {
+                console.log('Failed to fetch profile details, proceeding with just ID')
+            }
+        }
 
         const { surveyId, answers } = await request.json()
 
@@ -17,28 +55,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Answers required' }, { status: 400 })
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
-
-        let customName = null
-        if (userId) {
-            // Try to get user details to populate custom_name
-            // 1. Try fetching from auth.users via admin
-            const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId)
-            
-            if (user) {
-                customName = user.user_metadata?.full_name || user.user_metadata?.name || user.email
-            }
-        }
-
         // Create submission record
         const { data: submission, error: subError } = await supabase
             .from('survey_submissions')
             .insert({
                 survey_id: surveyId,
-                user_id: userId || null,
+                user_id: userId, // Now refers to profiles.id (or null) - Constraint dropped
                 custom_name: customName,
                 created_at: new Date().toISOString()
             })
@@ -55,7 +77,8 @@ export async function POST(request: Request) {
             const answerRows = answers.map((ans: any) => ({
                 submission_id: submission.id,
                 question_id: ans.questionId,
-                selected_option_index: ans.selectedOptionIndex
+                selected_option_index: ans.selectedOptionIndex ?? null, // Allow null
+                response_text: ans.responseText || null // Map text/url
             }))
 
             const { error: ansError } = await supabase

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { verifyAdminPermission } from '@/utils/auth'
 
 export async function GET() {
   const cookieStore = await cookies()
@@ -14,20 +15,23 @@ export async function GET() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  let isAdmin = false
+  // 1. Resolve User ID
+  let userId = sessionId
   
-  if (accessCode) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('access_code', accessCode).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
-  } 
-  
-  if (!isAdmin && sessionId) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('id', sessionId).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
+  if (accessCode && !userId) {
+      const { data: userByCode } = await supabase.from('profiles').select('id').eq('access_code', accessCode).single()
+      if (userByCode) userId = userByCode.id
   }
 
-  if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!userId) {
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // 2. Verify Permission
+  const { authorized } = await verifyAdminPermission(supabase, userId, 'manage_rewards')
+
+  if (!authorized) {
+       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {

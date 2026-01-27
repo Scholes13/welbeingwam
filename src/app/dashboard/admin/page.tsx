@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, Pencil, BarChart2 } from 'lucide-react'
+import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, Pencil, BarChart2, Trophy } from 'lucide-react'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
+import { supabase } from '@/lib/supabase/client'
+
+import ManageAdmins from './ManageAdmins'
 
 export default function AdminPage() {
     const { success, error: toastError, info } = useToast()
@@ -15,7 +18,44 @@ export default function AdminPage() {
     const [isEditingSurvey, setIsEditingSurvey] = useState(false)
     const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
 
-    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots'>('users')
+    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots' | 'doorprize' | 'admins'>('users')
+    const [myPermissions, setMyPermissions] = useState<string[]>([])
+
+    useEffect(() => {
+        // Fetch my permissions
+        const checkMe = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            // supabase.auth.getUser() might be empty if using custom auth? 
+            // The existing code uses cookies 'strava_athlete_id'.
+            // Let's rely on an API call to /api/me or just /api/admin/check_auth if it existed.
+            // Or we just accept that some tabs will 403 if we click them.
+            // Better: Let's fetch /api/admin/me (we need to make this?) OR just fetch profile by ID from cookie logic if possible client side?
+            // Actually, we can just do a fetch to a new endpoint or existing one to get my role.
+            // let's use a quick RPC or just select from profiles if RLS allows reading own profile.
+            // The existing code initializes supabase client.
+
+            // Actually, let's just add the tab and handle 403s gracefully for now, 
+            // OR fetch profile content.
+            // "profiles" table RLS usually allows "Users can view own profile".
+            // So:
+            /*
+            const { data: { session } } = await supabase.auth.getSession()
+            if (session) { ... }
+            */
+            // But we use custom auth with strava_athlete_id cookie.
+            // Client side `supabase` might not have the session if it's custom cookie based.
+            // Use a server action or an API route to get "my permissions".
+
+            // For now, let's just enable the tab and let the API reject if unauthorized. 
+            // But to hide the tab... we need to know.
+
+            // I'll skip hiding tabs for *security* but hide them for *UX* if I can.
+            // Let's assume for now we show all tabs, and if they click 'manage admins' and fail, so be it.
+            // Or better, let's fetch profile using a direct query if we can.
+
+            // Existing code doesn't seem to fetch "my profile" on mount for admin check.
+        }
+    }, [])
 
     // ... (keep existing state) ...
 
@@ -44,6 +84,189 @@ export default function AdminPage() {
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
     const [scanResult, setScanResult] = useState<{ success: boolean, message: string, user?: any } | null>(null)
+
+    // Doorprize State
+    const [doorprizeSessions, setDoorprizeSessions] = useState<any[]>([])
+    const [sessionForm, setSessionForm] = useState({ name: '', activityId: '' })
+    const [isDoorprizeModalOpen, setIsDoorprizeModalOpen] = useState(false)
+    const [selectedDoorprize, setSelectedDoorprize] = useState<any>(null)
+    const [doorprizeConfig, setDoorprizeConfig] = useState({ prize_name: '', quantity: 1, background_url: '' })
+    const [doorprizeWinners, setDoorprizeWinners] = useState<any[]>([])
+    const [isUploading, setIsUploading] = useState(false)
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return
+
+        const file = e.target.files[0]
+        const activityId = doorprizeForm.activityId
+
+        if (!activityId) {
+            toastError('Please select an activity first')
+            e.target.value = '' // Reset input
+            return
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toastError('File size exceeds 5MB limit')
+            return
+        }
+
+        try {
+            setIsUploading(true)
+            const supabase = createClient()
+            const fileName = `bg-${activityId}` // Fixed name to replace old one
+
+            const { data, error } = await supabase.storage
+                .from('doorprize-assets')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                })
+
+            if (error) throw error
+
+            // Get Public URL
+            const { data: { publicUrl } } = supabase.storage
+                .from('doorprize-assets')
+                .getPublicUrl(fileName)
+
+            // Append timestamp to bust cache
+            const urlWithTimestamp = `${publicUrl}?t=${Date.now()}`
+
+            setDoorprizeForm(prev => ({ ...prev, bgUrl: urlWithTimestamp }))
+            toastSuccess('Background uploaded successfully')
+
+        } catch (error: any) {
+            console.error('Upload error:', error)
+            toastError(error.message || 'Failed to upload image')
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const fetchDoorprizeSessions = async () => {
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions')
+            const data = await res.json()
+            if (Array.isArray(data)) setDoorprizeSessions(data)
+        } catch (e) { console.error(e) }
+    }
+
+    const handleCreateSession = async () => {
+        if (!sessionForm.name || !sessionForm.activityId) {
+            toastError('Please fill all fields')
+            return
+        }
+
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: sessionForm.name,
+                    activity_id: sessionForm.activityId,
+                    prize_name: 'Doorprize', // Default
+                    quantity: 1, // Default
+                })
+            })
+            const data = await res.json()
+
+            if (res.ok) {
+                success('Session Created!')
+                setIsDoorprizeModalOpen(false)
+                setSessionForm({ name: '', activityId: '' })
+                fetchDoorprizeSessions()
+                // Open detail panel instead of launching
+                selectDoorprize(data)
+            } else {
+                toastError('Failed to create session')
+            }
+        } catch (e) {
+            toastError('Error creating session')
+        }
+    }
+
+    const selectDoorprize = async (session: any) => {
+        setSelectedDoorprize(session)
+        setDoorprizeConfig({
+            prize_name: session.prize_name || 'Doorprize',
+            quantity: session.quantity || 1,
+            background_url: session.background_url || ''
+        })
+
+        // Fetch winner count for this session
+        try {
+            console.log('Fetching winners for session:', session.id)
+            const res = await fetch(`/api/admin/doorprize/winners?doorprizeId=${session.id}`)
+            const data = await res.json()
+            console.log('Winners API Data:', data)
+
+            if (res.ok && data.winners) {
+                // Flatten user data
+                const flattenedWinners = data.winners.map((w: any) => ({
+                    ...w,
+                    full_name: w.user?.full_name || w.full_name,
+                    username: w.user?.username || w.username,
+                    avatar_url: w.user?.avatar_url || w.avatar_url
+                }))
+
+                setSelectedDoorprize((prev: any) => ({ ...prev, winnerCount: data.winners.length }))
+                setDoorprizeWinners(flattenedWinners)
+            }
+        } catch (e) {
+            console.error('Failed to fetch winners', e)
+        }
+    }
+
+    const handleSaveDoorprizeConfig = async () => {
+        if (!selectedDoorprize) return
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: selectedDoorprize.id,
+                    activity_id: selectedDoorprize.activity_id,
+                    name: selectedDoorprize.name,
+                    ...doorprizeConfig
+                })
+            })
+            if (res.ok) {
+                success('Config Saved!')
+                fetchDoorprizeSessions()
+                // Update local state
+                setSelectedDoorprize({ ...selectedDoorprize, ...doorprizeConfig })
+            } else {
+                toastError('Failed to save config')
+            }
+        } catch (e) {
+            toastError('Error saving config')
+        }
+    }
+
+    const handleDoorprizeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0 || !selectedDoorprize) return
+        const file = e.target.files[0]
+        if (file.size > 5 * 1024 * 1024) {
+            toastError('File size exceeds 5MB limit')
+            return
+        }
+        try {
+            setIsUploading(true)
+            const fileName = `bg-${selectedDoorprize.id}`
+            const { error } = await supabase.storage
+                .from('doorprize-assets')
+                .upload(fileName, file, { cacheControl: '3600', upsert: true })
+            if (error) throw error
+            const { data: { publicUrl } } = supabase.storage.from('doorprize-assets').getPublicUrl(fileName)
+            setDoorprizeConfig(prev => ({ ...prev, background_url: `${publicUrl}?t=${Date.now()}` }))
+            success('Background uploaded!')
+        } catch (err: any) {
+            toastError(err.message || 'Upload failed')
+        } finally {
+            setIsUploading(false)
+        }
+    }
 
     // Activity Detail State
     const [showActivityDetail, setShowActivityDetail] = useState(false)
@@ -159,7 +382,10 @@ export default function AdminPage() {
         else if (activeTab === 'surveys') fetchSurveys()
         else if (activeTab === 'rewards') fetchRewards()
         else if (activeTab === 'activities') fetchActivities()
-        else if (activeTab === 'spots') fetchSpots()
+        else if (activeTab === 'doorprize') {
+            fetchActivities()
+            fetchDoorprizeSessions()
+        }
     }, [activeTab])
 
     useEffect(() => {
@@ -411,6 +637,28 @@ export default function AdminPage() {
         const a = document.createElement('a')
         a.href = url
         a.download = `${activityDetail.activity.title}_PENDING_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    const exportActivityAttended = () => {
+        if (!activityDetail || !activityDetail.attendees || activityDetail.attendees.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram', 'Joined At']
+        const rows = activityDetail.attendees.map((u: any, idx: number) => [
+            idx + 1,
+            u.full_name || '-',
+            u.username || '-',
+            u.instagram || '-',
+            u.joined_at ? new Date(u.joined_at).toLocaleString() : '-'
+        ])
+
+        const csv = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${activityDetail.activity.title}_COMPLETED_${new Date().toISOString().split('T')[0]}.csv`
         a.click()
         URL.revokeObjectURL(url)
     }
@@ -840,13 +1088,15 @@ export default function AdminPage() {
                     </h1>
                     <p className="text-gray-400 text-sm md:text-base">Manage users, quests, and surveys.</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                    <Plus size={20} />
-                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : activeTab === 'spots' ? 'QR Spot' : (!selectedSurvey ? 'Survey' : 'Question')}
-                </button>
+                {activeTab !== 'admins' && (
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                    >
+                        <Plus size={20} />
+                        Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : activeTab === 'spots' ? 'QR Spot' : (!selectedSurvey ? 'Survey' : 'Question')}
+                    </button>
+                )}
             </div>
 
             {/* Tabs */}
@@ -886,6 +1136,18 @@ export default function AdminPage() {
                     className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'spots' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
                 >
                     <MapPin size={18} /> QR Spots
+                </button>
+                <button
+                    onClick={() => { setActiveTab('doorprize'); setSelectedSurvey(null) }}
+                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'doorprize' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
+                >
+                    <Gift size={18} /> Doorprize
+                </button>
+                <button
+                    onClick={() => { setActiveTab('admins'); setSelectedSurvey(null) }}
+                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'admins' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
+                >
+                    <Shield size={18} /> Admins
                 </button>
             </div>
 
@@ -1188,6 +1450,7 @@ export default function AdminPage() {
                 )
             }
 
+            {activeTab === 'admins' && <ManageAdmins />}
 
             {
                 activeTab === 'surveys' && (
@@ -1342,191 +1605,407 @@ export default function AdminPage() {
                 )
             }
 
-            {/* Activities Tab */}
-            {activeTab === 'activities' && (
+            {/* Doorprize Tab - Session Manager */}
+            {activeTab === 'doorprize' && (
                 <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold">Manage Activities</h2>
+                    <div className="flex justify-between items-center bg-[#1a1a1a] p-6 rounded-2xl border border-white/5">
+                        <h3 className="text-xl font-bold flex items-center gap-2">
+                            <Gift className="text-[#FC4C02]" /> Doorprize Sessions
+                        </h3>
+                        <button
+                            onClick={() => setIsDoorprizeModalOpen(true)}
+                            className="bg-[#FC4C02] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-[#e04302] flex items-center gap-2"
+                        >
+                            <Plus size={16} /> New Session
+                        </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {activities.map((activity) => (
-                            <div
-                                key={activity.id}
-                                className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 hover:bg-white/5 transition-colors cursor-pointer group"
-                                onClick={() => fetchActivityDetail(activity.id)}
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <h3 className="font-bold text-lg text-white mb-1 group-hover:text-[#FC4C02] transition-colors">{activity.title}</h3>
-                                        <div className="flex items-center gap-2 text-gray-400 text-sm">
-                                            <Calendar className="w-4 h-4" />
-                                            {activity.activity_date}
-                                        </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Sessions List */}
+                        <div className="lg:col-span-1 bg-[#1a1a1a] border border-white/5 rounded-2xl overflow-hidden">
+                            <div className="p-4 bg-white/5 text-gray-400 text-xs uppercase font-bold">Sessions</div>
+                            <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+                                {doorprizeSessions.map((session: any) => (
+                                    <div
+                                        key={session.id}
+                                        onClick={() => selectDoorprize(session)}
+                                        className={`p-4 cursor-pointer transition-colors ${selectedDoorprize?.id === session.id ? 'bg-[#FC4C02]/10 border-l-4 border-[#FC4C02]' : 'hover:bg-white/5'}`}
+                                    >
+                                        <div className="font-bold text-white">{session.name}</div>
+                                        <div className="text-xs text-gray-500">{session.activity?.title}</div>
+                                        <div className="text-xs text-gray-600 mt-1">{session.prize_name} ({session.quantity} winners)</div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                promptDeleteActivity(activity.id, activity.title)
-                                            }}
-                                            className="p-1 text-gray-500 hover:text-red-500 transition-colors"
-                                            title="Delete Activity"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                        <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
-                                            {activity.attendance_count || 0} Present
+                                ))}
+                                {doorprizeSessions.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">No sessions yet.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Session Detail / Config Panel */}
+                        <div className="lg:col-span-2 bg-[#1a1a1a] border border-white/5 rounded-2xl p-6">
+                            {selectedDoorprize ? (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="text-2xl font-bold text-white">{selectedDoorprize.name}</h4>
+                                            <p className="text-gray-500 text-sm">{selectedDoorprize.activity?.title}</p>
                                         </div>
-                                        {activity.points > 0 && (
-                                            <span className="text-[#FC4C02] text-xs font-bold bg-[#FC4C02]/10 px-2 py-1 rounded-lg">
-                                                +{activity.points} PTS
-                                            </span>
+                                        <button
+                                            onClick={() => setSelectedDoorprize(null)}
+                                            className="text-gray-500 hover:text-white"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Prize Name</label>
+                                            <input
+                                                value={doorprizeConfig.prize_name}
+                                                onChange={e => setDoorprizeConfig({ ...doorprizeConfig, prize_name: e.target.value })}
+                                                placeholder="e.g. Motor Honda Beat"
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Quantity (Winners)</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={doorprizeConfig.quantity}
+                                                onChange={e => setDoorprizeConfig({ ...doorprizeConfig, quantity: parseInt(e.target.value) || 1 })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                            />
+                                        </div>
+
+                                        {/* Winner Count Status */}
+                                        <div className="flex items-center gap-3 p-4 bg-black/30 rounded-xl border border-white/5">
+                                            <Trophy size={20} className="text-[#FC4C02]" />
+                                            <div>
+                                                <div className="text-sm font-bold text-white">
+                                                    {selectedDoorprize.winnerCount || 0} / {doorprizeConfig.quantity} Winners Selected
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {(selectedDoorprize.winnerCount || 0) >= doorprizeConfig.quantity ? 'All slots filled!' : 'Launch to roll more winners'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Background Image</label>
+                                            {doorprizeConfig.background_url && (
+                                                <div className="mb-3 w-full h-40 rounded-xl overflow-hidden border border-white/20">
+                                                    <img src={doorprizeConfig.background_url} className="w-full h-full object-cover" alt="bg" />
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <label className="cursor-pointer bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm">
+                                                    {isUploading ? <Loader2 size={16} className="animate-spin" /> : <></>}
+                                                    <span>{isUploading ? 'Uploading...' : 'Upload Image'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleDoorprizeImageUpload}
+                                                        disabled={isUploading}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mt-2">Max 5MB. Recommended 1920x1080.</p>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-4">
+                                            <button
+                                                onClick={handleSaveDoorprizeConfig}
+                                                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                                            >
+                                                <Save size={18} /> Save Config
+                                            </button>
+                                            <button
+                                                onClick={() => window.open(`/doorprize/${selectedDoorprize.id}`, '_blank')}
+                                                className="flex-1 bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                                            >
+                                                <Target size={18} /> Launch Presentation
+                                            </button>
+                                        </div>
+
+                                        {/* Winners List */}
+                                        {doorprizeWinners.length > 0 && (
+                                            <div className="mt-6 border-t border-white/10 pt-4">
+                                                <h3 className="text-sm font-bold text-gray-400 mb-3">Winners ({doorprizeWinners.length})</h3>
+                                                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                                    {doorprizeWinners.map((w, i) => (
+                                                        <div key={i} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-white/5">
+                                                            <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex-shrink-0">
+                                                                <img src={w.avatar_url} className="w-full h-full object-cover" alt={w.full_name} />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-sm font-bold text-white truncate">{w.full_name}</div>
+                                                                <div className="text-[10px] text-gray-500 truncate">@{w.username}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
-
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        setSelectedActivityId(activity.id)
-                                        setIsScannerOpen(true)
-                                        setScanResult(null)
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors z-10 relative"
-                                >
-                                    <Scan className="w-4 h-4" />
-                                    Scan Attendance
-                                </button>
-                            </div>
-                        ))}
-
-                        {activities.length === 0 && (
-                            <div className="col-span-full text-center py-12 text-gray-500">
-                                No activities found. Create one to get started.
-                            </div>
-                        )}
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-gray-500">
+                                    <div className="text-center">
+                                        <Gift size={48} className="mx-auto mb-4 opacity-30" />
+                                        <p>Select a session to configure</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            )
+            )}
+
+            {/* Doorprize Modal */}
+            {isDoorprizeModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm p-4">
+                    <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-md p-6 relative">
+                        <button
+                            onClick={() => setIsDoorprizeModalOpen(false)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <h2 className="text-xl font-bold mb-6">Create New Doorprize Session</h2>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Session Name</label>
+                                <input
+                                    value={sessionForm.name}
+                                    onChange={e => setSessionForm({ ...sessionForm, name: e.target.value })}
+                                    placeholder="e.g. Sesi Siang - Mobil"
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2"
+                                />
+                                <p className="text-[10px] text-gray-600 mt-1">For your reference only.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Select Activity (Source)</label>
+                                <select
+                                    value={sessionForm.activityId}
+                                    onChange={(e) => setSessionForm({ ...sessionForm, activityId: e.target.value })}
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white appearance-none"
+                                >
+                                    <option value="">-- Select Activity --</option>
+                                    {activities.map((a: any) => (
+                                        <option key={a.id} value={a.id}>
+                                            {a.title} ({a.activity_date})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <button
+                                onClick={handleCreateSession}
+                                className="w-full bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl mt-4"
+                            >
+                                Create Session
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {/* Activities Tab */}
+            {
+                activeTab === 'activities' && (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-xl font-bold">Manage Activities</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {activities.map((activity) => (
+                                <div
+                                    key={activity.id}
+                                    className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 hover:bg-white/5 transition-colors cursor-pointer group"
+                                    onClick={() => fetchActivityDetail(activity.id)}
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg text-white mb-1 group-hover:text-[#FC4C02] transition-colors">{activity.title}</h3>
+                                            <div className="flex items-center gap-2 text-gray-400 text-sm">
+                                                <Calendar className="w-4 h-4" />
+                                                {activity.activity_date}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    promptDeleteActivity(activity.id, activity.title)
+                                                }}
+                                                className="p-1 text-gray-500 hover:text-red-500 transition-colors"
+                                                title="Delete Activity"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                            <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
+                                                {activity.attendance_count || 0} Present
+                                            </div>
+                                            {activity.points > 0 && (
+                                                <span className="text-[#FC4C02] text-xs font-bold bg-[#FC4C02]/10 px-2 py-1 rounded-lg">
+                                                    +{activity.points} PTS
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedActivityId(activity.id)
+                                            setIsScannerOpen(true)
+                                            setScanResult(null)
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors z-10 relative"
+                                    >
+                                        <Scan className="w-4 h-4" />
+                                        Scan Attendance
+                                    </button>
+                                </div>
+                            ))}
+
+                            {activities.length === 0 && (
+                                <div className="col-span-full text-center py-12 text-gray-500">
+                                    No activities found. Create one to get started.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )
             }
 
             {/* QR Spots Tab */}
-            {activeTab === 'spots' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
-                    {spots.map((spot) => (
-                        <div
-                            key={spot.id}
-                            className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:border-[#FC4C02]/50 transition-colors group"
-                            onClick={() => fetchSpotDetail(spot.id)}
-                        >
-                            {/* QR Code Preview */}
-                            <div className="bg-white p-4 flex justify-center">
-                                <img
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(spot.code)}&size=150x150`}
-                                    alt={`QR Code for ${spot.name}`}
-                                    className="w-32 h-32"
-                                />
-                            </div>
-
-                            <div className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="font-bold text-lg">{spot.name}</h3>
-                                    <span className="bg-[#FC4C02]/20 text-[#FC4C02] px-2 py-1 rounded-lg text-xs font-bold">
-                                        +{spot.points} PTS
-                                    </span>
+            {
+                activeTab === 'spots' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
+                        {spots.map((spot) => (
+                            <div
+                                key={spot.id}
+                                className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:border-[#FC4C02]/50 transition-colors group"
+                                onClick={() => fetchSpotDetail(spot.id)}
+                            >
+                                {/* QR Code Preview */}
+                                <div className="bg-white p-4 flex justify-center">
+                                    <img
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(spot.code)}&size=150x150`}
+                                        alt={`QR Code for ${spot.name}`}
+                                        className="w-32 h-32"
+                                    />
                                 </div>
 
-                                {spot.description && (
-                                    <p className="text-gray-400 text-sm mb-3 line-clamp-2">{spot.description}</p>
-                                )}
+                                <div className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-bold text-lg">{spot.name}</h3>
+                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] px-2 py-1 rounded-lg text-xs font-bold">
+                                            +{spot.points} PTS
+                                        </span>
+                                    </div>
 
-                                <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-500">
-                                    <span className="bg-white/5 px-2 py-1 rounded">
-                                        Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
-                                    </span>
-                                    <button
-                                        disabled={toggleLoadingSpotId === spot.id}
-                                        onClick={async (e) => {
-                                            e.stopPropagation()
-                                            setToggleLoadingSpotId(spot.id)
-                                            try {
-                                                const res = await fetch('/api/admin/spots', {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ id: spot.id, is_active: !spot.is_active })
-                                                })
-                                                if (res.ok) {
-                                                    // Refresh spots list
-                                                    const spotsRes = await fetch('/api/admin/spots')
-                                                    const spotsData = await spotsRes.json()
-                                                    setSpots(spotsData.spots || [])
-                                                    success(spot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                    {spot.description && (
+                                        <p className="text-gray-400 text-sm mb-3 line-clamp-2">{spot.description}</p>
+                                    )}
+
+                                    <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-500">
+                                        <span className="bg-white/5 px-2 py-1 rounded">
+                                            Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
+                                        </span>
+                                        <button
+                                            disabled={toggleLoadingSpotId === spot.id}
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                setToggleLoadingSpotId(spot.id)
+                                                try {
+                                                    const res = await fetch('/api/admin/spots', {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ id: spot.id, is_active: !spot.is_active })
+                                                    })
+                                                    if (res.ok) {
+                                                        // Refresh spots list
+                                                        const spotsRes = await fetch('/api/admin/spots')
+                                                        const spotsData = await spotsRes.json()
+                                                        setSpots(spotsData.spots || [])
+                                                        success(spot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                                    }
+                                                } catch (err) {
+                                                    toastError('Failed to toggle spot')
+                                                } finally {
+                                                    setToggleLoadingSpotId(null)
                                                 }
-                                            } catch (err) {
-                                                toastError('Failed to toggle spot')
-                                            } finally {
-                                                setToggleLoadingSpotId(null)
-                                            }
-                                        }}
-                                        className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
-                                    >
-                                        {toggleLoadingSpotId === spot.id ? (
-                                            <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                            spot.is_active ? 'Active' : 'Inactive'
-                                        )}
-                                    </button>
-                                </div>
+                                            }}
+                                            className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
+                                        >
+                                            {toggleLoadingSpotId === spot.id ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                spot.is_active ? 'Active' : 'Inactive'
+                                            )}
+                                        </button>
+                                    </div>
 
-                                <div className="flex gap-2 mb-3">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(spot.code) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                                        {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); downloadQR(spot.code, spot.name) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        <Download size={14} />
-                                        Download
-                                    </button>
-                                </div>
+                                    <div className="flex gap-2 mb-3">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(spot.code) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                                            {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); downloadQR(spot.code, spot.name) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            <Download size={14} />
+                                            Download
+                                        </button>
+                                    </div>
 
-                                <div className="text-xs text-gray-600 font-mono mb-3 text-center bg-black py-2 rounded">
-                                    {spot.code}
-                                </div>
+                                    <div className="text-xs text-gray-600 font-mono mb-3 text-center bg-black py-2 rounded">
+                                        {spot.code}
+                                    </div>
 
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); fetchSpotDetail(spot.id) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-[#FC4C02]/10 text-[#FC4C02] hover:bg-[#FC4C02]/20 py-2 rounded-lg text-sm transition-colors font-medium"
-                                    >
-                                        View Claims
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteSpot(spot.id) }}
-                                        className="flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); fetchSpotDetail(spot.id) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-[#FC4C02]/10 text-[#FC4C02] hover:bg-[#FC4C02]/20 py-2 rounded-lg text-sm transition-colors font-medium"
+                                        >
+                                            View Claims
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteSpot(spot.id) }}
+                                            className="flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
 
-                    {spots.length === 0 && (
-                        <div className="col-span-full text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
-                            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p>No QR Spots yet.</p>
-                            <p className="text-sm">Create one to let users earn points by scanning!</p>
-                        </div>
-                    )}
-                </div>
-            )
+                        {spots.length === 0 && (
+                            <div className="col-span-full text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
+                                <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                <p>No QR Spots yet.</p>
+                                <p className="text-sm">Create one to let users earn points by scanning!</p>
+                            </div>
+                        )}
+                    </div>
+                )
             }
 
             {/* Create Spot Modal */}
@@ -2728,15 +3207,13 @@ export default function AdminPage() {
                                         </button>
                                     </div>
 
-                                    {/* Export Button (Visible for Pending Tab) */}
-                                    {activeDetailTab === 'pending' && (
-                                        <button
-                                            onClick={exportActivityPending}
-                                            className="mr-4 flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04502] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-[#FC4C02]/20"
-                                        >
-                                            <Download size={14} /> Export CSV
-                                        </button>
-                                    )}
+                                    {/* Export Button (Visible for BOTH Tabs) */}
+                                    <button
+                                        onClick={activeDetailTab === 'completed' ? exportActivityAttended : exportActivityPending}
+                                        className="mr-4 flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04502] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-[#FC4C02]/20"
+                                    >
+                                        <Download size={14} /> Export {activeDetailTab === 'completed' ? 'Completed' : 'Pending'}
+                                    </button>
                                 </div>
 
                                 {/* Content Area */}

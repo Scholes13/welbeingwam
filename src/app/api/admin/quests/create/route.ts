@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { verifyAdminPermission } from '@/utils/auth'
 
 export async function POST(request: Request) {
   try {
@@ -18,14 +19,10 @@ export async function POST(request: Request) {
     )
 
     // Verify Admin
-    const { data: adminUser } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', currentUserId)
-        .single()
+    const { authorized } = await verifyAdminPermission(supabase, currentUserId, 'manage_content')
 
-    if (adminUser?.username !== 'admin_wam') {
-         return NextResponse.json({ error: 'Unauthorized: Admin only' }, { status: 403 })
+    if (!authorized) {
+         return NextResponse.json({ error: 'Unauthorized: Insufficient permissions' }, { status: 403 })
     }
 
     // Create Quest

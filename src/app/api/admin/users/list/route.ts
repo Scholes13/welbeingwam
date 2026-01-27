@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { verifyAdminPermission } from '@/utils/auth'
 
 export async function GET() {
   try {
@@ -17,14 +18,10 @@ export async function GET() {
     )
 
     // 1. Verify Admin
-    const { data: adminUser } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', currentUserId)
-        .single()
+    const { authorized } = await verifyAdminPermission(supabase, currentUserId, 'manage_users')
 
-    if (adminUser?.username !== 'admin_wam') {
-         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    if (!authorized) {
+         return NextResponse.json({ error: 'Unauthorized: Insufficient permissions' }, { status: 403 })
     }
 
     // 2. Fetch all users

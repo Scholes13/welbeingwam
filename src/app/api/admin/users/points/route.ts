@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { verifyAdminPermission } from '@/utils/auth'
 
 export async function POST(request: Request) {
   const cookieStore = await cookies()
@@ -18,14 +19,10 @@ export async function POST(request: Request) {
 
   try {
     // 1. Verify Admin Status
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', userId)
-        .single()
+    const { authorized } = await verifyAdminPermission(supabase, userId, 'manage_points')
 
-    if (profile?.username !== 'admin_wam') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!authorized) {
+        return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
     }
 
     const { targetUserId, points, reason } = await request.json()
