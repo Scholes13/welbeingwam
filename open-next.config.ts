@@ -1,7 +1,7 @@
 import type { OpenNextConfig } from "@opennextjs/cloudflare";
 
 const config: OpenNextConfig = {
-  // Default configuration for Cloudflare Workers
+  default: {},
 };
 
 export default config;
