@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.16.0",
+    "wrangler": "^4.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
