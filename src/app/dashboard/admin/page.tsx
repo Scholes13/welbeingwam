@@ -98,7 +98,7 @@ export default function AdminPage() {
         if (!e.target.files || e.target.files.length === 0) return
 
         const file = e.target.files[0]
-        const activityId = doorprizeForm.activityId
+        const activityId = sessionForm.activityId
 
         if (!activityId) {
             toastError('Please select an activity first')
@@ -113,7 +113,6 @@ export default function AdminPage() {
 
         try {
             setIsUploading(true)
-            const supabase = createClient()
             const fileName = `bg-${activityId}` // Fixed name to replace old one
 
             const { data, error } = await supabase.storage
@@ -133,8 +132,8 @@ export default function AdminPage() {
             // Append timestamp to bust cache
             const urlWithTimestamp = `${publicUrl}?t=${Date.now()}`
 
-            setDoorprizeForm(prev => ({ ...prev, bgUrl: urlWithTimestamp }))
-            toastSuccess('Background uploaded successfully')
+            setDoorprizeConfig(prev => ({ ...prev, background_url: urlWithTimestamp }))
+            success('Background uploaded successfully')
 
         } catch (error: any) {
             console.error('Upload error:', error)
