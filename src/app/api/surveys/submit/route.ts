@@ -37,8 +37,7 @@ export async function POST(request: Request) {
                 
                 if (profile) {
                     customName = profile.full_name || 
-                                 (profile.firstname ? `${profile.firstname} ${profile.lastname || ''}`.trim()) : 
-                                 profile.username
+                                 (profile.firstname ? `${profile.firstname} ${profile.lastname || ''}`.trim() : profile.username)
                 }
             } catch (ignore) {
                 console.log('Failed to fetch profile details, proceeding with just ID')
