@@ -444,9 +444,9 @@ export default function TourMap({
         </div>
       )}
       
-      {/* Category Filter */}
+      {/* Category Filter - Collapsible */}
       {categoryFilterEnabled && categories.length > 0 && (
-        <div className="absolute bottom-24 left-4 z-10">
+        <div className="absolute bottom-24 left-4 z-10 max-h-[40vh] overflow-y-auto">
           <CategoryFilter 
             categories={categories}
             onFilterChange={handleFilterChange}
@@ -456,7 +456,7 @@ export default function TourMap({
       )}
       
       {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-30">
           <div className="text-white">Loading map...</div>
         </div>
       )}
