@@ -173,11 +173,10 @@ export default function TourMap({
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [115.2126, -8.6705], // Bali default
-      zoom: 13,
-      // Enable local tile caching for offline support
-      localIdeographFontFamily: "'Noto Sans', 'Noto Sans CJK SC', sans-serif"
+      style: 'mapbox://styles/mapbox/streets-v12', // Colorful street map
+      center: [115.2626, -8.5069], // Ubud, Bali default
+      zoom: 12,
+      attributionControl: true
     })
 
     // Add navigation controls
@@ -186,6 +185,10 @@ export default function TourMap({
     // Handle map load
     map.current.on('load', () => {
       setIsLoaded(true)
+      // Trigger resize to ensure map fills container
+      setTimeout(() => {
+        map.current?.resize()
+      }, 100)
     })
 
     // Cleanup
@@ -434,8 +437,8 @@ export default function TourMap({
     : null
 
   return (
-    <div className={`relative w-full h-full ${className}`}>
-      <div ref={mapContainer} className="absolute inset-0" />
+    <div className={`absolute inset-0 ${className}`}>
+      <div ref={mapContainer} className="w-full h-full" />
       
       {/* Offline Indicator */}
       {!isOnline && (

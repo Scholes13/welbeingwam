@@ -58,7 +58,7 @@ export default function MapPage() {
   const categoryFilterEnabled = settings?.features.category_filter !== false
 
   return (
-    <div className="min-h-screen bg-gray-900">
+    <div className="fixed inset-0 bg-gray-900">
       {/* Top Bar */}
       <div className="absolute top-0 left-0 right-0 z-20 p-4 flex items-start justify-between gap-4">
         {/* Connection Status */}
@@ -85,10 +85,8 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Map */}
-      <div className="w-full h-screen">
-        <TourMap categoryFilterEnabled={categoryFilterEnabled} />
-      </div>
+      {/* Map - Full screen */}
+      <TourMap categoryFilterEnabled={categoryFilterEnabled} />
     </div>
   )
 }
