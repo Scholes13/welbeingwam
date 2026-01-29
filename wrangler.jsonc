@@ -1,5 +1,5 @@
 {
-    "name": "wam25",
+    "name": "cta",
     "main": ".open-next/worker.js",
     "compatibility_date": "2024-09-23",
     "compatibility_flags": [
