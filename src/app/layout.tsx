@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/mobile/BottomNav";
+import AppHeader from "@/components/ui/AppHeader";
 import { ToastProvider } from "@/context/ToastContext";
+import { SettingsProvider } from "@/context/SettingsContext";
+import { SessionProvider } from "@/context/SessionContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WAM25",
-  description: "Your personal wellness companion.",
+  title: "City Tour",
+  description: "Interactive city tour with gamification.",
   manifest: "/manifest.json",
   themeColor: "#000000",
   viewport: {
@@ -28,7 +31,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "WAM25",
+    title: "City Tour",
   },
 };
 
@@ -41,8 +44,13 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
         <ToastProvider>
-          {children}
-          <BottomNav />
+          <SettingsProvider>
+            <SessionProvider>
+              <AppHeader />
+              {children}
+              <BottomNav />
+            </SessionProvider>
+          </SettingsProvider>
         </ToastProvider>
       </body>
     </html>

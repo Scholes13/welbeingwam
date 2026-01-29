@@ -1,4 +1,6 @@
 import useSWR from 'swr'
+import { useEffect } from 'react'
+import { supabase } from '@/lib/supabase/client'
 
 // Generic fetcher
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -37,17 +39,59 @@ export function useRewards() {
     }
 }
 
-// Hook for Leaderboard
+// Hook for Leaderboard with Realtime updates
 export function useLeaderboard() {
     const { data, error, isLoading, mutate } = useSWR('/api/leaderboard', fetcher, {
         revalidateOnFocus: true, // Leaderboard changes often, keep it fresh
         refreshInterval: 30000, // Auto refresh every 30s
     })
 
+    // Subscribe to Realtime updates for visits and participant_badges
+    useEffect(() => {
+        // Subscribe to visits table changes
+        const visitsChannel = supabase
+            .channel('leaderboard-visits')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'visits'
+                },
+                () => {
+                    // Refresh leaderboard when a new check-in happens
+                    mutate()
+                }
+            )
+            .subscribe()
+
+        // Subscribe to participant_badges table changes
+        const badgesChannel = supabase
+            .channel('leaderboard-badges')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'participant_badges'
+                },
+                () => {
+                    // Refresh leaderboard when a badge is earned
+                    mutate()
+                }
+            )
+            .subscribe()
+
+        // Cleanup subscriptions on unmount
+        return () => {
+            supabase.removeChannel(visitsChannel)
+            supabase.removeChannel(badgesChannel)
+        }
+    }, [mutate])
+
     return {
         leaderboard: data?.leaderboard || [],
-        currentUser: data?.currentUser || null,
-        lastUpdated: data?.lastUpdated,
+        currentParticipant: data?.currentParticipant || null,
         isLoading,
         isError: error,
         mutate
