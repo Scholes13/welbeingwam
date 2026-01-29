@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 
@@ -22,7 +22,7 @@ export default function MapPicker({
   const mapContainer = useRef<HTMLDivElement>(null)
   const map = useRef<mapboxgl.Map | null>(null)
   const marker = useRef<mapboxgl.Marker | null>(null)
-  const radiusCircle = useRef<string | null>(null)
+  const [isLoaded, setIsLoaded] = useState(false)
 
   // Initialize map
   useEffect(() => {
@@ -38,6 +38,11 @@ export default function MapPicker({
     // Add navigation controls
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right')
 
+    // Wait for map to load
+    map.current.on('load', () => {
+      setIsLoaded(true)
+    })
+
     // Handle map clicks
     map.current.on('click', (e) => {
       const { lng, lat } = e.lngLat
@@ -51,15 +56,16 @@ export default function MapPicker({
         map.current = null
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Update marker and radius circle when location or radius changes
+  // Update marker when location changes
   useEffect(() => {
     if (!map.current) return
 
     const mapInstance = map.current
 
-    // Update marker
+    // Update or create marker
     if (!marker.current) {
       marker.current = new mapboxgl.Marker({
         color: '#FC4C02',
@@ -77,15 +83,31 @@ export default function MapPicker({
       marker.current.setLngLat([longitude, latitude])
     }
 
-    // Update radius circle
-    if (radiusCircle.current) {
-      mapInstance.removeLayer(radiusCircle.current)
-      mapInstance.removeSource(radiusCircle.current)
-    }
+    // Center map on location
+    mapInstance.flyTo({
+      center: [longitude, latitude],
+      zoom: 15
+    })
+  }, [latitude, longitude, onLocationSelect])
 
-    // Create circle GeoJSON
+  // Update radius circle only after map is loaded
+  useEffect(() => {
+    if (!map.current || !isLoaded) return
+
+    const mapInstance = map.current
     const circleId = 'radius-circle'
-    radiusCircle.current = circleId
+    const outlineId = 'radius-circle-outline'
+
+    // Remove existing layers and source
+    if (mapInstance.getLayer(outlineId)) {
+      mapInstance.removeLayer(outlineId)
+    }
+    if (mapInstance.getLayer(circleId)) {
+      mapInstance.removeLayer(circleId)
+    }
+    if (mapInstance.getSource(circleId)) {
+      mapInstance.removeSource(circleId)
+    }
 
     // Calculate circle points
     const points = 64
@@ -124,7 +146,7 @@ export default function MapPicker({
     })
 
     mapInstance.addLayer({
-      id: `${circleId}-outline`,
+      id: outlineId,
       type: 'line',
       source: circleId,
       paint: {
@@ -132,13 +154,7 @@ export default function MapPicker({
         'line-width': 2
       }
     })
-
-    // Center map on location
-    mapInstance.flyTo({
-      center: [longitude, latitude],
-      zoom: 15
-    })
-  }, [latitude, longitude, radius, onLocationSelect])
+  }, [latitude, longitude, radius, isLoaded])
 
   return (
     <div 

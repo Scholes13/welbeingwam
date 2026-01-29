@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import SpotPopup from './SpotPopup'
@@ -43,14 +43,26 @@ interface SpotsGeoJSON {
   features: SpotFeature[]
 }
 
+interface OnlineParticipant {
+  participant_id: string
+  name: string
+  profile_photo_url: string | null
+  total_points: number
+  lng: number
+  lat: number
+  last_seen: string
+}
+
 interface TourMapProps {
   className?: string
   categoryFilterEnabled?: boolean
+  currentParticipantId?: string
 }
 
 export default function TourMap({
   className = '',
-  categoryFilterEnabled = true
+  categoryFilterEnabled = true,
+  currentParticipantId
 }: TourMapProps) {
   const { isOnline } = useConnectionStatus()
   const [selectedSpot, setSelectedSpot] = useState<SpotFeature['properties'] | null>(null)
@@ -63,6 +75,36 @@ export default function TourMap({
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+  const [onlineParticipants, setOnlineParticipants] = useState<OnlineParticipant[]>([])
+  const participantMarkers = useRef<Map<string, mapboxgl.Marker>>(new Map())
+
+  // Update own location to server
+  const updateMyLocation = useCallback(async (lng: number, lat: number) => {
+    if (!isOnline) return
+    try {
+      await fetch('/api/tour/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: lat, longitude: lng })
+      })
+    } catch (error) {
+      console.error('Failed to update location:', error)
+    }
+  }, [isOnline])
+
+  // Fetch online participants
+  const fetchOnlineParticipants = useCallback(async () => {
+    if (!isOnline) return
+    try {
+      const res = await fetch('/api/tour/location')
+      if (res.ok) {
+        const data = await res.json()
+        setOnlineParticipants(data.participants || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch online participants:', error)
+    }
+  }, [isOnline])
 
   // Fetch spots data
   const fetchSpots = async () => {
@@ -174,8 +216,8 @@ export default function TourMap({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12', // Colorful street map
-      center: [115.2626, -8.5069], // Ubud, Bali default
-      zoom: 12,
+      center: [110.3897, -7.7567], // Condongcatur, Jogja
+      zoom: 15,
       attributionControl: true
     })
 
@@ -419,6 +461,96 @@ export default function TourMap({
     }
   }, [isLoaded, selectedCategoryIds])
 
+  // Update own location to server and fetch other participants
+  useEffect(() => {
+    if (!isLoaded || !isOnline) return
+
+    // Update own location when it changes
+    if (userLocation) {
+      updateMyLocation(userLocation[0], userLocation[1])
+    }
+
+    // Fetch online participants periodically
+    fetchOnlineParticipants()
+    const interval = setInterval(fetchOnlineParticipants, 5000) // Every 5 seconds
+
+    return () => clearInterval(interval)
+  }, [isLoaded, isOnline, userLocation, updateMyLocation, fetchOnlineParticipants])
+
+  // Render participant markers on map
+  useEffect(() => {
+    if (!map.current || !isLoaded) return
+
+    const mapInstance = map.current
+
+    // Track which participants are still online
+    const currentParticipantIds = new Set(onlineParticipants.map(p => p.participant_id))
+
+    // Remove markers for participants who went offline
+    participantMarkers.current.forEach((marker, participantId) => {
+      if (!currentParticipantIds.has(participantId)) {
+        marker.remove()
+        participantMarkers.current.delete(participantId)
+      }
+    })
+
+    // Add or update markers for online participants
+    onlineParticipants.forEach(participant => {
+      // Skip current user (they have their own blue dot)
+      if (participant.participant_id === currentParticipantId) return
+
+      const existingMarker = participantMarkers.current.get(participant.participant_id)
+
+      if (existingMarker) {
+        // Update position
+        existingMarker.setLngLat([participant.lng, participant.lat])
+      } else {
+        // Create new marker with avatar
+        const el = document.createElement('div')
+        el.className = 'participant-marker'
+        el.innerHTML = `
+          <div style="
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 3px solid #10b981;
+            overflow: hidden;
+            background: #1f2937;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          ">
+            <img 
+              src="${participant.profile_photo_url || '/default-avatar.png'}" 
+              alt="${participant.name}"
+              style="width: 100%; height: 100%; object-fit: cover;"
+              onerror="this.src='/default-avatar.png'"
+            />
+          </div>
+          <div style="
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            white-space: nowrap;
+          ">
+            ${participant.name}
+          </div>
+        `
+        el.style.position = 'relative'
+
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([participant.lng, participant.lat])
+          .addTo(mapInstance)
+
+        participantMarkers.current.set(participant.participant_id, marker)
+      }
+    })
+  }, [isLoaded, onlineParticipants, currentParticipantId])
+
   const handleFilterChange = (categoryIds: string[]) => {
     setSelectedCategoryIds(categoryIds)
   }
@@ -426,6 +558,36 @@ export default function TourMap({
   const handleCheckInSuccess = () => {
     // Refresh spots data to update visited status
     fetchSpots()
+  }
+
+  // Center map on user location
+  const handleLocateMe = () => {
+    if (userLocation && map.current) {
+      map.current.flyTo({
+        center: userLocation,
+        zoom: 16,
+        duration: 1000
+      })
+    } else if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { longitude, latitude } = position.coords
+          setUserLocation([longitude, latitude])
+          if (map.current) {
+            map.current.flyTo({
+              center: [longitude, latitude],
+              zoom: 16,
+              duration: 1000
+            })
+          }
+        },
+        (error) => {
+          console.error('Error getting location:', error)
+          alert('Tidak bisa mendapatkan lokasi. Pastikan GPS diaktifkan dan izin lokasi diberikan.')
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      )
+    }
   }
 
   // Get selected spot with coordinates
@@ -455,6 +617,33 @@ export default function TourMap({
             onFilterChange={handleFilterChange}
             enabled={categoryFilterEnabled}
           />
+        </div>
+      )}
+
+      {/* Locate Me Button */}
+      <button
+        onClick={handleLocateMe}
+        className="absolute bottom-24 right-4 z-10 bg-white rounded-full p-3 shadow-lg hover:bg-gray-100 transition-colors"
+        title="Lokasi Saya"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+        </svg>
+      </button>
+
+      {/* User Location Indicator */}
+      {userLocation && (
+        <div className="absolute bottom-36 right-4 z-10 bg-black/70 text-white text-xs px-2 py-1 rounded">
+          📍 {userLocation[1].toFixed(4)}, {userLocation[0].toFixed(4)}
+        </div>
+      )}
+
+      {/* Online Participants Counter */}
+      {onlineParticipants.length > 0 && (
+        <div className="absolute top-20 left-4 z-10 bg-green-600 text-white text-sm px-3 py-1.5 rounded-full flex items-center gap-2">
+          <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+          {onlineParticipants.length} online
         </div>
       )}
       

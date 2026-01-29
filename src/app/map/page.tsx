@@ -86,7 +86,10 @@ export default function MapPage() {
       </div>
 
       {/* Map - Full screen */}
-      <TourMap categoryFilterEnabled={categoryFilterEnabled} />
+      <TourMap 
+        categoryFilterEnabled={categoryFilterEnabled} 
+        currentParticipantId={participant.id}
+      />
     </div>
   )
 }
