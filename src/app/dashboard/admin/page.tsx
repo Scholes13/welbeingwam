@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu } from 'lucide-react'
+import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu, FileText, Zap } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -135,6 +135,18 @@ export default function AdminPage() {
     const [doorprizeConfig, setDoorprizeConfig] = useState({ prize_name: '', quantity: 1, background_url: '' })
     const [doorprizeWinners, setDoorprizeWinners] = useState<any[]>([])
     const [isUploading, setIsUploading] = useState(false)
+
+    // Quest Template State
+    const [questTemplates, setQuestTemplates] = useState<any[]>([])
+    const [templateTitle, setTemplateTitle] = useState('')
+    const [templateDesc, setTemplateDesc] = useState('')
+    const [templatePoints, setTemplatePoints] = useState('')
+    const [templateDimensionId, setTemplateDimensionId] = useState('')
+    const [templateRecurrence, setTemplateRecurrence] = useState('daily')
+    const [templateTriggerType, setTemplateTriggerType] = useState('scheduled')
+    const [templateVerificationType, setTemplateVerificationType] = useState('none')
+    const [templateRequiresPhoto, setTemplateRequiresPhoto] = useState(false)
+    const [templateLinkedActivityTypeId, setTemplateLinkedActivityTypeId] = useState('')
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return
@@ -506,6 +518,93 @@ export default function AdminPage() {
         })
     }, [activityTypes, isActivityTypeHierarchyEnabled])
 
+    // Quest Template Functions
+    const fetchQuestTemplates = async () => {
+        try {
+            const res = await fetch('/api/admin/quest-templates')
+            const data = await res.json()
+            if (data.templates) setQuestTemplates(data.templates)
+        } catch (e) { console.error('Failed to fetch quest templates', e) }
+    }
+
+    const createQuestTemplate = async () => {
+        if (!templateTitle || !templatePoints) return
+        try {
+            const res = await fetch('/api/admin/quest-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: templateTitle,
+                    description: templateDesc || null,
+                    dimension_id: templateDimensionId || null,
+                    points: parseInt(templatePoints),
+                    verification_type: templateVerificationType,
+                    requires_photo: templateRequiresPhoto,
+                    recurrence: templateRecurrence,
+                    trigger_type: templateTriggerType,
+                    linked_activity_type_id: templateLinkedActivityTypeId || null,
+                }),
+            })
+            if (res.ok) {
+                setTemplateTitle('')
+                setTemplateDesc('')
+                setTemplatePoints('')
+                setTemplateDimensionId('')
+                setTemplateRecurrence('daily')
+                setTemplateTriggerType('scheduled')
+                setTemplateVerificationType('none')
+                setTemplateRequiresPhoto(false)
+                setTemplateLinkedActivityTypeId('')
+                fetchQuestTemplates()
+                success('Template created!')
+            } else {
+                const data = await res.json()
+                toastError(data.error || 'Failed to create template')
+            }
+        } catch (e) {
+            toastError('Error creating template')
+        }
+    }
+
+    const deleteQuestTemplate = async (id: string) => {
+        try {
+            const res = await fetch(`/api/admin/quest-templates?id=${id}`, { method: 'DELETE' })
+            if (res.ok) {
+                fetchQuestTemplates()
+                success('Template deleted!')
+            }
+        } catch (e) {
+            toastError('Error deleting template')
+        }
+    }
+
+    const toggleQuestTemplate = async (id: string, isActive: boolean) => {
+        try {
+            const res = await fetch('/api/admin/quest-templates', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, is_active: !isActive }),
+            })
+            if (res.ok) fetchQuestTemplates()
+        } catch (e) {
+            toastError('Error toggling template')
+        }
+    }
+
+    const generateQuestsNow = async () => {
+        try {
+            const res = await fetch('/api/admin/quest-templates/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger_type: 'scheduled' }),
+            })
+            const data = await res.json()
+            success(`Generated ${data.generated || 0} quests from templates`)
+        } catch (e) {
+            toastError('Error generating quests')
+        }
+    }
+
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
         else if (activeTab === 'quests') { fetchQuests(); fetchDimensions() }
@@ -519,6 +618,11 @@ export default function AdminPage() {
         else if (activeTab === 'doorprize') {
             fetchActivities()
             fetchDoorprizeSessions()
+        }
+        else if (activeTab === 'templates') {
+            fetchQuestTemplates()
+            fetchDimensions()
+            fetchActivityTypes()
         }
     }, [activeTab])
 
@@ -1528,6 +1632,218 @@ export default function AdminPage() {
             )}
 
             {activeTab === 'admins' && <ManageAdmins />}
+
+            {activeTab === 'templates' && (
+                <div className="space-y-6">
+                    {/* Generate Button */}
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-white">Quest Templates</h3>
+                        <button
+                            onClick={generateQuestsNow}
+                            className="flex items-center gap-2 bg-[#FC4C02] hover:bg-[#FC4C02]/80 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                        >
+                            <Zap size={16} /> Generate Quests Now
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Template List */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {questTemplates.length === 0 && (
+                                <div className="text-gray-500 text-sm text-center py-8">No templates yet. Create one to get started.</div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {questTemplates.map((tpl) => (
+                                    <div
+                                        key={tpl.id}
+                                        className="bg-[#1a1a1a] border border-gray-800 p-5 rounded-2xl flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3 gap-3">
+                                                <h4 className="text-base font-bold text-white flex-1 break-words">{tpl.title}</h4>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <span className="bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-lg font-mono text-xs font-bold">
+                                                        {tpl.points} PTS
+                                                    </span>
+                                                    <button
+                                                        onClick={() => deleteQuestTemplate(tpl.id)}
+                                                        className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+                                                        title="Delete Template"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {tpl.description && (
+                                                <p className="text-gray-400 text-xs mb-3 line-clamp-2">{tpl.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {tpl.dimension && (
+                                                    <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                        {tpl.dimension.display_name}
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-blue-300/60 bg-blue-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                    {tpl.recurrence}
+                                                </span>
+                                                <span className="text-xs text-purple-300/60 bg-purple-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                    {tpl.trigger_type === 'activity_linked' ? 'Activity Linked' : 'Scheduled'}
+                                                </span>
+                                                {tpl.verification_type && tpl.verification_type !== 'none' && (
+                                                    <span className="text-xs text-cyan-300/60 bg-cyan-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                        {tpl.verification_type.replace(/_/g, ' ')}
+                                                    </span>
+                                                )}
+                                                {tpl.requires_photo && (
+                                                    <span className="text-xs text-pink-300/60 bg-pink-500/10 px-2 py-0.5 rounded-full">
+                                                        Photo Required
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                onClick={() => toggleQuestTemplate(tpl.id, tpl.is_active)}
+                                                className={`text-xs font-bold uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${tpl.is_active ? 'text-green-500' : 'text-red-500'}`}
+                                            >
+                                                {tpl.is_active ? '● Active' : '● Inactive'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Create Template Form */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl h-fit">
+                            <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                                <FileText size={16} className="text-[#FC4C02]" /> Create Template
+                            </h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Title</label>
+                                    <input
+                                        type="text"
+                                        value={templateTitle}
+                                        onChange={(e) => setTemplateTitle(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. Morning Meditation"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Points</label>
+                                    <input
+                                        type="number"
+                                        value={templatePoints}
+                                        onChange={(e) => setTemplatePoints(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description</label>
+                                    <textarea
+                                        value={templateDesc}
+                                        onChange={(e) => setTemplateDesc(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02] h-20 resize-none"
+                                        placeholder="Optional description..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                    <select
+                                        value={templateDimensionId}
+                                        onChange={(e) => setTemplateDimensionId(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="">No Dimension</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Recurrence</label>
+                                    <select
+                                        value={templateRecurrence}
+                                        onChange={(e) => setTemplateRecurrence(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Trigger Type</label>
+                                    <select
+                                        value={templateTriggerType}
+                                        onChange={(e) => {
+                                            setTemplateTriggerType(e.target.value)
+                                            if (e.target.value !== 'activity_linked') setTemplateLinkedActivityTypeId('')
+                                        }}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="scheduled">Scheduled</option>
+                                        <option value="activity_linked">Activity Linked</option>
+                                    </select>
+                                </div>
+                                {templateTriggerType === 'activity_linked' && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Activity Type</label>
+                                        <select
+                                            value={templateLinkedActivityTypeId}
+                                            onChange={(e) => setTemplateLinkedActivityTypeId(e.target.value)}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        >
+                                            <option value="">Select Activity Type</option>
+                                            {activityTypes.map((at) => (
+                                                <option key={at.id} value={at.id}>{at.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Verification Type</label>
+                                    <select
+                                        value={templateVerificationType}
+                                        onChange={(e) => {
+                                            setTemplateVerificationType(e.target.value)
+                                            if (e.target.value === 'photo_proof') setTemplateRequiresPhoto(true)
+                                        }}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="none">None (Instant Claim)</option>
+                                        <option value="self_report">Self Report</option>
+                                        <option value="photo_proof">Photo Proof</option>
+                                        <option value="step_count">Step Count</option>
+                                        <option value="activity_attendance">Activity Attendance</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="templateRequiresPhoto"
+                                        checked={templateRequiresPhoto}
+                                        onChange={(e) => setTemplateRequiresPhoto(e.target.checked)}
+                                        className="w-4 h-4 rounded border-white/10 bg-black accent-[#FC4C02]"
+                                    />
+                                    <label htmlFor="templateRequiresPhoto" className="text-xs font-medium text-gray-400 uppercase">
+                                        Requires Photo
+                                    </label>
+                                </div>
+                                <button
+                                    onClick={createQuestTemplate}
+                                    disabled={!templateTitle || !templatePoints}
+                                    className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/80 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2.5 rounded-lg font-bold text-sm transition-colors mt-2"
+                                >
+                                    Create Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {
                 activeTab === 'surveys' && (
