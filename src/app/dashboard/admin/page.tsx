@@ -164,6 +164,14 @@ export default function AdminPage() {
         ], null, 2)
     )
 
+    // Monthly Awards State
+    const [awardPeriod, setAwardPeriod] = useState(() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    })
+    const [pastAwards, setPastAwards] = useState<any[]>([])
+    const [isFinalizingAwards, setIsFinalizingAwards] = useState(false)
+
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return
 
@@ -697,6 +705,42 @@ export default function AdminPage() {
         }
     }
 
+    // Monthly Awards Functions
+    const fetchPastAwards = async () => {
+        try {
+            const supabaseClient = supabase
+            const { data } = await supabaseClient
+                .from('monthly_awards')
+                .select('*, dimension:dimensions(id, name, display_name, icon), profile:profiles(id, full_name, avatar_url)')
+                .order('period', { ascending: false })
+                .limit(50)
+            setPastAwards(data || [])
+        } catch (e) { console.error('Failed to fetch awards', e) }
+    }
+
+    const finalizeAwards = async () => {
+        if (!awardPeriod) return
+        setIsFinalizingAwards(true)
+        try {
+            const res = await fetch('/api/admin/awards/finalize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ period: awardPeriod }),
+            })
+            const data = await res.json()
+            if (res.ok) {
+                success(`🏆 Finalized ${data.count} awards for ${awardPeriod}!`)
+                fetchPastAwards()
+            } else {
+                toastError(data.error || 'Failed to finalize awards')
+            }
+        } catch (e) {
+            toastError('Error finalizing awards')
+        } finally {
+            setIsFinalizingAwards(false)
+        }
+    }
+
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
         else if (activeTab === 'quests') { fetchQuests(); fetchDimensions() }
@@ -719,6 +763,7 @@ export default function AdminPage() {
         else if (activeTab === 'streaks') {
             fetchStreakEvents()
             fetchDimensions()
+            fetchPastAwards()
         }
     }, [activeTab])
 
@@ -2080,6 +2125,56 @@ export default function AdminPage() {
                                 </button>
                             </div>
                         </div>
+                    </div>
+
+                    {/* Monthly Awards Section */}
+                    <div className="border-t border-white/10 pt-6 mt-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white">🏆 Monthly Awards</h3>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="month"
+                                    value={awardPeriod}
+                                    onChange={(e) => setAwardPeriod(e.target.value)}
+                                    className="bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                />
+                                <button
+                                    onClick={finalizeAwards}
+                                    disabled={isFinalizingAwards || !awardPeriod}
+                                    className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-700 disabled:text-gray-500 text-black px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                    {isFinalizingAwards ? 'Finalizing...' : '🏆 Finalize Awards'}
+                                </button>
+                            </div>
+                        </div>
+                        {pastAwards.length === 0 ? (
+                            <div className="text-gray-500 text-sm text-center py-6">No awards finalized yet.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {pastAwards.map((award) => (
+                                    <div key={award.id} className="bg-[#1a1a1a] border border-yellow-500/20 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <img
+                                                src={award.profile?.avatar_url || 'https://via.placeholder.com/40'}
+                                                alt={award.profile?.full_name}
+                                                className="w-8 h-8 rounded-full border border-yellow-500/30"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-bold text-white truncate">{award.profile?.full_name || 'Unknown'}</div>
+                                                <div className="text-[10px] text-gray-500">{award.period}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-bold text-yellow-400 mb-1">🏆 {award.award_title}</div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                {award.dimension?.display_name || 'Unknown'}
+                                            </span>
+                                            <span className="text-xs text-gray-400 font-mono">{award.points_earned} pts</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

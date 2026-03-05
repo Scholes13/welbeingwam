@@ -19,6 +19,7 @@ export default function ProfilePage() {
     const [message, setMessage] = useState('')
     const [sending, setSending] = useState(false)
     const [activityScanMode, setActivityScanMode] = useState<'scan_in' | 'scan_out'>('scan_in')
+    const [userAwards, setUserAwards] = useState<any[]>([])
     const router = useRouter()
     const { success, error } = useToast()
 
@@ -38,6 +39,22 @@ export default function ProfilePage() {
     }, [])
 
     // Auto-fetched by SWR
+
+    // Fetch user awards
+    useEffect(() => {
+        if (!profile) return
+        const fetchAwards = async () => {
+            try {
+                const { data } = await supabase
+                    .from('monthly_awards')
+                    .select('*, dimension:dimensions(name, display_name, icon)')
+                    .eq('user_id', profile.id)
+                    .order('period', { ascending: false })
+                setUserAwards(data || [])
+            } catch { /* ignore */ }
+        }
+        fetchAwards()
+    }, [profile])
 
     const handleLogout = () => {
         router.push('/api/auth/logout')
@@ -334,6 +351,23 @@ export default function ProfilePage() {
                         </button>
                     </div>
                 </div>
+
+                {/* Awards Section */}
+                {userAwards.length > 0 && (
+                    <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">🏆 Awards</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {userAwards.map((award) => (
+                                <div key={award.id} className="bg-white/5 border border-yellow-500/20 rounded-xl p-3 text-center">
+                                    <div className="text-2xl mb-1">🏆</div>
+                                    <div className="text-xs font-bold text-orange-400 line-clamp-2">{award.award_title}</div>
+                                    <div className="text-[10px] text-gray-500 mt-1">{award.dimension?.display_name}</div>
+                                    <div className="text-[10px] text-gray-600">{award.period}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="mt-12 text-center">
                     <p className="text-xs text-gray-600">
