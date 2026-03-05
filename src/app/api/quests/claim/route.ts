@@ -2,6 +2,7 @@ import { getAuthProfileContext } from '@/utils/auth'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkPositiveSentiment } from '@/lib/openrouter'
+import { updateUserStreak } from '@/lib/streaks'
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
 
     const { data: quest } = await supabase
         .from('quests')
-        .select('verification_type, created_at')
+        .select('verification_type, created_at, dimension_id, points, title')
         .eq('id', questId)
         .single()
 
@@ -103,7 +104,31 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    // Streak bonus: update streak and apply multiplier
+    let streakMultiplier = 1.0
+    if (quest?.dimension_id) {
+      try {
+        const { multiplier } = await updateUserStreak(String(currentUserId), String(quest.dimension_id))
+        streakMultiplier = multiplier
+
+        if (multiplier > 1.0 && quest.points) {
+          const bonusPoints = Math.floor(quest.points * (multiplier - 1))
+          if (bonusPoints > 0) {
+            await supabase.from('point_adjustments').insert({
+              user_id: currentUserId,
+              points: bonusPoints,
+              reason: `🔥 Streak bonus (${multiplier}x) for quest: ${quest.title}`,
+              dimension_id: quest.dimension_id,
+              admin_id: null,
+            })
+          }
+        }
+      } catch (streakErr) {
+        console.error('[Claim] Streak update error (non-fatal):', streakErr)
+      }
+    }
+
+    return NextResponse.json({ success: true, streakMultiplier })
 
   } catch (error) {
     console.error('Claim Error:', error)
