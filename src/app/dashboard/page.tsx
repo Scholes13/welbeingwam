@@ -1,13 +1,31 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useProfile, useNotifications } from '@/hooks/use-swr-hooks'
 import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
-import { Plus, Users, Award, Zap, Activity, Bell, Footprints, Trophy } from 'lucide-react'
+import { Plus, Users, Award, Zap, Activity, Bell, Footprints, Trophy, Heart, Brain, Sparkles, Briefcase } from 'lucide-react'
 
 import Link from 'next/link'
 import Loader from '@/components/ui/Loader'
+
+interface Dimension {
+    id: string
+    name: string
+    display_name: string
+    icon: string
+    sort_order: number
+}
+
+const dimensionIconMap: Record<string, React.ComponentType<{ className?: string; size?: number }>> = {
+    activity: Activity,
+    heart: Heart,
+    brain: Brain,
+    users: Users,
+    sparkles: Sparkles,
+    briefcase: Briefcase,
+}
 
 interface Survey {
     id: string
@@ -28,9 +46,34 @@ export default function Dashboard() {
     const { unreadCount } = useNotifications()
     const router = useRouter()
 
+    const [dimensions, setDimensions] = useState<Dimension[]>([])
+    const [dimensionPoints, setDimensionPoints] = useState<Record<string, number>>({})
+
     const handleRefresh = () => {
         mutateProfile()
     }
+
+    // Fetch dimensions
+    useEffect(() => {
+        fetch('/api/dimensions')
+            .then(r => r.json())
+            .then(d => setDimensions(d.dimensions || []))
+            .catch(() => {})
+    }, [])
+
+    // Fetch user's dimension points from leaderboard
+    useEffect(() => {
+        if (!profile) return
+        fetch('/api/leaderboard')
+            .then(r => r.json())
+            .then(data => {
+                const me = (data.leaderboard || []).find((e: any) => e.user_id === profile.id)
+                if (me?.dimension_points) {
+                    setDimensionPoints(me.dimension_points)
+                }
+            })
+            .catch(() => {})
+    }, [profile])
 
     if (profileLoading && !profile) {
         return <Loader text="LOADING DASHBOARD..." />
@@ -107,6 +150,38 @@ export default function Dashboard() {
                         userQuests={userQuests}
                         onClaim={handleRefresh}
                     />
+
+                    {/* Life Mode Progress — 6 Dimensions */}
+                    {dimensions.length > 0 && (
+                        <div className="bg-white/5 rounded-2xl border border-white/10 p-6">
+                            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Life Mode Progress</h3>
+                            <div className="space-y-3">
+                                {dimensions.map(dim => {
+                                    const points = dimensionPoints[dim.id] || 0
+                                    const maxPoints = Math.max(
+                                        100,
+                                        ...Object.values(dimensionPoints).filter(v => v > 0)
+                                    )
+                                    const percent = maxPoints > 0 ? Math.min((points / maxPoints) * 100, 100) : 0
+                                    const IconComp = dimensionIconMap[dim.icon] || Activity
+
+                                    return (
+                                        <div key={dim.id} className="flex items-center gap-3">
+                                            <IconComp className="text-[#FC4C02] flex-shrink-0" size={16} />
+                                            <span className="text-xs text-gray-400 w-28 truncate">{dim.display_name}</span>
+                                            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-[#FC4C02] to-orange-400 rounded-full transition-all duration-500"
+                                                    style={{ width: `${percent}%`, opacity: 0.4 + (percent / 100) * 0.6 }}
+                                                />
+                                            </div>
+                                            <span className="text-xs text-gray-400 w-14 text-right font-mono">{points} pts</span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid gap-6">
                         <h2 className="text-2xl font-semibold border-b border-gray-800 pb-2">
