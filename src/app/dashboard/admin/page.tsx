@@ -2,10 +2,47 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, Pencil, BarChart2 } from 'lucide-react'
-import { Scanner } from '@yudiel/react-qr-scanner'
+import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu } from 'lucide-react'
+import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
+import { supabase } from '@/lib/supabase/client'
+
+import ManageAdmins from './ManageAdmins'
+import type { AdminTab } from './components/AdminTabs'
+import { AdminSidebar } from './components/AdminSidebar'
+import {
+    ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY,
+    getAdminCreateLabel,
+    getAdminPageMeta,
+    resolveAdminSidebarCollapsedState,
+} from './components/adminLayout'
+import {
+    formatActivityTypeOptionLabel,
+    getChildActivityTypes,
+    getTopLevelActivityTypes,
+    resolveInitialActivityTypeSelection,
+    resolveTypeBadgeLabel,
+    type ActivityTypeNode,
+} from './components/activityTypeHierarchy'
+import { buildActivityTypePayload, shouldSubmitActivityTypeByKey } from './components/activityTypeForm'
+import { getMissingDefaultTopCategories } from './components/activityTypeDefaults'
+import {
+    getActivityTypeFormGridClass,
+    getActivityTypeModalContainerClass,
+    getActivityTypeModalListClass,
+} from './components/activityTypeModalLayout'
+import {
+    getCreateActivityModalContainerClass,
+    getCreateActivityModalFormClass,
+    getCreateActivityModalHeaderClass,
+    getCreateActivityTimeGridClass,
+    getCreateActivityTypeGridClass,
+} from './components/createActivityModalLayout'
+import { RewardsTab } from './components/RewardsTab'
+import { UsersTab } from './components/UsersTab'
+import { useUserSelection } from './hooks/useUserSelection'
+import type { AdminReward, AdminUser } from './types'
 
 export default function AdminPage() {
     const { success, error: toastError, info } = useToast()
@@ -15,7 +52,29 @@ export default function AdminPage() {
     const [isEditingSurvey, setIsEditingSurvey] = useState(false)
     const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
 
-    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots'>('users')
+    const [activeTab, setActiveTab] = useState<AdminTab>('users')
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+    const [myPermissions, setMyPermissions] = useState<string[]>([])
+
+    useEffect(() => {
+        // Fetch my permissions using Supabase Auth
+        const checkMe = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('permissions, is_admin')
+                    .eq('id', user.id)
+                    .single()
+
+                if (profile?.permissions) {
+                    setMyPermissions(profile.permissions)
+                }
+            }
+        }
+        checkMe()
+    }, [])
 
     // ... (keep existing state) ...
 
@@ -37,13 +96,219 @@ export default function AdminPage() {
         setIsModalOpen(true)
     }
 
-    // Activity & Scanner State
-    // Activity & Scanner State
+    // Activity State
     const [activities, setActivities] = useState<any[]>([])
-    const [activityForm, setActivityForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], points: 0 })
+    const [activityTypes, setActivityTypes] = useState<ActivityTypeNode[]>([])
+    const [newActivityTypeName, setNewActivityTypeName] = useState('')
+    const [newActivityTypeDescription, setNewActivityTypeDescription] = useState('')
+    const [newActivityTypeParentId, setNewActivityTypeParentId] = useState('')
+    const [newActivityTypeDimensionId, setNewActivityTypeDimensionId] = useState('')
+    const [isActivityTypeModalOpen, setIsActivityTypeModalOpen] = useState(false)
+    const [isActivityTypeHierarchyEnabled, setIsActivityTypeHierarchyEnabled] = useState(true)
+    const [selectedTypeFilter, setSelectedTypeFilter] = useState('')
+    const [activityForm, setActivityForm] = useState({
+        title: '',
+        date: new Date().toISOString().split('T')[0],
+        startTime: '19:00',
+        endTime: '21:00',
+        points: 0,
+        parentTypeId: '',
+        typeId: '',
+        isPublished: true,
+        scheduleMode: 'one_time',
+        recurringWeeks: 4,
+    })
+
+    // Activity QR Display State
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
-    const [scanResult, setScanResult] = useState<{ success: boolean, message: string, user?: any } | null>(null)
+    const [activityQrValue, setActivityQrValue] = useState<string | null>(null)
+    const [activityQrExpiresAt, setActivityQrExpiresAt] = useState<string | null>(null)
+    const [activityQrTitle, setActivityQrTitle] = useState('')
+    const [activityQrLoading, setActivityQrLoading] = useState(false)
+
+    // Doorprize State
+    const [doorprizeSessions, setDoorprizeSessions] = useState<any[]>([])
+    const [sessionForm, setSessionForm] = useState({ name: '', activityId: '' })
+    const [isDoorprizeModalOpen, setIsDoorprizeModalOpen] = useState(false)
+    const [selectedDoorprize, setSelectedDoorprize] = useState<any>(null)
+    const [doorprizeConfig, setDoorprizeConfig] = useState({ prize_name: '', quantity: 1, background_url: '' })
+    const [doorprizeWinners, setDoorprizeWinners] = useState<any[]>([])
+    const [isUploading, setIsUploading] = useState(false)
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return
+
+        const file = e.target.files[0]
+        const activityId = selectedDoorprize?.id || 'default'
+
+        if (!activityId) {
+            toastError('Please select an activity first')
+            e.target.value = '' // Reset input
+            return
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            toastError('File size exceeds 5MB limit')
+            return
+        }
+
+        try {
+            setIsUploading(true)
+            const uploadClient = supabase
+            const fileName = `bg-${activityId}` // Fixed name to replace old one
+
+            const { data, error } = await uploadClient.storage
+                .from('doorprize-assets')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                })
+
+            if (error) throw error
+
+            // Get Public URL
+            const { data: { publicUrl } } = uploadClient.storage
+                .from('doorprize-assets')
+                .getPublicUrl(fileName)
+
+            // Append timestamp to bust cache
+            const urlWithTimestamp = `${publicUrl}?t=${Date.now()}`
+
+            setDoorprizeConfig(prev => ({ ...prev, background_url: urlWithTimestamp }))
+            success('Background uploaded successfully')
+
+        } catch (error: any) {
+            console.error('Upload error:', error)
+            toastError(error.message || 'Failed to upload image')
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
+    const fetchDoorprizeSessions = async () => {
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions')
+            const data = await res.json()
+            if (Array.isArray(data)) setDoorprizeSessions(data)
+        } catch (e) { console.error(e) }
+    }
+
+    const handleCreateSession = async () => {
+        if (!sessionForm.name || !sessionForm.activityId) {
+            toastError('Please fill all fields')
+            return
+        }
+
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: sessionForm.name,
+                    activity_id: sessionForm.activityId,
+                    prize_name: 'Doorprize', // Default
+                    quantity: 1, // Default
+                })
+            })
+            const data = await res.json()
+
+            if (res.ok) {
+                success('Session Created!')
+                setIsDoorprizeModalOpen(false)
+                setSessionForm({ name: '', activityId: '' })
+                fetchDoorprizeSessions()
+                // Open detail panel instead of launching
+                selectDoorprize(data)
+            } else {
+                toastError('Failed to create session')
+            }
+        } catch (e) {
+            toastError('Error creating session')
+        }
+    }
+
+    const selectDoorprize = async (session: any) => {
+        setSelectedDoorprize(session)
+        setDoorprizeConfig({
+            prize_name: session.prize_name || 'Doorprize',
+            quantity: session.quantity || 1,
+            background_url: session.background_url || ''
+        })
+
+        // Fetch winner count for this session
+        try {
+            console.log('Fetching winners for session:', session.id)
+            const res = await fetch(`/api/admin/doorprize/winners?doorprizeId=${session.id}`)
+            const data = await res.json()
+            console.log('Winners API Data:', data)
+
+            if (res.ok && data.winners) {
+                // Flatten user data
+                const flattenedWinners = data.winners.map((w: any) => ({
+                    ...w,
+                    full_name: w.user?.full_name || w.full_name,
+                    username: w.user?.username || w.username,
+                    avatar_url: w.user?.avatar_url || w.avatar_url
+                }))
+
+                setSelectedDoorprize((prev: any) => ({ ...prev, winnerCount: data.winners.length }))
+                setDoorprizeWinners(flattenedWinners)
+            }
+        } catch (e) {
+            console.error('Failed to fetch winners', e)
+        }
+    }
+
+    const handleSaveDoorprizeConfig = async () => {
+        if (!selectedDoorprize) return
+        try {
+            const res = await fetch('/api/admin/doorprize/sessions', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: selectedDoorprize.id,
+                    activity_id: selectedDoorprize.activity_id,
+                    name: selectedDoorprize.name,
+                    ...doorprizeConfig
+                })
+            })
+            if (res.ok) {
+                success('Config Saved!')
+                fetchDoorprizeSessions()
+                // Update local state
+                setSelectedDoorprize({ ...selectedDoorprize, ...doorprizeConfig })
+            } else {
+                toastError('Failed to save config')
+            }
+        } catch (e) {
+            toastError('Error saving config')
+        }
+    }
+
+    const handleDoorprizeImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0 || !selectedDoorprize) return
+        const file = e.target.files[0]
+        if (file.size > 5 * 1024 * 1024) {
+            toastError('File size exceeds 5MB limit')
+            return
+        }
+        try {
+            setIsUploading(true)
+            const fileName = `bg-${selectedDoorprize.id}`
+            const { error } = await supabase.storage
+                .from('doorprize-assets')
+                .upload(fileName, file, { cacheControl: '3600', upsert: true })
+            if (error) throw error
+            const { data: { publicUrl } } = supabase.storage.from('doorprize-assets').getPublicUrl(fileName)
+            setDoorprizeConfig(prev => ({ ...prev, background_url: `${publicUrl}?t=${Date.now()}` }))
+            success('Background uploaded!')
+        } catch (err: any) {
+            toastError(err.message || 'Upload failed')
+        } finally {
+            setIsUploading(false)
+        }
+    }
 
     // Activity Detail State
     const [showActivityDetail, setShowActivityDetail] = useState(false)
@@ -53,11 +318,11 @@ export default function AdminPage() {
     // Survey State for Navigation
     const [selectedSurvey, setSelectedSurvey] = useState<any | null>(null)
 
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<AdminUser[]>([])
     const [quests, setQuests] = useState<any[]>([])
     const [surveys, setSurveys] = useState<any[]>([])
     const [questions, setQuestions] = useState<any[]>([])
-    const [rewards, setRewards] = useState<any[]>([])
+    const [rewards, setRewards] = useState<AdminReward[]>([])
     const [spots, setSpots] = useState<any[]>([])
     const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '', clue: '' })
     const [selectedSpot, setSelectedSpot] = useState<any>(null)
@@ -82,7 +347,8 @@ export default function AdminPage() {
     const [questPoints, setQuestPoints] = useState('')
     const [questExpiresAt, setQuestExpiresAt] = useState('')
     const [questVerificationType, setQuestVerificationType] = useState('none') // New state
-
+    const [questDimensionId, setQuestDimensionId] = useState('')
+    const [dimensions, setDimensions] = useState<Array<{id: string, name: string, display_name: string, icon: string}>>([])
 
     // Form State (Survey Container)
     const [surveyContainerData, setSurveyContainerData] = useState({
@@ -130,37 +396,148 @@ export default function AdminPage() {
 
     // Search & Bulk Actions
     const [searchTerm, setSearchTerm] = useState('')
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
+    const normalizedSearchTerm = searchTerm.toLowerCase()
     const filteredUsers = users.filter(user =>
-        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username?.toLowerCase().includes(searchTerm.toLowerCase())
+        (user.full_name || '').toLowerCase().includes(normalizedSearchTerm) ||
+        (user.username || '').toLowerCase().includes(normalizedSearchTerm)
     )
 
-    const toggleSelectAll = () => {
-        if (selectedUserIds.length === filteredUsers.length) {
-            setSelectedUserIds([])
-        } else {
-            setSelectedUserIds(filteredUsers.map(u => u.id))
-        }
+    const {
+        selectedIds: selectedUserIds,
+        setSelectedIds: setSelectedUserIds,
+        isAllSelected,
+        toggleSelectAll,
+        toggleSelectOne,
+    } = useUserSelection(filteredUsers)
+
+    const handleTabChange = (tab: AdminTab) => {
+        setActiveTab(tab)
+        setSelectedSurvey(null)
+        setIsSidebarOpen(false)
+        setIsActivityTypeModalOpen(false)
     }
 
-    const toggleSelectUser = (id: string) => {
-        if (selectedUserIds.includes(id)) {
-            setSelectedUserIds(selectedUserIds.filter(uid => uid !== id))
-        } else {
-            setSelectedUserIds([...selectedUserIds, id])
-        }
+    const pageMeta = getAdminPageMeta(activeTab)
+    const createLabel = getAdminCreateLabel(activeTab, Boolean(selectedSurvey))
+    const activityTypeModalContainerClass = getActivityTypeModalContainerClass()
+    const activityTypeFormGridClass = getActivityTypeFormGridClass(isActivityTypeHierarchyEnabled)
+    const activityTypeModalListClass = getActivityTypeModalListClass()
+    const createActivityModalContainerClass = getCreateActivityModalContainerClass()
+    const createActivityModalHeaderClass = getCreateActivityModalHeaderClass()
+    const createActivityModalFormClass = getCreateActivityModalFormClass()
+    const createActivityTypeGridClass = getCreateActivityTypeGridClass(isActivityTypeHierarchyEnabled)
+    const createActivityTimeGridClass = getCreateActivityTimeGridClass()
+    const topLevelActivityTypes = getTopLevelActivityTypes(activityTypes)
+    const missingDefaultTopCategories = getMissingDefaultTopCategories(activityTypes)
+    const selectedParentForActivity = activityForm.parentTypeId || topLevelActivityTypes[0]?.id || ''
+    const childTypesForSelectedParent = selectedParentForActivity
+        ? getChildActivityTypes(activityTypes, selectedParentForActivity)
+        : []
+
+    const setActivityParentType = (parentTypeId: string) => {
+        const children = getChildActivityTypes(activityTypes, parentTypeId)
+        const activeChildren = children.filter((child) => child.is_active !== false)
+        const preferredChild = activeChildren[0] ?? children[0]
+
+        setActivityForm((prev) => ({
+            ...prev,
+            parentTypeId,
+            typeId: preferredChild?.id ?? parentTypeId,
+        }))
+    }
+
+    const setActivitySubType = (typeId: string) => {
+        setActivityForm((prev) => ({ ...prev, typeId: typeId || prev.parentTypeId }))
     }
 
     useEffect(() => {
+        document.body.style.overflow = isSidebarOpen ? 'hidden' : ''
+        return () => {
+            document.body.style.overflow = ''
+        }
+    }, [isSidebarOpen])
+
+    useEffect(() => {
+        const storedValue = window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY)
+        setIsSidebarCollapsed(resolveAdminSidebarCollapsedState(storedValue))
+    }, [])
+
+    useEffect(() => {
+        window.localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY, isSidebarCollapsed ? '1' : '0')
+    }, [isSidebarCollapsed])
+
+    useEffect(() => {
+        if (activityTypes.length === 0) return
+
+        if (!isActivityTypeHierarchyEnabled) {
+            setNewActivityTypeParentId('')
+            setActivityForm((prev) => {
+                const hasValidType = activityTypes.some((type) => type.id === prev.typeId)
+                if (hasValidType) return { ...prev, parentTypeId: '' }
+                return {
+                    ...prev,
+                    parentTypeId: '',
+                    typeId: activityTypes[0]?.id || '',
+                }
+            })
+            return
+        }
+
+        const topLevelIds = new Set(getTopLevelActivityTypes(activityTypes).map((type) => type.id))
+        const typeIds = new Set(activityTypes.map((type) => type.id))
+        const initialSelection = resolveInitialActivityTypeSelection(activityTypes)
+
+        setNewActivityTypeParentId((prev) => {
+            if (prev && topLevelIds.has(prev)) return prev
+            return initialSelection.parentTypeId
+        })
+
+        setActivityForm((prev) => {
+            const hasValidParent = prev.parentTypeId && topLevelIds.has(prev.parentTypeId)
+            const hasValidType = prev.typeId && typeIds.has(prev.typeId)
+            if (hasValidParent && hasValidType) return prev
+
+            return {
+                ...prev,
+                parentTypeId: initialSelection.parentTypeId,
+                typeId: initialSelection.typeId,
+            }
+        })
+    }, [activityTypes, isActivityTypeHierarchyEnabled])
+
+    useEffect(() => {
         if (activeTab === 'users') fetchUsers()
-        else if (activeTab === 'quests') fetchQuests()
+        else if (activeTab === 'quests') { fetchQuests(); fetchDimensions() }
         else if (activeTab === 'surveys') fetchSurveys()
         else if (activeTab === 'rewards') fetchRewards()
-        else if (activeTab === 'activities') fetchActivities()
-        else if (activeTab === 'spots') fetchSpots()
+        else if (activeTab === 'activities') {
+            fetchActivityTypes()
+            fetchActivities()
+            fetchDimensions()
+        }
+        else if (activeTab === 'doorprize') {
+            fetchActivities()
+            fetchDoorprizeSessions()
+        }
     }, [activeTab])
+
+    useEffect(() => {
+        if (activeTab === 'activities') {
+            fetchActivities()
+        }
+    }, [selectedTypeFilter])
+
+    useEffect(() => {
+        if (!isScannerOpen || !selectedActivityId) return
+
+        fetchActivityQrToken(selectedActivityId)
+        const intervalId = setInterval(() => {
+            fetchActivityQrToken(selectedActivityId)
+        }, 40000)
+
+        return () => clearInterval(intervalId)
+    }, [isScannerOpen, selectedActivityId])
 
     useEffect(() => {
         if (selectedSurvey) {
@@ -176,17 +553,214 @@ export default function AdminPage() {
                 return
             }
             const data = await res.json()
-            if (data.users) setUsers(data.users)
+            if (data.users) setUsers(data.users as AdminUser[])
         } catch (e) { console.error(e) } finally { setLoading(false) }
     }
 
     const fetchActivities = async () => {
         try {
-            const res = await fetch('/api/admin/activities')
+            const params = new URLSearchParams()
+            if (selectedTypeFilter && activeTab === 'activities') params.set('typeId', selectedTypeFilter)
+            const query = params.toString()
+            const res = await fetch(`/api/admin/activities${query ? `?${query}` : ''}`)
             const data = await res.json()
-            setActivities(data)
+            setActivities(Array.isArray(data) ? data : [])
         } catch (error) {
             console.error('Error fetching activities:', error)
+        }
+    }
+
+    const fetchActivityTypes = async () => {
+        try {
+            const res = await fetch('/api/admin/activity-types')
+            const data = await res.json()
+            if (res.ok) {
+                const types: ActivityTypeNode[] = Array.isArray(data.types) ? data.types : []
+                setIsActivityTypeHierarchyEnabled(data.hierarchyEnabled !== false)
+                setActivityTypes(types)
+
+                const initialSelection = resolveInitialActivityTypeSelection(types)
+                setActivityForm((prev) => {
+                    if (prev.typeId) return prev
+                    return {
+                        ...prev,
+                        parentTypeId: initialSelection.parentTypeId,
+                        typeId: initialSelection.typeId,
+                    }
+                })
+
+                setNewActivityTypeParentId((prev) => {
+                    if (prev) return prev
+                    return initialSelection.parentTypeId
+                })
+            }
+        } catch (error) {
+            console.error('Error fetching activity types:', error)
+        }
+    }
+
+    const openActivityTypeModal = () => {
+        setIsModalOpen(false)
+
+        if (!isActivityTypeHierarchyEnabled) {
+            setNewActivityTypeParentId('')
+            setIsActivityTypeModalOpen(true)
+            return
+        }
+
+        const initialSelection = resolveInitialActivityTypeSelection(activityTypes)
+        if (!newActivityTypeParentId && initialSelection.parentTypeId) {
+            setNewActivityTypeParentId(initialSelection.parentTypeId)
+        }
+        setIsActivityTypeModalOpen(true)
+    }
+
+    const createActivityType = async () => {
+        const payload = buildActivityTypePayload(
+            newActivityTypeName,
+            newActivityTypeDescription,
+            isActivityTypeHierarchyEnabled ? (newActivityTypeParentId || null) : null,
+        )
+        if (!payload) {
+            toastError('Type name is required')
+            return
+        }
+
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, dimension_id: newActivityTypeDimensionId || null })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to create type')
+                return
+            }
+
+            setNewActivityTypeName('')
+            setNewActivityTypeDescription('')
+            setNewActivityTypeDimensionId('')
+            setIsActivityTypeModalOpen(false)
+            success('Activity type created')
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Create activity type error:', error)
+            toastError('Failed to create type')
+        }
+    }
+
+    const createDefaultTopCategory = async (categoryName: string) => {
+        const payload = buildActivityTypePayload(categoryName, '', null)
+        if (!payload) return
+
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to create default category')
+                return
+            }
+
+            success(`${categoryName} created`)
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Create default activity type error:', error)
+            toastError('Failed to create default category')
+        }
+    }
+
+    const deleteActivityType = async (typeId: string) => {
+        try {
+            const res = await fetch(`/api/admin/activity-types?id=${typeId}`, {
+                method: 'DELETE',
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to delete type')
+                return
+            }
+
+            success('Activity type deleted')
+            if (selectedTypeFilter === typeId) setSelectedTypeFilter('')
+            fetchActivityTypes()
+            fetchActivities()
+        } catch (error) {
+            console.error('Delete activity type error:', error)
+            toastError('Failed to delete type')
+        }
+    }
+
+    const toggleActivityTypeActive = async (type: ActivityTypeNode) => {
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: type.id, isActive: !type.is_active })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to update type')
+                return
+            }
+
+            success(type.is_active ? 'Type deactivated' : 'Type activated')
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Toggle activity type error:', error)
+            toastError('Failed to update type')
+        }
+    }
+
+    const fetchActivityQrToken = async (activityId: string) => {
+        try {
+            setActivityQrLoading(true)
+            const res = await fetch(`/api/admin/activities/token?activityId=${activityId}`)
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to refresh QR token')
+                return
+            }
+
+            setActivityQrValue(data.qrValue || null)
+            setActivityQrExpiresAt(data.expiresAt || null)
+            setActivityQrTitle(data.activity?.title || '')
+        } catch (error) {
+            console.error('Error fetching activity token:', error)
+            toastError('Failed to load activity QR')
+        } finally {
+            setActivityQrLoading(false)
+        }
+    }
+
+    const toggleActivityPublish = async (activity: any) => {
+        try {
+            const res = await fetch('/api/admin/activities', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: activity.id, isPublished: !activity.is_published })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to update publish status')
+                return
+            }
+
+            success(activity.is_published ? 'Activity unpublished' : 'Activity published')
+            fetchActivities()
+        } catch (error) {
+            console.error('Toggle activity publish error:', error)
+            toastError('Failed to update publish status')
         }
     }
 
@@ -200,7 +774,16 @@ export default function AdminPage() {
             })
             if (res.ok) {
                 setIsModalOpen(false)
-                setActivityForm({ title: '', date: new Date().toISOString().split('T')[0], points: 0 })
+                setActivityForm(prev => ({
+                    ...prev,
+                    title: '',
+                    date: new Date().toISOString().split('T')[0],
+                    startTime: '19:00',
+                    endTime: '21:00',
+                    points: 0,
+                    scheduleMode: 'one_time',
+                    recurringWeeks: 4,
+                }))
                 fetchActivities()
             }
         } catch (error) {
@@ -208,39 +791,15 @@ export default function AdminPage() {
         }
     }
 
-    const handleScan = async (accessCodes: any[]) => {
-        if (!accessCodes || accessCodes.length === 0) return
-        const code = accessCodes[0].rawValue
 
+
+    const fetchDimensions = async () => {
         try {
-            const res = await fetch('/api/admin/attendance/scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    activity_id: selectedActivityId,
-                    access_code: code
-                })
-            })
+            const res = await fetch('/api/dimensions')
             const data = await res.json()
-            setScanResult({
-                success: data.success || false,
-                message: data.message || data.error,
-                user: data.user
-            })
-
-            if (data.success) {
-                // Refresh list to update counts
-                fetchActivities()
-                // Optional: Close scanner after success or keep open for next
-                // setIsScannerOpen(false) 
-            }
-
-        } catch (error) {
-            console.error('Scan Error:', error)
-        }
+            if (data.dimensions) setDimensions(data.dimensions)
+        } catch (e) { console.error(e) }
     }
-
-
 
     const fetchQuests = async () => {
         try {
@@ -262,7 +821,7 @@ export default function AdminPage() {
         try {
             const res = await fetch('/api/admin/rewards/list')
             const data = await res.json()
-            if (data.rewards) setRewards(data.rewards)
+            if (data.rewards) setRewards(data.rewards as AdminReward[])
         } catch (e) { console.error(e) }
     }
 
@@ -415,6 +974,28 @@ export default function AdminPage() {
         URL.revokeObjectURL(url)
     }
 
+    const exportActivityAttended = () => {
+        if (!activityDetail || !activityDetail.attendees || activityDetail.attendees.length === 0) return
+
+        const headers = ['No', 'Name', 'Username', 'Instagram', 'Joined At']
+        const rows = activityDetail.attendees.map((u: any, idx: number) => [
+            idx + 1,
+            u.full_name || '-',
+            u.username || '-',
+            u.instagram || '-',
+            u.joined_at ? new Date(u.joined_at).toLocaleString() : '-'
+        ])
+
+        const csv = [headers.join(','), ...rows.map((r: any) => r.join(','))].join('\n')
+        const blob = new Blob([csv], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${activityDetail.activity.title}_COMPLETED_${new Date().toISOString().split('T')[0]}.csv`
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
     const fetchRewardDetail = async (rewardId: string) => {
         try {
             // Find reward info from existing list first
@@ -438,10 +1019,10 @@ export default function AdminPage() {
         }
     }
 
-    const handleEditReward = (reward: any) => {
+    const handleEditReward = (reward: AdminReward) => {
         setRewardData({
             title: reward.title,
-            description: reward.description,
+            description: reward.description || '',
             image_url: reward.image_url || '',
             required_points: reward.required_points,
             max_claims: reward.max_claims,
@@ -695,7 +1276,8 @@ export default function AdminPage() {
                     description: questDesc,
                     points: parseInt(questPoints) || 0,
                     expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null,
-                    verification_type: questVerificationType
+                    verification_type: questVerificationType,
+                    dimension_id: questDimensionId || null
                 }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
                 // Create OR Update Survey Container
@@ -745,6 +1327,7 @@ export default function AdminPage() {
                     setQuestPoints('')
                     setQuestExpiresAt('')
                     setQuestVerificationType('none')
+                    setQuestDimensionId('')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
                     setRewardData({ title: '', description: '', image_url: '', required_points: 0, max_claims: 0, type: 'reveal' })
@@ -823,249 +1406,69 @@ export default function AdminPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-8">
-            <button
-                onClick={() => router.back()}
-                className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition-colors"
-            >
-                <ArrowLeft size={20} />
-                Back to Dashboard
-            </button>
+        <div className="min-h-screen bg-black text-white">
+            <div className="flex min-h-screen">
+                <AdminSidebar
+                    activeTab={activeTab}
+                    isOpen={isSidebarOpen}
+                    isCollapsed={isSidebarCollapsed}
+                    onBack={() => router.back()}
+                    onClose={() => setIsSidebarOpen(false)}
+                    onChange={handleTabChange}
+                    onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+                />
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
-                        <Shield className="text-[#FC4C02]" />
-                        Admin Panel
-                    </h1>
-                    <p className="text-gray-400 text-sm md:text-base">Manage users, quests, and surveys.</p>
-                </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                    <Plus size={20} />
-                    Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : activeTab === 'spots' ? 'QR Spot' : (!selectedSurvey ? 'Survey' : 'Question')}
-                </button>
-            </div>
+                <div className="min-w-0 flex-1">
+                    <div className="p-4 md:p-8">
+                        <div className="mb-4 flex items-center md:hidden">
+                            <button
+                                onClick={() => setIsSidebarOpen(true)}
+                                className="rounded-lg border border-white/10 p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                                aria-label="Open admin menu"
+                            >
+                                <Menu size={18} />
+                            </button>
+                        </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 md:gap-4 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                <button
-                    onClick={() => { setActiveTab('users'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'users' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <User size={18} /> Users
-                </button>
-                <button
-                    onClick={() => { setActiveTab('quests'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'quests' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Gift size={18} /> Daily Quests
-                </button>
-                <button
-                    onClick={() => { setActiveTab('surveys'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'surveys' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <ClipboardList size={18} /> Surveys
-                </button>
-                <button
-                    onClick={() => { setActiveTab('rewards'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'rewards' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Gift size={18} /> Rewards
-                </button>
-                <button
-                    onClick={() => { setActiveTab('activities'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'activities' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Calendar size={18} /> Activities
-                </button>
-                <button
-                    onClick={() => { setActiveTab('spots'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'spots' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <MapPin size={18} /> QR Spots
-                </button>
-            </div>
-
-            {/* Users Table */}
-            {activeTab === 'users' && (
-                <>
-                    {/* Desktop Table View */}
-                    <div className="hidden md:block bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden">
-                        <div className="p-4 border-b border-white/10 flex gap-4">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Search users by name or username..."
-                                    className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                />
+                        <div className="mb-8 rounded-2xl border border-white/10 bg-gradient-to-r from-[#121212] via-[#0f0f0f] to-[#141414] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] md:p-6">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#FC4C02]">Admin Workspace</p>
+                                <h1 className="text-2xl font-bold md:text-3xl">{pageMeta.title}</h1>
+                                <p className="text-sm text-gray-400 md:text-base">{pageMeta.description}</p>
+                            </div>
+                            {createLabel && (
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="w-full rounded-xl bg-[#FC4C02] px-6 py-3 font-bold text-white transition-colors hover:bg-orange-600 md:w-auto"
+                                >
+                                    <span className="flex items-center justify-center gap-2">
+                                        <Plus size={20} />
+                                        Add {createLabel}
+                                    </span>
+                                </button>
+                            )}
                             </div>
                         </div>
 
-                        {/* Bulk Actions Toolbar */}
-                        {selectedUserIds.length > 0 && (
-                            <div className="bg-[#FC4C02]/10 p-4 flex items-center justify-between border-b border-[#FC4C02]/20 animate-in fade-in slide-in-from-top-2">
-                                <div className="text-[#FC4C02] font-bold text-sm">
-                                    {selectedUserIds.length} Users Selected
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => openBulkPointsModal()} // Need to implement
-                                        className="px-4 py-2 bg-[#FC4C02] text-white rounded-lg text-sm font-bold hover:bg-orange-600 transition-colors flex items-center gap-2"
-                                    >
-                                        <Plus size={16} /> Bulk Add Points
-                                    </button>
-                                    <button
-                                        onClick={() => openBulkResetModal()} // Need to implement
-                                        className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-colors flex items-center gap-2"
-                                    >
-                                        <RotateCcw size={16} /> Bulk Reset
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        <table className="w-full text-left">
-                            <thead className="bg-black/50 text-gray-400 text-sm uppercase">
-                                <tr>
-                                    <th className="p-4 w-12 text-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length}
-                                            onChange={toggleSelectAll}
-                                            className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
-                                        />
-                                    </th>
-                                    <th className="p-4">User</th>
-                                    <th className="p-4">Username</th>
-                                    <th className="p-4">Access Code</th>
-                                    <th className="p-4">Status</th>
-                                    <th className="p-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/10">
-                                {loading ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">Loading...</td></tr>
-                                ) : filteredUsers.map((user) => (
-                                    <tr key={user.id} className="hover:bg-white/5 transition-colors">
-                                        <td className="p-4 text-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUserIds.includes(user.id)}
-                                                onChange={() => toggleSelectUser(user.id)}
-                                                className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
-                                            />
-                                        </td>
-                                        <td className="p-4 flex items-center gap-3">
-                                            <img src={user.avatar_url} className="w-10 h-10 rounded-full" alt="" />
-                                            <span className="font-medium">{user.full_name}</span>
-                                        </td>
-                                        <td className="p-4 font-mono text-gray-400">@{user.username}</td>
-                                        <td className="p-4 font-mono text-[#FC4C02]">{user.access_code || '-'}</td>
-                                        <td className="p-4">
-                                            <span className="bg-green-500/20 text-green-500 px-2 py-1 rounded-full text-xs font-bold">
-                                                Active
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            {user.username !== 'admin_wam' && (
-                                                <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openPointsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Adjust Points"
-                                                        className="p-2 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500/20 transition-colors"
-                                                    >
-                                                        <Target size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Adjust Steps"
-                                                        className="p-2 bg-purple-500/10 text-purple-500 rounded-lg hover:bg-purple-500/20 transition-colors"
-                                                    >
-                                                        <Footprints size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Reset Points"
-                                                        className="p-2 bg-orange-500/10 text-orange-500 rounded-lg hover:bg-orange-500/20 transition-colors"
-                                                    >
-                                                        <RotateCcw size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => promptDeleteUser(user.id, user.username)}
-                                                        className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Card View */}
-                    <div className="md:hidden space-y-4">
-                        {loading ? (
-                            <div className="text-center text-gray-500 py-8">Loading...</div>
-                        ) : users.map((user) => (
-                            <div key={user.id} className="bg-[#1a1a1a] border border-white/10 p-4 rounded-xl flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <img src={user.avatar_url} className="w-10 h-10 rounded-full shrink-0 object-cover" alt="" />
-                                    <div className="min-w-0">
-                                        <div className="font-bold truncate">{user.full_name}</div>
-                                        <div className="text-xs text-gray-500 font-mono truncate">@{user.username}</div>
-                                        <div className="text-xs text-[#FC4C02] font-mono mt-1 bg-[#FC4C02]/10 inline-block px-1.5 py-0.5 rounded">
-                                            {user.access_code || 'NO-CODE'}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {user.username !== 'admin_wam' && (
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => openPointsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Target size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-purple-500 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Footprints size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <RotateCcw size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <RotateCcw size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => promptDeleteUser(user.id, user.username)}
-                                            className="p-2 text-red-500 bg-red-500/10 hover:bg-red-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </>
+            {activeTab === 'users' && (
+                <UsersTab
+                    loading={loading}
+                    users={users}
+                    filteredUsers={filteredUsers}
+                    searchTerm={searchTerm}
+                    selectedUserIds={selectedUserIds}
+                    isAllSelected={isAllSelected}
+                    onSearchTermChange={setSearchTerm}
+                    onToggleSelectAll={toggleSelectAll}
+                    onToggleSelectUser={toggleSelectOne}
+                    onOpenBulkPointsModal={openBulkPointsModal}
+                    onOpenBulkResetModal={openBulkResetModal}
+                    onOpenPointsModal={openPointsModal}
+                    onOpenStepsModal={openStepsModal}
+                    onOpenResetModal={openResetModal}
+                    onPromptDeleteUser={promptDeleteUser}
+                />
             )}
 
             {/* Quests Table */}
@@ -1085,6 +1488,11 @@ export default function AdminPage() {
                                             <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap">
                                                 {quest.points} PTS
                                             </span>
+                                            {quest.dimension && (
+                                                <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                    {quest.dimension.display_name}
+                                                </span>
+                                            )}
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -1110,84 +1518,16 @@ export default function AdminPage() {
                 )
             }
 
-            {/* Rewards Table */}
-            {
-                activeTab === 'rewards' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {rewards.map((reward) => (
-                            <div
-                                key={reward.id}
-                                onClick={() => fetchRewardDetail(reward.id)}
-                                className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between cursor-pointer hover:border-[#FC4C02] transition-colors group"
-                            >
-                                <div>
-                                    <div className="flex justify-between items-start mb-4 gap-4">
-                                        <h3 className="text-xl font-bold flex-1 break-words group-hover:text-[#FC4C02] transition-colors">{reward.title}</h3>
-                                        <div className="flex flex-col items-end gap-2">
-                                            <div className="flex flex-col items-end">
-                                                {reward.required_points > 0 && (
-                                                    <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap mb-1">
-                                                        {reward.required_points} PTS
-                                                    </span>
-                                                )}
-                                                {reward.required_steps > 0 && (
-                                                    <span className="bg-blue-500/20 text-blue-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap">
-                                                        {reward.required_steps} STEPS
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="flex gap-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        handleEditReward(reward)
-                                                    }}
-                                                    className="text-gray-500 hover:text-blue-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
-                                                    title="Edit Reward"
-                                                >
-                                                    <Pencil size={18} />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        promptDeleteReward(reward.id, reward.title)
-                                                    }}
-                                                    className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
-                                                    title="Delete Reward"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p className="text-gray-400 text-sm mb-4 line-clamp-3">{reward.description}</p>
-                                </div>
-                                <div className="flex justify-between items-end border-t border-white/5 pt-4">
-                                    <div className="text-xs text-gray-500">
-                                        <div className="uppercase font-bold mb-1">Claims</div>
-                                        <span className={reward.max_claims > 0 && reward.total_claimed >= reward.max_claims ? 'text-red-500' : 'text-white'}>
-                                            {reward.total_claimed} / {reward.max_claims === 0 ? '∞' : reward.max_claims}
-                                        </span>
-                                    </div>
-                                    <div className={`text-xs font-bold uppercase tracking-wider ${reward.is_active ? 'text-green-500' : 'text-red-500'} `}>
-                                        {reward.is_active ? '● Active' : '● Inactive'}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                        {rewards.length === 0 && (
-                            <div className="col-span-full text-center py-12 text-gray-500">
-                                No rewards found. Create one to get started.
-                            </div>
-                        )}
-                    </div>
-                )
-            }
+            {activeTab === 'rewards' && (
+                <RewardsTab
+                    rewards={rewards}
+                    onOpenRewardDetail={fetchRewardDetail}
+                    onEditReward={handleEditReward}
+                    onDeleteReward={promptDeleteReward}
+                />
+            )}
 
+            {activeTab === 'admins' && <ManageAdmins />}
 
             {
                 activeTab === 'surveys' && (
@@ -1342,191 +1682,491 @@ export default function AdminPage() {
                 )
             }
 
-            {/* Activities Tab */}
-            {activeTab === 'activities' && (
+            {/* Doorprize Tab - Session Manager */}
+            {activeTab === 'doorprize' && (
                 <div className="space-y-6">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold">Manage Activities</h2>
+                    <div className="flex justify-between items-center bg-[#1a1a1a] p-6 rounded-2xl border border-white/5">
+                        <h3 className="text-xl font-bold flex items-center gap-2">
+                            <Gift className="text-[#FC4C02]" /> Doorprize Sessions
+                        </h3>
+                        <button
+                            onClick={() => setIsDoorprizeModalOpen(true)}
+                            className="bg-[#FC4C02] text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-[#e04302] flex items-center gap-2"
+                        >
+                            <Plus size={16} /> New Session
+                        </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {activities.map((activity) => (
-                            <div
-                                key={activity.id}
-                                className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 hover:bg-white/5 transition-colors cursor-pointer group"
-                                onClick={() => fetchActivityDetail(activity.id)}
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <h3 className="font-bold text-lg text-white mb-1 group-hover:text-[#FC4C02] transition-colors">{activity.title}</h3>
-                                        <div className="flex items-center gap-2 text-gray-400 text-sm">
-                                            <Calendar className="w-4 h-4" />
-                                            {activity.activity_date}
-                                        </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Sessions List */}
+                        <div className="lg:col-span-1 bg-[#1a1a1a] border border-white/5 rounded-2xl overflow-hidden">
+                            <div className="p-4 bg-white/5 text-gray-400 text-xs uppercase font-bold">Sessions</div>
+                            <div className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+                                {doorprizeSessions.map((session: any) => (
+                                    <div
+                                        key={session.id}
+                                        onClick={() => selectDoorprize(session)}
+                                        className={`p-4 cursor-pointer transition-colors ${selectedDoorprize?.id === session.id ? 'bg-[#FC4C02]/10 border-l-4 border-[#FC4C02]' : 'hover:bg-white/5'}`}
+                                    >
+                                        <div className="font-bold text-white">{session.name}</div>
+                                        <div className="text-xs text-gray-500">{session.activity?.title}</div>
+                                        <div className="text-xs text-gray-600 mt-1">{session.prize_name} ({session.quantity} winners)</div>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                promptDeleteActivity(activity.id, activity.title)
-                                            }}
-                                            className="p-1 text-gray-500 hover:text-red-500 transition-colors"
-                                            title="Delete Activity"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                        <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
-                                            {activity.attendance_count || 0} Present
+                                ))}
+                                {doorprizeSessions.length === 0 && (
+                                    <div className="p-8 text-center text-gray-500">No sessions yet.</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Session Detail / Config Panel */}
+                        <div className="lg:col-span-2 bg-[#1a1a1a] border border-white/5 rounded-2xl p-6">
+                            {selectedDoorprize ? (
+                                <div className="space-y-6">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <h4 className="text-2xl font-bold text-white">{selectedDoorprize.name}</h4>
+                                            <p className="text-gray-500 text-sm">{selectedDoorprize.activity?.title}</p>
                                         </div>
-                                        {activity.points > 0 && (
-                                            <span className="text-[#FC4C02] text-xs font-bold bg-[#FC4C02]/10 px-2 py-1 rounded-lg">
-                                                +{activity.points} PTS
-                                            </span>
+                                        <button
+                                            onClick={() => setSelectedDoorprize(null)}
+                                            className="text-gray-500 hover:text-white"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Prize Name</label>
+                                            <input
+                                                value={doorprizeConfig.prize_name}
+                                                onChange={e => setDoorprizeConfig({ ...doorprizeConfig, prize_name: e.target.value })}
+                                                placeholder="e.g. Motor Honda Beat"
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Quantity (Winners)</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                value={doorprizeConfig.quantity}
+                                                onChange={e => setDoorprizeConfig({ ...doorprizeConfig, quantity: parseInt(e.target.value) || 1 })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white"
+                                            />
+                                        </div>
+
+                                        {/* Winner Count Status */}
+                                        <div className="flex items-center gap-3 p-4 bg-black/30 rounded-xl border border-white/5">
+                                            <Trophy size={20} className="text-[#FC4C02]" />
+                                            <div>
+                                                <div className="text-sm font-bold text-white">
+                                                    {selectedDoorprize.winnerCount || 0} / {doorprizeConfig.quantity} Winners Selected
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {(selectedDoorprize.winnerCount || 0) >= doorprizeConfig.quantity ? 'All slots filled!' : 'Launch to roll more winners'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-400 mb-2">Background Image</label>
+                                            {doorprizeConfig.background_url && (
+                                                <div className="mb-3 w-full h-40 rounded-xl overflow-hidden border border-white/20">
+                                                    <img src={doorprizeConfig.background_url} className="w-full h-full object-cover" alt="bg" />
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <label className="cursor-pointer bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg flex items-center gap-2 transition-colors text-sm">
+                                                    {isUploading ? <Loader2 size={16} className="animate-spin" /> : <></>}
+                                                    <span>{isUploading ? 'Uploading...' : 'Upload Image'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={handleDoorprizeImageUpload}
+                                                        disabled={isUploading}
+                                                        className="hidden"
+                                                    />
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-600 mt-2">Max 5MB. Recommended 1920x1080.</p>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-4">
+                                            <button
+                                                onClick={handleSaveDoorprizeConfig}
+                                                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                                            >
+                                                <Save size={18} /> Save Config
+                                            </button>
+                                            <button
+                                                onClick={() => window.open(`/doorprize/${selectedDoorprize.id}`, '_blank')}
+                                                className="flex-1 bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2"
+                                            >
+                                                <Target size={18} /> Launch Presentation
+                                            </button>
+                                        </div>
+
+                                        {/* Winners List */}
+                                        {doorprizeWinners.length > 0 && (
+                                            <div className="mt-6 border-t border-white/10 pt-4">
+                                                <h3 className="text-sm font-bold text-gray-400 mb-3">Winners ({doorprizeWinners.length})</h3>
+                                                <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                                    {doorprizeWinners.map((w, i) => (
+                                                        <div key={i} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-white/5">
+                                                            <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden flex-shrink-0">
+                                                                <img src={w.avatar_url} className="w-full h-full object-cover" alt={w.full_name} />
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-sm font-bold text-white truncate">{w.full_name}</div>
+                                                                <div className="text-[10px] text-gray-500 truncate">@{w.username}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
-
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        setSelectedActivityId(activity.id)
-                                        setIsScannerOpen(true)
-                                        setScanResult(null)
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors z-10 relative"
-                                >
-                                    <Scan className="w-4 h-4" />
-                                    Scan Attendance
-                                </button>
-                            </div>
-                        ))}
-
-                        {activities.length === 0 && (
-                            <div className="col-span-full text-center py-12 text-gray-500">
-                                No activities found. Create one to get started.
-                            </div>
-                        )}
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-gray-500">
+                                    <div className="text-center">
+                                        <Gift size={48} className="mx-auto mb-4 opacity-30" />
+                                        <p>Select a session to configure</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            )
+            )}
+
+            {/* Doorprize Modal */}
+            {isDoorprizeModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center backdrop-blur-sm p-4">
+                    <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-md p-6 relative">
+                        <button
+                            onClick={() => setIsDoorprizeModalOpen(false)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-white"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <h2 className="text-xl font-bold mb-6">Create New Doorprize Session</h2>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Session Name</label>
+                                <input
+                                    value={sessionForm.name}
+                                    onChange={e => setSessionForm({ ...sessionForm, name: e.target.value })}
+                                    placeholder="e.g. Sesi Siang - Mobil"
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2"
+                                />
+                                <p className="text-[10px] text-gray-600 mt-1">For your reference only.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Select Activity (Source)</label>
+                                <select
+                                    value={sessionForm.activityId}
+                                    onChange={(e) => setSessionForm({ ...sessionForm, activityId: e.target.value })}
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-white appearance-none"
+                                >
+                                    <option value="">-- Select Activity --</option>
+                                    {activities.map((a: any) => (
+                                        <option key={a.id} value={a.id}>
+                                            {a.title} ({a.activity_date})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <button
+                                onClick={handleCreateSession}
+                                className="w-full bg-[#FC4C02] hover:bg-[#e04302] text-white font-bold py-3 rounded-xl mt-4"
+                            >
+                                Create Session
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+
+            {/* Activities Tab */}
+            {
+                activeTab === 'activities' && (
+                    <div className="space-y-6">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                            <h2 className="text-xl font-bold">Manage Activities</h2>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    onClick={openActivityTypeModal}
+                                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-200 transition-colors hover:bg-white/10"
+                                >
+                                    Manage Types
+                                </button>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-gray-500 uppercase tracking-widest">Type</label>
+                                    <select
+                                        value={selectedTypeFilter}
+                                        onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                                        className="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    >
+                                        <option value="">All Types</option>
+                                        {activityTypes.map((type) => (
+                                            <option key={type.id} value={type.id}>{formatActivityTypeOptionLabel(type, activityTypes)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="border border-white/10 rounded-2xl p-4 bg-black/30 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-gray-500 uppercase tracking-widest">Activity Types</div>
+                                <button
+                                    onClick={openActivityTypeModal}
+                                    className="text-xs font-bold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                >
+                                    Add New Type
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {activityTypes.map((type) => {
+                                    const label = resolveTypeBadgeLabel(type.id, activityTypes)
+                                    return (
+                                    <div key={type.id} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1.5 text-xs">
+                                        <span className={`font-bold ${type.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                                            {type.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                        <span className="text-gray-200">
+                                            {label.category}{label.subcategory ? ` / ${label.subcategory}` : ''}
+                                        </span>
+                                    </div>
+                                )})}
+                                {activityTypes.length === 0 && <span className="text-xs text-gray-500">No types yet.</span>}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {activities.map((activity) => (
+                                <div
+                                    key={activity.id}
+                                    className="bg-gray-900/50 border border-white/5 rounded-2xl p-6 hover:bg-white/5 transition-colors cursor-pointer group"
+                                    onClick={() => fetchActivityDetail(activity.id)}
+                                >
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg text-white mb-1 group-hover:text-[#FC4C02] transition-colors">{activity.title}</h3>
+                                            <div className="flex items-center gap-2 text-gray-400 text-sm">
+                                                <Calendar className="w-4 h-4" />
+                                                {activity.activity_date}
+                                            </div>
+                                            <div className="mt-2 flex items-center gap-2">
+                                                {(() => {
+                                                    const badge = resolveTypeBadgeLabel(activity.type_id, activityTypes)
+                                                    return (
+                                                        <>
+                                                            <span className="text-[10px] uppercase tracking-wider bg-white/10 px-2 py-1 rounded-full text-gray-300">
+                                                                {badge.category}
+                                                            </span>
+                                                            {badge.subcategory && (
+                                                                <span className="text-[10px] uppercase tracking-wider bg-[#FC4C02]/15 px-2 py-1 rounded-full text-[#ff8a57]">
+                                                                    {badge.subcategory}
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    )
+                                                })()}
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    {activity.start_at ? new Date(activity.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    {' - '}
+                                                    {activity.end_at ? new Date(activity.end_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    toggleActivityPublish(activity)
+                                                }}
+                                                className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${activity.is_published ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
+                                                title={activity.is_published ? 'Unpublish Activity' : 'Publish Activity'}
+                                            >
+                                                {activity.is_published ? 'Published' : 'Unpublished'}
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    promptDeleteActivity(activity.id, activity.title)
+                                                }}
+                                                className="p-1 text-gray-500 hover:text-red-500 transition-colors"
+                                                title="Delete Activity"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                            <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
+                                                {activity.attendance_count || 0} Present
+                                            </div>
+                                            {typeof activity.in_progress_count === 'number' && activity.in_progress_count > 0 && (
+                                                <div className="bg-yellow-500/15 text-yellow-400 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                                    {activity.in_progress_count} In Progress
+                                                </div>
+                                            )}
+                                            {activity.points > 0 && (
+                                                <span className="text-[#FC4C02] text-xs font-bold bg-[#FC4C02]/10 px-2 py-1 rounded-lg">
+                                                    +{activity.points} PTS
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            setSelectedActivityId(activity.id)
+                                            setIsScannerOpen(true)
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors z-10 relative"
+                                    >
+                                        <QrCode className="w-4 h-4" />
+                                        Show Event QR
+                                    </button>
+                                </div>
+                            ))}
+
+                            {activities.length === 0 && (
+                                <div className="col-span-full text-center py-12 text-gray-500">
+                                    No activities found. Create one to get started.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )
             }
 
             {/* QR Spots Tab */}
-            {activeTab === 'spots' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
-                    {spots.map((spot) => (
-                        <div
-                            key={spot.id}
-                            className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:border-[#FC4C02]/50 transition-colors group"
-                            onClick={() => fetchSpotDetail(spot.id)}
-                        >
-                            {/* QR Code Preview */}
-                            <div className="bg-white p-4 flex justify-center">
-                                <img
-                                    src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(spot.code)}&size=150x150`}
-                                    alt={`QR Code for ${spot.name}`}
-                                    className="w-32 h-32"
-                                />
-                            </div>
-
-                            <div className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="font-bold text-lg">{spot.name}</h3>
-                                    <span className="bg-[#FC4C02]/20 text-[#FC4C02] px-2 py-1 rounded-lg text-xs font-bold">
-                                        +{spot.points} PTS
-                                    </span>
+            {
+                activeTab === 'spots' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-24">
+                        {spots.map((spot) => (
+                            <div
+                                key={spot.id}
+                                className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden cursor-pointer hover:border-[#FC4C02]/50 transition-colors group"
+                                onClick={() => fetchSpotDetail(spot.id)}
+                            >
+                                {/* QR Code Preview */}
+                                <div className="bg-white p-4 flex justify-center">
+                                    <img
+                                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(spot.code)}&size=150x150`}
+                                        alt={`QR Code for ${spot.name}`}
+                                        className="w-32 h-32"
+                                    />
                                 </div>
 
-                                {spot.description && (
-                                    <p className="text-gray-400 text-sm mb-3 line-clamp-2">{spot.description}</p>
-                                )}
+                                <div className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-bold text-lg">{spot.name}</h3>
+                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] px-2 py-1 rounded-lg text-xs font-bold">
+                                            +{spot.points} PTS
+                                        </span>
+                                    </div>
 
-                                <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-500">
-                                    <span className="bg-white/5 px-2 py-1 rounded">
-                                        Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
-                                    </span>
-                                    <button
-                                        disabled={toggleLoadingSpotId === spot.id}
-                                        onClick={async (e) => {
-                                            e.stopPropagation()
-                                            setToggleLoadingSpotId(spot.id)
-                                            try {
-                                                const res = await fetch('/api/admin/spots', {
-                                                    method: 'PATCH',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ id: spot.id, is_active: !spot.is_active })
-                                                })
-                                                if (res.ok) {
-                                                    // Refresh spots list
-                                                    const spotsRes = await fetch('/api/admin/spots')
-                                                    const spotsData = await spotsRes.json()
-                                                    setSpots(spotsData.spots || [])
-                                                    success(spot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                    {spot.description && (
+                                        <p className="text-gray-400 text-sm mb-3 line-clamp-2">{spot.description}</p>
+                                    )}
+
+                                    <div className="flex flex-wrap gap-2 mb-4 text-xs text-gray-500">
+                                        <span className="bg-white/5 px-2 py-1 rounded">
+                                            Claims: {spot.claim_count || 0}{spot.max_claims > 0 ? `/${spot.max_claims}` : ''}
+                                        </span>
+                                        <button
+                                            disabled={toggleLoadingSpotId === spot.id}
+                                            onClick={async (e) => {
+                                                e.stopPropagation()
+                                                setToggleLoadingSpotId(spot.id)
+                                                try {
+                                                    const res = await fetch('/api/admin/spots', {
+                                                        method: 'PATCH',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ id: spot.id, is_active: !spot.is_active })
+                                                    })
+                                                    if (res.ok) {
+                                                        // Refresh spots list
+                                                        const spotsRes = await fetch('/api/admin/spots')
+                                                        const spotsData = await spotsRes.json()
+                                                        setSpots(spotsData.spots || [])
+                                                        success(spot.is_active ? 'Spot deactivated!' : 'Spot activated!')
+                                                    }
+                                                } catch (err) {
+                                                    toastError('Failed to toggle spot')
+                                                } finally {
+                                                    setToggleLoadingSpotId(null)
                                                 }
-                                            } catch (err) {
-                                                toastError('Failed to toggle spot')
-                                            } finally {
-                                                setToggleLoadingSpotId(null)
-                                            }
-                                        }}
-                                        className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
-                                    >
-                                        {toggleLoadingSpotId === spot.id ? (
-                                            <Loader2 size={14} className="animate-spin" />
-                                        ) : (
-                                            spot.is_active ? 'Active' : 'Inactive'
-                                        )}
-                                    </button>
-                                </div>
+                                            }}
+                                            className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-50 ${spot.is_active ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}
+                                        >
+                                            {toggleLoadingSpotId === spot.id ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                spot.is_active ? 'Active' : 'Inactive'
+                                            )}
+                                        </button>
+                                    </div>
 
-                                <div className="flex gap-2 mb-3">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(spot.code) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
-                                        {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); downloadQR(spot.code, spot.name) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        <Download size={14} />
-                                        Download
-                                    </button>
-                                </div>
+                                    <div className="flex gap-2 mb-3">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(spot.code) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            {copiedCode === spot.code ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                                            {copiedCode === spot.code ? 'Copied!' : 'Copy Code'}
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); downloadQR(spot.code, spot.name) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            <Download size={14} />
+                                            Download
+                                        </button>
+                                    </div>
 
-                                <div className="text-xs text-gray-600 font-mono mb-3 text-center bg-black py-2 rounded">
-                                    {spot.code}
-                                </div>
+                                    <div className="text-xs text-gray-600 font-mono mb-3 text-center bg-black py-2 rounded">
+                                        {spot.code}
+                                    </div>
 
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); fetchSpotDetail(spot.id) }}
-                                        className="flex-1 flex items-center justify-center gap-1 bg-[#FC4C02]/10 text-[#FC4C02] hover:bg-[#FC4C02]/20 py-2 rounded-lg text-sm transition-colors font-medium"
-                                    >
-                                        View Claims
-                                    </button>
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteSpot(spot.id) }}
-                                        className="flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm transition-colors"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); fetchSpotDetail(spot.id) }}
+                                            className="flex-1 flex items-center justify-center gap-1 bg-[#FC4C02]/10 text-[#FC4C02] hover:bg-[#FC4C02]/20 py-2 rounded-lg text-sm transition-colors font-medium"
+                                        >
+                                            View Claims
+                                        </button>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteSpot(spot.id) }}
+                                            className="flex items-center justify-center gap-1 text-red-500 hover:bg-red-500/10 px-4 py-2 rounded-lg text-sm transition-colors"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
 
-                    {spots.length === 0 && (
-                        <div className="col-span-full text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
-                            <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p>No QR Spots yet.</p>
-                            <p className="text-sm">Create one to let users earn points by scanning!</p>
-                        </div>
-                    )}
-                </div>
-            )
+                        {spots.length === 0 && (
+                            <div className="col-span-full text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl">
+                                <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                <p>No QR Spots yet.</p>
+                                <p className="text-sm">Create one to let users earn points by scanning!</p>
+                            </div>
+                        )}
+                    </div>
+                )
             }
 
             {/* Create Spot Modal */}
@@ -2060,6 +2700,19 @@ export default function AdminPage() {
                                                 <option value="positive_message">Send Positive Message (AI Check)</option>
                                             </select>
                                         </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                            <select
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                value={questDimensionId}
+                                                onChange={(e) => setQuestDimensionId(e.target.value)}
+                                            >
+                                                <option value="">No Dimension</option>
+                                                {dimensions.map((d) => (
+                                                    <option key={d.id} value={d.id}>{d.display_name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </>
                                 ) : activeTab === 'rewards' ? (
                                     /* CREATE REWARD FORM */
@@ -2427,6 +3080,155 @@ export default function AdminPage() {
                 }
             </AnimatePresence >
 
+            {/* Activity Type Modal */}
+            <AnimatePresence>
+                {isActivityTypeModalOpen && activeTab === 'activities' && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsActivityTypeModalOpen(false)}
+                        className="fixed inset-0 z-[55] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={activityTypeModalContainerClass}
+                        >
+                            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#121212] px-4 py-3 sm:px-6 sm:py-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white sm:text-xl">Manage Activity Types</h2>
+                                    <p className="text-xs text-gray-500">Create, activate, or delete activity categories.</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsActivityTypeModalOpen(false)}
+                                    className="text-gray-400 hover:text-white"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <div className="flex max-h-[calc(88vh-72px)] flex-col gap-4 p-4 sm:p-6">
+                                {!isActivityTypeHierarchyEnabled && (
+                                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                        Hierarchy mode belum aktif di database. Jalankan migration `20260217000004_activity_type_hierarchy.sql` untuk pakai kategori + subkategori.
+                                    </div>
+                                )}
+                                {missingDefaultTopCategories.length > 0 && (
+                                    <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Quick Add Default Categories</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingDefaultTopCategories.map((category) => (
+                                                <button
+                                                    key={category}
+                                                    onClick={() => createDefaultTopCategory(category)}
+                                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-200 transition-colors hover:bg-white/10"
+                                                >
+                                                    + {category}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className={activityTypeFormGridClass}>
+                                    {isActivityTypeHierarchyEnabled && (
+                                        <select
+                                            value={newActivityTypeParentId}
+                                            onChange={(e) => setNewActivityTypeParentId(e.target.value)}
+                                            className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                        >
+                                            <option value="">Top Category</option>
+                                            {topLevelActivityTypes.map((type) => (
+                                                <option key={type.id} value={type.id}>{type.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    <input
+                                        value={newActivityTypeName}
+                                        onChange={(e) => setNewActivityTypeName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (!shouldSubmitActivityTypeByKey(e.key)) return
+                                            e.preventDefault()
+                                            createActivityType()
+                                        }}
+                                        placeholder="Type name"
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    />
+                                    <input
+                                        value={newActivityTypeDescription}
+                                        onChange={(e) => setNewActivityTypeDescription(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (!shouldSubmitActivityTypeByKey(e.key)) return
+                                            e.preventDefault()
+                                            createActivityType()
+                                        }}
+                                        placeholder="Description (optional)"
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    />
+                                    <select
+                                        value={newActivityTypeDimensionId}
+                                        onChange={(e) => setNewActivityTypeDimensionId(e.target.value)}
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    >
+                                        <option value="">No Dimension</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={createActivityType}
+                                        className="rounded-lg bg-[#FC4C02] px-4 py-2 text-sm font-bold text-white hover:bg-[#e04302] xl:min-w-[128px]"
+                                    >
+                                        Add Type
+                                    </button>
+                                </div>
+
+                                <div className={activityTypeModalListClass}>
+                                    {activityTypes.map((type) => {
+                                        const label = resolveTypeBadgeLabel(type.id, activityTypes)
+                                        return (
+                                            <div
+                                                key={type.id}
+                                                className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                            >
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-semibold text-white">{type.name}</div>
+                                                    <div className="truncate text-xs text-gray-500">
+                                                        {label.subcategory ? `${label.category} / ${label.subcategory}` : `${label.category} (Category)`}
+                                                    </div>
+                                                    {type.description && <div className="text-xs text-gray-500">{type.description}</div>}
+                                                </div>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => toggleActivityTypeActive(type)}
+                                                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${type.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+                                                    >
+                                                        {type.is_active ? 'Active' : 'Inactive'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteActivityType(type.id)}
+                                                        className="text-red-400 hover:text-red-300"
+                                                        title="Delete type"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+
+                                    {activityTypes.length === 0 && (
+                                        <p className="py-6 text-center text-sm text-gray-500">No activity types yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Create Activity Modal */}
             <AnimatePresence>
                 {
@@ -2435,22 +3237,24 @@ export default function AdminPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setIsModalOpen(false)}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
                         >
                             <motion.div
                                 initial={{ scale: 0.95 }}
                                 animate={{ scale: 1 }}
                                 exit={{ scale: 0.95 }}
-                                className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                                className={createActivityModalContainerClass}
                             >
-                                <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                                    <h2 className="text-xl font-bold">New Activity</h2>
+                                <div className={createActivityModalHeaderClass}>
+                                    <h2 className="text-lg font-bold sm:text-xl">New Activity</h2>
                                     <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
 
-                                <form onSubmit={handleCreateActivity} className="p-6 space-y-4">
+                                <form onSubmit={handleCreateActivity} className={createActivityModalFormClass}>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Activity Title</label>
                                         <input
@@ -2462,6 +3266,86 @@ export default function AdminPage() {
                                             placeholder="e.g. Morning Run"
                                         />
                                     </div>
+
+                                    {isActivityTypeHierarchyEnabled ? (
+                                        <div className={createActivityTypeGridClass}>
+                                            <div>
+                                                <div className="mb-1 flex items-center justify-between gap-2">
+                                                    <label className="block text-sm font-medium text-gray-400">Category</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={openActivityTypeModal}
+                                                        className="text-xs font-semibold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                                    >
+                                                        Add Type
+                                                    </button>
+                                                </div>
+                                                <select
+                                                    required
+                                                    value={selectedParentForActivity}
+                                                    onChange={e => setActivityParentType(e.target.value)}
+                                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                >
+                                                    <option value="">Select category</option>
+                                                    {topLevelActivityTypes.map((type) => (
+                                                        <option key={type.id} value={type.id}>{type.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-400 mb-1">Sub Category</label>
+                                                <select
+                                                    value={childTypesForSelectedParent.length > 0 ? activityForm.typeId : selectedParentForActivity}
+                                                    onChange={e => setActivitySubType(e.target.value)}
+                                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                >
+                                                    {childTypesForSelectedParent.length === 0 && (
+                                                        <option value={selectedParentForActivity}>No sub category (use category)</option>
+                                                    )}
+                                                    {childTypesForSelectedParent.map((type) => (
+                                                        <option key={type.id} value={type.id}>{type.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                <label className="block text-sm font-medium text-gray-400">Activity Type</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={openActivityTypeModal}
+                                                    className="text-xs font-semibold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                                >
+                                                    Add Type
+                                                </button>
+                                            </div>
+                                            <select
+                                                required
+                                                value={activityForm.typeId}
+                                                onChange={e => setActivityForm({ ...activityForm, typeId: e.target.value, parentTypeId: '' })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            >
+                                                <option value="">Select type</option>
+                                                {activityTypes.map((type) => (
+                                                    <option key={type.id} value={type.id}>{type.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Schedule Mode</label>
+                                        <select
+                                            value={activityForm.scheduleMode}
+                                            onChange={e => setActivityForm({ ...activityForm, scheduleMode: e.target.value })}
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        >
+                                            <option value="one_time">One-time</option>
+                                            <option value="weekly">Recurring Weekly</option>
+                                        </select>
+                                    </div>
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Date</label>
                                         <input
@@ -2472,6 +3356,44 @@ export default function AdminPage() {
                                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
                                         />
                                     </div>
+
+                                    <div className={createActivityTimeGridClass}>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Start Time</label>
+                                            <input
+                                                type="time"
+                                                required
+                                                value={activityForm.startTime}
+                                                onChange={e => setActivityForm({ ...activityForm, startTime: e.target.value })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">End Time</label>
+                                            <input
+                                                type="time"
+                                                required
+                                                value={activityForm.endTime}
+                                                onChange={e => setActivityForm({ ...activityForm, endTime: e.target.value })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {activityForm.scheduleMode === 'weekly' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Generate Weeks Ahead</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="12"
+                                                value={activityForm.recurringWeeks}
+                                                onChange={e => setActivityForm({ ...activityForm, recurringWeeks: Math.min(Math.max(parseInt(e.target.value) || 1, 1), 12) })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                    )}
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Points Reward (Optional)</label>
                                         <input
@@ -2483,6 +3405,16 @@ export default function AdminPage() {
                                             placeholder="0"
                                         />
                                     </div>
+
+                                    <label className="flex items-center justify-between rounded-xl border border-white/10 px-4 py-3 bg-black/30">
+                                        <span className="text-sm text-gray-300">Published</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={activityForm.isPublished}
+                                            onChange={e => setActivityForm({ ...activityForm, isPublished: e.target.checked })}
+                                            className="w-4 h-4"
+                                        />
+                                    </label>
 
                                     <button
                                         type="submit"
@@ -2497,7 +3429,7 @@ export default function AdminPage() {
                 }
             </AnimatePresence >
 
-            {/* QR Scanner Modal */}
+            {/* Activity QR Modal */}
             <AnimatePresence>
                 {
                     isScannerOpen && (
@@ -2509,31 +3441,38 @@ export default function AdminPage() {
                         >
                             <div className="w-full max-w-md bg-[#121212] rounded-3xl overflow-hidden border border-white/10 relative">
                                 <button
-                                    onClick={() => setIsScannerOpen(false)}
+                                    onClick={() => {
+                                        setIsScannerOpen(false)
+                                        setSelectedActivityId(null)
+                                        setActivityQrValue(null)
+                                        setActivityQrExpiresAt(null)
+                                        setActivityQrTitle('')
+                                    }}
                                     className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white"
                                 >
                                     <X className="w-6 h-6" />
                                 </button>
 
                                 <div className="p-6 text-center">
-                                    <h2 className="text-2xl font-bold mb-2">Scan QR Code</h2>
-                                    <p className="text-gray-400 text-sm mb-6">Point camera at user's ID Card</p>
+                                    <h2 className="text-2xl font-bold mb-2">Rotating Activity QR</h2>
+                                    <p className="text-gray-400 text-sm mb-2">Users scan this QR for Scan In / Scan Out.</p>
+                                    {activityQrTitle && <p className="text-[#FC4C02] text-sm font-bold mb-5">{activityQrTitle}</p>}
 
-                                    <div className="rounded-xl overflow-hidden border-2 border-[#FC4C02]/50 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-6">
-                                        <Scanner
-                                            onScan={handleScan}
-                                        />
+                                    <div className="rounded-xl bg-white p-5 border border-[#FC4C02]/40 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-5 flex items-center justify-center min-h-64">
+                                        {activityQrLoading && !activityQrValue ? (
+                                            <Loader2 className="w-7 h-7 animate-spin text-[#FC4C02]" />
+                                        ) : activityQrValue ? (
+                                            <QRCode value={activityQrValue} size={220} />
+                                        ) : (
+                                            <p className="text-black/60 text-sm">QR token unavailable</p>
+                                        )}
                                     </div>
 
-                                    {scanResult && (
-                                        <div className={`p-4 rounded-xl border ${scanResult.success ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
-                                            <div className="font-bold flex items-center justify-center gap-2 mb-1">
-                                                {scanResult.success ? <Shield className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                                                {scanResult.success ? 'Success!' : 'Error'}
-                                            </div>
-                                            <p className="text-sm">{scanResult.message}</p>
-                                        </div>
-                                    )}
+                                    <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-left text-xs text-gray-300 space-y-1">
+                                        <p><span className="text-gray-500">TTL:</span> 45 seconds (auto rotate)</p>
+                                        <p><span className="text-gray-500">Expires:</span> {activityQrExpiresAt ? new Date(activityQrExpiresAt).toLocaleTimeString() : '-'}</p>
+                                        <p className="text-amber-400">After first scan user state becomes Scan Out.</p>
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>
@@ -2728,15 +3667,13 @@ export default function AdminPage() {
                                         </button>
                                     </div>
 
-                                    {/* Export Button (Visible for Pending Tab) */}
-                                    {activeDetailTab === 'pending' && (
-                                        <button
-                                            onClick={exportActivityPending}
-                                            className="mr-4 flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04502] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-[#FC4C02]/20"
-                                        >
-                                            <Download size={14} /> Export CSV
-                                        </button>
-                                    )}
+                                    {/* Export Button (Visible for BOTH Tabs) */}
+                                    <button
+                                        onClick={activeDetailTab === 'completed' ? exportActivityAttended : exportActivityPending}
+                                        className="mr-4 flex items-center gap-2 bg-[#FC4C02] hover:bg-[#e04502] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-lg shadow-[#FC4C02]/20"
+                                    >
+                                        <Download size={14} /> Export {activeDetailTab === 'completed' ? 'Completed' : 'Pending'}
+                                    </button>
                                 </div>
 
                                 {/* Content Area */}
@@ -2836,8 +3773,8 @@ export default function AdminPage() {
                                                                     )}
                                                                 </div>
                                                                 <div className="col-span-3 text-right">
-                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FC4C02] bg-[#FC4C02]/10 px-2 py-1 rounded-full border border-[#FC4C02]/20">
-                                                                        Pending
+                                                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${user.status === 'in_progress' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' : 'text-[#FC4C02] bg-[#FC4C02]/10 border-[#FC4C02]/20'}`}>
+                                                                        {user.status === 'in_progress' ? 'In Progress' : 'Pending'}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -2853,6 +3790,9 @@ export default function AdminPage() {
                     )
                 }
             </AnimatePresence >
-        </div >
+                    </div>
+                </div>
+            </div>
+        </div>
     )
 }

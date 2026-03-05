@@ -1,9 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, Gift, Loader2, Timer, XCircle } from 'lucide-react'
+import { Check, Gift, Loader2, Timer, XCircle, Activity, Heart, Brain, Users, Sparkles, Briefcase } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/context/ToastContext'
+
+const dimensionIcons: Record<string, React.ComponentType<{className?: string}>> = {
+    activity: Activity,
+    heart: Heart,
+    brain: Brain,
+    users: Users,
+    sparkles: Sparkles,
+    briefcase: Briefcase,
+}
 
 export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
@@ -119,6 +128,15 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
 
                                     {/* Footer Info: Badge + Timer */}
                                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                        {quest.dimension && (
+                                            <span className="flex items-center gap-1 text-xs text-orange-300/70 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                {(() => {
+                                                    const IconComp = dimensionIcons[quest.dimension.icon]
+                                                    return IconComp ? <IconComp className="w-3 h-3" /> : null
+                                                })()}
+                                                {quest.dimension.display_name}
+                                            </span>
+                                        )}
                                         <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
                                             +{quest.points} PTS
                                         </span>
