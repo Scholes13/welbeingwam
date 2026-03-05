@@ -24,8 +24,17 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
     const [photoFile, setPhotoFile] = useState<File | null>(null)
     const [verificationNote, setVerificationNote] = useState('')
     const [uploading, setUploading] = useState(false)
+    const [streakMap, setStreakMap] = useState<Record<string, { current_streak: number; multiplier: number; event_title: string }>>({})
 
     const { success, error } = useToast()
+
+    // Fetch user streaks
+    useEffect(() => {
+        fetch('/api/streaks')
+            .then(r => r.json())
+            .then(d => { if (d.streaks) setStreakMap(d.streaks) })
+            .catch(() => {})
+    }, [])
 
     const getCountdown = (expiresAt: string) => {
         const total = Date.parse(expiresAt) - Date.parse(new Date().toString())
@@ -207,6 +216,12 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                                         <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
                                             +{quest.points} PTS
                                         </span>
+
+                                        {quest.dimension_id && streakMap[quest.dimension_id] && streakMap[quest.dimension_id].current_streak > 0 && (
+                                            <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md shrink-0 font-bold">
+                                                🔥 {streakMap[quest.dimension_id].current_streak}d — {streakMap[quest.dimension_id].multiplier}x
+                                            </span>
+                                        )}
 
                                         <div className="h-5 flex items-center">
                                             {errorMessage ? (

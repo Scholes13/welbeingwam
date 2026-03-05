@@ -1,6 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import useSWR from 'swr'
+
+import Loader from '@/components/ui/Loader'
 
 interface LeaderboardEntry {
     user_id: string
@@ -10,22 +13,55 @@ interface LeaderboardEntry {
     total_steps: number
     quest_points: number
     overall_points: number
+    dimension_points: Record<string, number>
 }
 
-import { useLeaderboard } from '@/hooks/use-swr-hooks'
+interface Dimension {
+    id: string
+    name: string
+    display_name: string
+}
 
-import Loader from '@/components/ui/Loader'
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 export default function Leaderboard() {
-    const { leaderboard: leaders, isLoading: loading } = useLeaderboard()
+    const [dimensions, setDimensions] = useState<Dimension[]>([])
+    const [selectedDimension, setSelectedDimension] = useState<string>('overall')
     const [activeTab, setActiveTab] = useState<'overall' | 'steps' | 'quests'>('overall')
+
+    const leaderboardUrl = selectedDimension === 'overall'
+        ? '/api/leaderboard'
+        : `/api/leaderboard?dimension=${selectedDimension}`
+
+    const { data, isLoading: loading } = useSWR(leaderboardUrl, fetcher, {
+        revalidateOnFocus: true,
+        refreshInterval: 30000,
+    })
+
+    const leaders: LeaderboardEntry[] = data?.leaderboard || []
+
+    useEffect(() => {
+        fetch('/api/dimensions').then(r => r.json()).then(d => setDimensions(d.dimensions || []))
+    }, [])
 
     // Sort Logic
     const sortedLeaders = [...leaders].sort((a, b) => {
+        if (selectedDimension !== 'overall') {
+            return (b.dimension_points?.[selectedDimension] ?? 0) - (a.dimension_points?.[selectedDimension] ?? 0)
+        }
         if (activeTab === 'steps') return b.total_steps - a.total_steps
         if (activeTab === 'quests') return b.quest_points - a.quest_points
         return b.overall_points - a.overall_points
     })
+
+    const getDisplayPoints = (entry: LeaderboardEntry) => {
+        if (selectedDimension !== 'overall') {
+            return entry.dimension_points?.[selectedDimension] ?? 0
+        }
+        if (activeTab === 'overall') return entry.overall_points
+        if (activeTab === 'steps') return entry.total_steps
+        return entry.quest_points
+    }
 
     if (loading) {
         return <Loader text="LOADING LEADERBOARD..." />
@@ -49,27 +85,54 @@ export default function Leaderboard() {
                     </p>
                 </header>
 
-                {/* Tabs */}
-                <div className="flex justify-center gap-2 mb-8 bg-white/5 p-1 rounded-full w-max mx-auto backdrop-blur-md border border-white/5">
-                    <button
-                        onClick={() => setActiveTab('overall')}
-                        className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'overall' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Overall
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('steps')}
-                        className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'steps' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Steps
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('quests')}
-                        className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'quests' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
-                    >
-                        Quests
-                    </button>
-                </div>
+                {/* Dimension Filter Tabs */}
+                {dimensions.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide mb-4">
+                        <button
+                            onClick={() => setSelectedDimension('overall')}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                                selectedDimension === 'overall' ? 'bg-[#FC4C02] text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                            }`}
+                        >
+                            Overall
+                        </button>
+                        {dimensions.map(d => (
+                            <button
+                                key={d.id}
+                                onClick={() => setSelectedDimension(d.id)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                                    selectedDimension === d.id ? 'bg-[#FC4C02] text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                                }`}
+                            >
+                                {d.display_name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+
+                {/* Sort Tabs (only show when viewing overall dimension) */}
+                {selectedDimension === 'overall' && (
+                    <div className="flex justify-center gap-2 mb-8 bg-white/5 p-1 rounded-full w-max mx-auto backdrop-blur-md border border-white/5">
+                        <button
+                            onClick={() => setActiveTab('overall')}
+                            className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'overall' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            Overall
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('steps')}
+                            className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'steps' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            Steps
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('quests')}
+                            className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTab === 'quests' ? 'bg-[#FC4C02] text-white shadow-lg shadow-orange-500/20' : 'text-gray-400 hover:text-white'}`}
+                        >
+                            Quests
+                        </button>
+                    </div>
+                )}
 
                 <div className="space-y-3">
                     {sortedLeaders.map((entry, index) => (
@@ -86,7 +149,7 @@ export default function Leaderboard() {
                                     index === 2 ? 'bg-orange-700/20 text-orange-700' :
                                         'bg-gray-800 text-gray-500'
                                 }`}>
-                                {index === 0 ? '👑' : index + 1}
+                                {index === 0 ? '\u{1F451}' : index + 1}
                             </div>
 
                             <img
@@ -104,9 +167,11 @@ export default function Leaderboard() {
                                         <span className="text-[#FC4C02]">@{entry.instagram_username}</span>
                                     ) : (
                                         <span className="uppercase">
-                                            {activeTab === 'overall' && 'Total Points'}
-                                            {activeTab === 'steps' && 'Total Steps'}
-                                            {activeTab === 'quests' && 'Quest Points'}
+                                            {selectedDimension !== 'overall'
+                                                ? dimensions.find(d => d.id === selectedDimension)?.display_name ?? 'Dimension'
+                                                : activeTab === 'overall' ? 'Total Points'
+                                                : activeTab === 'steps' ? 'Total Steps'
+                                                : 'Quest Points'}
                                         </span>
                                     )}
                                 </p>
@@ -114,11 +179,9 @@ export default function Leaderboard() {
 
                             <div className="text-right flex-shrink-0">
                                 <span className={`text-xl font-mono font-bold block ${index === 0 ? 'text-[#FC4C02]' : 'text-white'}`}>
-                                    {activeTab === 'overall' && entry.overall_points.toLocaleString()}
-                                    {activeTab === 'steps' && entry.total_steps.toLocaleString()}
-                                    {activeTab === 'quests' && entry.quest_points.toLocaleString()}
+                                    {getDisplayPoints(entry).toLocaleString()}
                                     <span className="text-xs font-sans ml-0.5 opacity-60">
-                                        {activeTab === 'steps' ? '' : ' pts'}
+                                        {selectedDimension === 'overall' && activeTab === 'steps' ? '' : ' pts'}
                                     </span>
                                 </span>
                             </div>

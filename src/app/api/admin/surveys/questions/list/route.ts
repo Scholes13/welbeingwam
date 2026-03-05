@@ -1,14 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
     const { surveyId } = await request.json()
     
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     if (!surveyId) {
          return NextResponse.json({ questions: [] })

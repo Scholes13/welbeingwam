@@ -1,33 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!currentUserId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { authorized } = await verifyAdminPermission('manage_users')
+    if (!authorized) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
-    // 1. Verify Admin
-    const { data: adminUser } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', currentUserId)
-        .single()
-
-    if (adminUser?.username !== 'admin_wam') {
-         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
-
-    // 2. Fetch all users
     const { data: users, error } = await supabase
         .from('profiles')
         .select('*')

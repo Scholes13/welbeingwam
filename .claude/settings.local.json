@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l \"reward\\\\|quest\\\\|leaderboard\\\\|coin\")",
+      "Bash(npm run build)",
+      "Bash(npx vitest run)"
+    ]
+  }
+}

@@ -148,6 +148,22 @@ export default function AdminPage() {
     const [templateRequiresPhoto, setTemplateRequiresPhoto] = useState(false)
     const [templateLinkedActivityTypeId, setTemplateLinkedActivityTypeId] = useState('')
 
+    // Streak Events State
+    const [streakEvents, setStreakEvents] = useState<any[]>([])
+    const [streakTitle, setStreakTitle] = useState('')
+    const [streakDesc, setStreakDesc] = useState('')
+    const [streakDimensionId, setStreakDimensionId] = useState('')
+    const [streakStartDate, setStreakStartDate] = useState('')
+    const [streakEndDate, setStreakEndDate] = useState('')
+    const [streakMultiplierTiers, setStreakMultiplierTiers] = useState(
+        JSON.stringify([
+            { days: 3, multiplier: 1.25 },
+            { days: 7, multiplier: 1.5 },
+            { days: 14, multiplier: 1.75 },
+            { days: 30, multiplier: 2.0 },
+        ], null, 2)
+    )
+
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return
 
@@ -605,6 +621,82 @@ export default function AdminPage() {
         }
     }
 
+    // Streak Event Functions
+    const fetchStreakEvents = async () => {
+        try {
+            const res = await fetch('/api/admin/streak-events')
+            const data = await res.json()
+            if (data.streakEvents) setStreakEvents(data.streakEvents)
+        } catch (e) { console.error('Failed to fetch streak events', e) }
+    }
+
+    const createStreakEvent = async () => {
+        if (!streakTitle || !streakStartDate || !streakEndDate) return
+        try {
+            let tiers
+            try { tiers = JSON.parse(streakMultiplierTiers) } catch { toastError('Invalid multiplier tiers JSON'); return }
+
+            const res = await fetch('/api/admin/streak-events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: streakTitle,
+                    description: streakDesc || null,
+                    dimension_id: streakDimensionId || null,
+                    multiplier_tiers: tiers,
+                    start_date: streakStartDate,
+                    end_date: streakEndDate,
+                    is_active: false,
+                }),
+            })
+            if (res.ok) {
+                setStreakTitle('')
+                setStreakDesc('')
+                setStreakDimensionId('')
+                setStreakStartDate('')
+                setStreakEndDate('')
+                setStreakMultiplierTiers(JSON.stringify([
+                    { days: 3, multiplier: 1.25 },
+                    { days: 7, multiplier: 1.5 },
+                    { days: 14, multiplier: 1.75 },
+                    { days: 30, multiplier: 2.0 },
+                ], null, 2))
+                fetchStreakEvents()
+                success('Streak event created!')
+            } else {
+                const data = await res.json()
+                toastError(data.error || 'Failed to create streak event')
+            }
+        } catch (e) {
+            toastError('Error creating streak event')
+        }
+    }
+
+    const deleteStreakEvent = async (id: string) => {
+        try {
+            const res = await fetch(`/api/admin/streak-events?id=${id}`, { method: 'DELETE' })
+            if (res.ok) {
+                fetchStreakEvents()
+                success('Streak event deleted!')
+            }
+        } catch (e) {
+            toastError('Error deleting streak event')
+        }
+    }
+
+    const toggleStreakEvent = async (id: string, isActive: boolean) => {
+        try {
+            const res = await fetch('/api/admin/streak-events', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, is_active: !isActive }),
+            })
+            if (res.ok) fetchStreakEvents()
+        } catch (e) {
+            toastError('Error toggling streak event')
+        }
+    }
+
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
         else if (activeTab === 'quests') { fetchQuests(); fetchDimensions() }
@@ -623,6 +715,10 @@ export default function AdminPage() {
             fetchQuestTemplates()
             fetchDimensions()
             fetchActivityTypes()
+        }
+        else if (activeTab === 'streaks') {
+            fetchStreakEvents()
+            fetchDimensions()
         }
     }, [activeTab])
 
@@ -1838,6 +1934,149 @@ export default function AdminPage() {
                                     className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/80 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2.5 rounded-lg font-bold text-sm transition-colors mt-2"
                                 >
                                     Create Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'streaks' && (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-white">🔥 Streak Events</h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Streak Events List */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {streakEvents.length === 0 && (
+                                <div className="text-gray-500 text-sm text-center py-8">No streak events yet. Create one to get started.</div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {streakEvents.map((evt) => (
+                                    <div
+                                        key={evt.id}
+                                        className="bg-[#1a1a1a] border border-gray-800 p-5 rounded-2xl flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3 gap-3">
+                                                <h4 className="text-base font-bold text-white flex-1 break-words">🔥 {evt.title}</h4>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <button
+                                                        onClick={() => deleteStreakEvent(evt.id)}
+                                                        className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+                                                        title="Delete Streak Event"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {evt.description && (
+                                                <p className="text-gray-400 text-xs mb-3 line-clamp-2">{evt.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {evt.dimension && (
+                                                    <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                        {evt.dimension.display_name}
+                                                    </span>
+                                                )}
+                                                {!evt.dimension && (
+                                                    <span className="text-xs text-gray-400/60 bg-white/5 px-2 py-0.5 rounded-full">
+                                                        All Dimensions
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-blue-300/60 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                                                    {evt.start_date} → {evt.end_date}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mb-2">
+                                                Tiers: {(evt.multiplier_tiers || []).map((t: any) => `${t.days}d=${t.multiplier}x`).join(', ')}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                onClick={() => toggleStreakEvent(evt.id, evt.is_active)}
+                                                className={`text-xs font-bold uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${evt.is_active ? 'text-green-500' : 'text-red-500'}`}
+                                            >
+                                                {evt.is_active ? '● Active' : '● Inactive'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Create Streak Event Form */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl h-fit">
+                            <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                                🔥 Create Streak Event
+                            </h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Title</label>
+                                    <input
+                                        type="text"
+                                        value={streakTitle}
+                                        onChange={(e) => setStreakTitle(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. March Wellness Sprint"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description</label>
+                                    <textarea
+                                        value={streakDesc}
+                                        onChange={(e) => setStreakDesc(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02] h-16 resize-none"
+                                        placeholder="Optional description..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                    <select
+                                        value={streakDimensionId}
+                                        onChange={(e) => setStreakDimensionId(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="">All Dimensions</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Start Date</label>
+                                    <input
+                                        type="date"
+                                        value={streakStartDate}
+                                        onChange={(e) => setStreakStartDate(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">End Date</label>
+                                    <input
+                                        type="date"
+                                        value={streakEndDate}
+                                        onChange={(e) => setStreakEndDate(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Multiplier Tiers (JSON)</label>
+                                    <textarea
+                                        value={streakMultiplierTiers}
+                                        onChange={(e) => setStreakMultiplierTiers(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-xs font-mono focus:outline-none focus:border-[#FC4C02] h-28 resize-none"
+                                    />
+                                </div>
+                                <button
+                                    onClick={createStreakEvent}
+                                    disabled={!streakTitle || !streakStartDate || !streakEndDate}
+                                    className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/80 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2.5 rounded-lg font-bold text-sm transition-colors mt-2"
+                                >
+                                    Create Streak Event
                                 </button>
                             </div>
                         </div>

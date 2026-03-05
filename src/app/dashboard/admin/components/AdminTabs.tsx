@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { Calendar, ClipboardList, Gift, MapPin, Shield, User, FileText } from 'lucide-react'
+import { Calendar, ClipboardList, Gift, MapPin, Shield, User, FileText, Flame } from 'lucide-react'
 
 export type AdminTab =
   | 'users'
@@ -11,6 +11,7 @@ export type AdminTab =
   | 'doorprize'
   | 'admins'
   | 'templates'
+  | 'streaks'
 
 type AdminTabsProps = {
   activeTab: AdminTab
@@ -27,6 +28,7 @@ const TAB_CONFIG: { key: AdminTab; label: string; Icon: ComponentType<{ size?: n
   { key: 'doorprize', label: 'Doorprize', Icon: Gift },
   { key: 'admins', label: 'Admins', Icon: Shield },
   { key: 'templates', label: 'Templates', Icon: FileText },
+  { key: 'streaks', label: 'Streaks', Icon: Flame },
 ]
 
 export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {

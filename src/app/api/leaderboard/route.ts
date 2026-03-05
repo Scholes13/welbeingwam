@@ -1,15 +1,21 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import {
+  computeLeaderboardEntries,
+  type LeaderboardActivity,
+  type LeaderboardAdjustment,
+  type LeaderboardProfile,
+  type LeaderboardQuestRow,
+} from '@/lib/gamification'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const dimension = request.nextUrl.searchParams.get('dimension') || null
+
         // Use Service Role to bypass RLS and see all user data
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const supabase = createSupabaseAdminClient()
 
         // 1. Fetch Users
         const { data: profiles, error: profileError } = await supabase
@@ -25,74 +31,36 @@ export async function GET() {
 
         if (activityError) throw activityError
 
-        // 3. Fetch Completed Quests (Points)
+        // 3. Fetch Completed Quests (Points) — include dimension_id
         const { data: userQuests, error: questError } = await supabase
             .from('user_quests')
-            .select('user_id, quest:quests(points)')
+            .select('user_id, quest:quests(points, dimension_id)')
             .eq('status', 'approved')
 
         if (questError) throw questError
 
-        // 4. Fetch Point Adjustments
+        // 4. Fetch Point Adjustments — include dimension_id
         const { data: adjustments, error: adjError } = await supabase
             .from('point_adjustments')
-            .select('user_id, points')
+            .select('user_id, points, dimension_id')
 
         if (adjError) throw adjError
 
-        // 5. Aggregate Data
-        const stats: Record<string, any> = {}
-
-        // Initialize stats
-        profiles?.forEach(p => {
-             // Exclude Admins
-             const isExcluded = ['admin_wam'].includes(p.username) || ['Super Admin', 'pramuji arif'].includes(p.full_name);
-             if (isExcluded) return;
-
-             // Handle BigInt by converting to string if needed, but JS numbers are usually fine for display unless > 2^53.
-             // Supabase JS often returns BigInt as numbers if they fit.
-            stats[p.id] = {
-                user_id: p.id,
-                full_name: p.full_name || 'N/A',
-                avatar_url: p.avatar_url,
-                instagram_username: p.instagram_username,
-                total_steps: 0,
-                quest_points: 0,
-                overall_points: 0
-            }
+        let leaderboard = computeLeaderboardEntries({
+            profiles: (profiles ?? []) as LeaderboardProfile[],
+            activities: (activities ?? []) as LeaderboardActivity[],
+            userQuests: (userQuests ?? []) as LeaderboardQuestRow[],
+            adjustments: (adjustments ?? []) as LeaderboardAdjustment[],
         })
 
-        // Sum Steps
-        activities?.forEach((act: any) => {
-            if (stats[act.user_id]) {
-                stats[act.user_id].total_steps += (act.steps || 0)
-            }
-        })
-
-        // Sum Quest Points
-        userQuests?.forEach((uq: any) => {
-            if (stats[uq.user_id] && uq.quest) {
-                stats[uq.user_id].quest_points += (uq.quest.points || 0)
-            }
-        })
-
-        // Sum Adjustments (Map Reduce)
-        const adjustmentsMap: Record<string, number> = {}
-        adjustments?.forEach((adj: any) => {
-             adjustmentsMap[adj.user_id] = (adjustmentsMap[adj.user_id] || 0) + adj.points
-        })
-
-        // Calculate Overall
-        Object.values(stats).forEach((entry: any) => {
-            const adj = adjustmentsMap[entry.user_id] || 0
-            
-            // Add manual points to quest_points as requested
-            entry.quest_points += adj
-            
-            entry.overall_points = entry.total_steps + entry.quest_points 
-        })
-
-        const leaderboard = Object.values(stats)
+        // Sort by dimension points if a dimension filter is provided
+        if (dimension) {
+            leaderboard = leaderboard.sort(
+                (a, b) => (b.dimension_points[dimension] ?? 0) - (a.dimension_points[dimension] ?? 0)
+            )
+        } else {
+            leaderboard = leaderboard.sort((a, b) => b.overall_points - a.overall_points)
+        }
 
         return NextResponse.json({ leaderboard })
     } catch (error) {

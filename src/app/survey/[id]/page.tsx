@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Sparkles, ArrowRight, Heart, ThumbsUp } from 'lucide-react'
+import { Check, Sparkles, ArrowRight, Heart, ThumbsUp, Upload, Image as ImageIcon, Loader2 } from 'lucide-react'
 import { useRouter, useParams } from 'next/navigation'
 import useSWR from 'swr'
 // Custom Toast Hook
 import { useToast } from '@/context/ToastContext'
+import { supabase } from '@/lib/supabase/client'
 
 interface Option {
     label?: string
@@ -18,7 +19,14 @@ interface Option {
 interface Question {
     id: string
     question_text: string
+    question_type?: 'choice' | 'text' | 'textarea' | 'image'
     options: Option[]
+}
+
+interface Answer {
+    questionId: string
+    selectedOptionIndex?: number
+    responseText?: string
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -29,7 +37,7 @@ export default function DynamicSurveyPage() {
     const surveyId = params?.id as string
 
     // Use custom toast hook
-    const { error: showError } = useToast()
+    const { error: showError, success: showSuccess } = useToast()
 
     // Pass surveyID to API
     const { data, error, isLoading } = useSWR(surveyId ? `/api/survey?id=${surveyId}` : null, fetcher)
@@ -39,10 +47,14 @@ export default function DynamicSurveyPage() {
     const [isFeedbackSurvey, setIsFeedbackSurvey] = useState(false)
 
     const [currentIndex, setCurrentIndex] = useState(0)
-    const [answers, setAnswers] = useState<{ questionId: string; selectedOptionIndex: number }[]>([])
+    const [answers, setAnswers] = useState<Answer[]>([])
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [recommendations, setRecommendations] = useState<any[]>([])
     const [showResults, setShowResults] = useState(false)
+
+    // File Upload State
+    const [isUploading, setIsUploading] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     // Fetch survey metadata to determine type
     useEffect(() => {
@@ -107,24 +119,79 @@ export default function DynamicSurveyPage() {
     }
 
     const currentQuestion = questions[currentIndex]
+    const currentAnswer = answers.find(a => a.questionId === currentQuestion.id)
 
-    // Handle Option Click
+    // Helper to update answers
+    const updateAnswer = (newAnswer: Answer) => {
+        setAnswers(prev => {
+            const index = prev.findIndex(a => a.questionId === newAnswer.questionId)
+            if (index >= 0) {
+                const updated = [...prev]
+                updated[index] = newAnswer
+                return updated
+            }
+            return [...prev, newAnswer]
+        })
+    }
+
+    // Handle Option Click (Choice)
     const handleSelectOption = (optionIndex: number) => {
-        const newAnswers = [...answers]
-        const existingIndex = newAnswers.findIndex(a => a.questionId === currentQuestion.id)
+        updateAnswer({
+            questionId: currentQuestion.id,
+            selectedOptionIndex: optionIndex
+        })
 
-        if (existingIndex >= 0) {
-            newAnswers[existingIndex] = { questionId: currentQuestion.id, selectedOptionIndex: optionIndex }
-        } else {
-            newAnswers.push({ questionId: currentQuestion.id, selectedOptionIndex: optionIndex })
-        }
-
-        setAnswers(newAnswers)
-
-        // Auto Advance after short delay
+        // Auto Advance for Choice questions
         setTimeout(() => {
             handleNext()
-        }, 400)
+        }, 300)
+    }
+
+    // Handle Text Input
+    const handleTextChange = (text: string) => {
+        updateAnswer({
+            questionId: currentQuestion.id,
+            responseText: text
+        })
+    }
+
+    // Handle File Upload
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return
+
+        const file = e.target.files[0]
+        if (file.size > 5 * 1024 * 1024) {
+            showError('File too large (max 5MB)')
+            return
+        }
+
+        try {
+            setIsUploading(true)
+            // const supabase = createClient() // Use singleton
+            const fileName = `${surveyId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '')}`
+
+            const { data, error } = await supabase.storage
+                .from('survey-uploads')
+                .upload(fileName, file, { upsert: true })
+
+            if (error) throw error
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('survey-uploads')
+                .getPublicUrl(fileName)
+
+            updateAnswer({
+                questionId: currentQuestion.id,
+                responseText: publicUrl
+            })
+
+            showSuccess('Photo uploaded!')
+        } catch (err: any) {
+            console.error(err)
+            showError('Upload failed: ' + err.message)
+        } finally {
+            setIsUploading(false)
+        }
     }
 
     const handleNext = async () => {
@@ -140,11 +207,12 @@ export default function DynamicSurveyPage() {
                 const surveyTitle = surveyMeta?.survey?.title?.toLowerCase() || ''
 
                 // Only "Corporate Wellbeing" survey shows recommendations
-                // All other surveys show thank you message
-                const isRecommendationSurvey = surveyTitle.includes('wellbeing') || surveyTitle.includes('wellness') || surveyTitle.includes('recommendation')
+                const isRecommendationSurvey = surveyTitle.includes('corporate')
+
+                // For logic routing
                 setIsFeedbackSurvey(!isRecommendationSurvey)
 
-                // ALWAYS save survey responses first (for all surveys)
+                // ALWAYS save survey responses first
                 await fetch('/api/surveys/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -164,7 +232,7 @@ export default function DynamicSurveyPage() {
 
                 setShowResults(true)
             } catch (err) {
-                showError('Failed to calculate results.')
+                showError('Failed to save answers.')
             } finally {
                 setIsSubmitting(false)
             }
@@ -177,7 +245,7 @@ export default function DynamicSurveyPage() {
 
     // --- RESULT VIEW ---
     if (showResults) {
-        // FEEDBACK SURVEY - Show Thank You
+        // FEEDBACK / GENERIC SURVEY - Show Thank You
         if (isFeedbackSurvey) {
             return (
                 <div className="min-h-screen bg-neutral-900 text-white p-6 overflow-y-auto">
@@ -200,30 +268,18 @@ export default function DynamicSurveyPage() {
                             </h1>
 
                             <p className="text-neutral-300 text-lg leading-relaxed">
-                                Feedback kamu sangat berarti bagi kami untuk terus meningkatkan pengalaman wellness kamu.
+                                Feedback kamu sangat berarti bagi kami.
                             </p>
 
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.5 }}
-                                className="bg-neutral-800/50 rounded-2xl p-6 border border-neutral-700"
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => router.push('/dashboard')}
+                                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg mt-8 flex items-center justify-center gap-2"
                             >
-                                <Heart className="w-8 h-8 text-pink-500 mx-auto mb-3" />
-                                <p className="text-neutral-400 text-sm">
-                                    Setiap jawaban membantu kami memahami kebutuhan wellness kamu dengan lebih baik.
-                                </p>
-                            </motion.div>
+                                Kembali ke Dashboard <ArrowRight className="w-4 h-4" />
+                            </motion.button>
                         </motion.div>
-
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => router.push('/dashboard')}
-                            className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 rounded-xl shadow-lg mt-8 flex items-center justify-center gap-2"
-                        >
-                            Kembali ke Dashboard <ArrowRight className="w-4 h-4" />
-                        </motion.button>
                     </div>
                 </div>
             )
@@ -254,29 +310,13 @@ export default function DynamicSurveyPage() {
                                 transition={{ delay: idx * 0.2 }}
                                 className="bg-neutral-800 rounded-2xl p-5 border border-neutral-700 shadow-xl relative overflow-hidden group"
                             >
-                                {idx === 0 && (
-                                    <div className="absolute top-0 right-0 bg-yellow-500 text-black text-xs font-bold px-3 py-1 rounded-bl-xl z-20">
-                                        BEST MATCH
-                                    </div>
-                                )}
                                 <div className="relative z-10 flex justify-between items-start">
                                     <div>
                                         <h3 className="text-xl font-bold text-white">{rec.name}</h3>
                                         <p className="text-amber-400 text-sm font-medium mb-2">{rec.time} • {rec.instructor}</p>
                                         <p className="text-neutral-300 text-sm leading-relaxed">{rec.description}</p>
-
-                                        {/* Reason Tags */}
-                                        <div className="flex flex-wrap gap-2 mt-4">
-                                            {rec.matchReasons?.map((reason: string) => (
-                                                <span key={reason} className="px-2 py-0.5 rounded-full bg-neutral-700 text-neutral-300 text-xs capitalize">
-                                                    {reason} Fit
-                                                </span>
-                                            ))}
-                                        </div>
                                     </div>
                                 </div>
-                                {/* Shine Effect */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                             </motion.div>
                         ))}
                     </div>
@@ -295,6 +335,8 @@ export default function DynamicSurveyPage() {
     }
 
     // --- SURVEY VIEW ---
+    const questionType = currentQuestion.question_type || 'choice' // Default to choice
+
     return (
         <div className="min-h-screen bg-black text-white relative font-sans overflow-x-hidden">
 
@@ -328,31 +370,97 @@ export default function DynamicSurveyPage() {
                                 </h2>
                             </div>
 
-                            <div className="space-y-3">
-                                {currentQuestion.options.map((option, idx) => {
-                                    const isSelected = answers.find(a => a.questionId === currentQuestion.id)?.selectedOptionIndex === idx
-                                    return (
-                                        <motion.button
-                                            key={idx}
-                                            onClick={() => handleSelectOption(idx)}
-                                            whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.08)' }}
-                                            whileTap={{ scale: 0.98 }}
+                            <div className="space-y-4">
+                                {/* RENDER BASED ON TYPE */}
+                                {questionType === 'choice' && (
+                                    <div className="space-y-3">
+                                        {currentQuestion.options.map((option, idx) => {
+                                            const isSelected = currentAnswer?.selectedOptionIndex === idx
+                                            return (
+                                                <motion.button
+                                                    key={idx}
+                                                    onClick={() => handleSelectOption(idx)}
+                                                    whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.08)' }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                    className={`
+                                                      w-full text-left p-4 md:p-6 rounded-2xl border transition-all duration-300 group relative overflow-hidden
+                                                      ${isSelected
+                                                            ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.2)]'
+                                                            : 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-600'}
+                                                    `}
+                                                >
+                                                    <div className="flex items-center justify-between relative z-10">
+                                                        <span className={`text-base md:text-lg font-medium pr-4 ${isSelected ? 'text-blue-400' : 'text-neutral-200 group-hover:text-white'}`}>
+                                                            {option.label}
+                                                        </span>
+                                                        {isSelected && <Check className="w-5 h-5 text-blue-400 flex-shrink-0" />}
+                                                    </div>
+                                                </motion.button>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+
+                                {questionType === 'text' && (
+                                    <input
+                                        type="text"
+                                        placeholder="Type your answer here..."
+                                        className="w-full bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                                        value={currentAnswer?.responseText || ''}
+                                        onChange={(e) => handleTextChange(e.target.value)}
+                                        autoFocus
+                                    />
+                                )}
+
+                                {questionType === 'textarea' && (
+                                    <textarea
+                                        rows={5}
+                                        placeholder="Share your story..."
+                                        className="w-full bg-neutral-900 border border-neutral-700 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                        value={currentAnswer?.responseText || ''}
+                                        onChange={(e) => handleTextChange(e.target.value)}
+                                        autoFocus
+                                    />
+                                )}
+
+                                {questionType === 'image' && (
+                                    <div className="space-y-4">
+                                        <div
+                                            onClick={() => fileInputRef.current?.click()}
                                             className={`
-                                              w-full text-left p-4 md:p-6 rounded-2xl border transition-all duration-300 group relative overflow-hidden
-                                              ${isSelected
-                                                    ? 'border-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.2)]'
-                                                    : 'border-neutral-800 bg-neutral-900/80 hover:border-neutral-600'}
+                                                border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors
+                                                ${currentAnswer?.responseText ? 'border-green-500/50 bg-green-500/10' : 'border-neutral-700 hover:border-neutral-500 bg-neutral-900'}
                                             `}
                                         >
-                                            <div className="flex items-center justify-between relative z-10">
-                                                <span className={`text-base md:text-lg font-medium pr-4 ${isSelected ? 'text-blue-400' : 'text-neutral-200 group-hover:text-white'}`}>
-                                                    {option.label}
-                                                </span>
-                                                {isSelected && <Check className="w-5 h-5 text-blue-400 flex-shrink-0" />}
-                                            </div>
-                                        </motion.button>
-                                    )
-                                })}
+                                            {currentAnswer?.responseText ? (
+                                                <div className="relative w-full aspect-video rounded-lg overflow-hidden">
+                                                    <img src={currentAnswer.responseText} className="w-full h-full object-cover" />
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity">
+                                                        <span className="text-white text-sm font-bold flex items-center gap-2"><ImageIcon size={16} /> Change Photo</span>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center">
+                                                    {isUploading ? (
+                                                        <Loader2 className="w-10 h-10 text-blue-500 animate-spin mx-auto mb-3" />
+                                                    ) : (
+                                                        <Upload className="w-10 h-10 text-neutral-500 mx-auto mb-3" />
+                                                    )}
+                                                    <p className="text-neutral-300 font-medium">{isUploading ? 'Uploading...' : 'Click to Upload Photo'}</p>
+                                                    <p className="text-neutral-500 text-sm mt-1">PG, JPG, WEBP (Max 5MB)</p>
+                                                </div>
+                                            )}
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={handleFileUpload}
+                                                disabled={isUploading}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     </AnimatePresence>
@@ -372,7 +480,20 @@ export default function DynamicSurveyPage() {
                             <ArrowRight className="w-4 h-4 rotate-180" /> Back
                         </button>
 
-                        {isSubmitting && <span className="animate-pulse text-blue-400 font-medium tracking-wide">Analyzing...</span>}
+                        <button
+                            onClick={handleNext}
+                            className={`
+                                flex items-center gap-2 px-6 py-2.5 rounded-full font-bold transition-all
+                                ${questionType !== 'choice'
+                                    ? 'bg-[#FC4C02] text-white hover:bg-[#e04302] shadow-lg shadow-orange-900/20' // Visible Next button for Inputs
+                                    : 'opacity-0 pointer-events-none' // Hidden for choice (auto advance)
+                                }
+                            `}
+                        >
+                            {currentIndex === questions.length - 1 ? 'Finish' : 'Next'} <ArrowRight className="w-4 h-4" />
+                        </button>
+
+                        {isSubmitting && <span className="animate-pulse text-blue-400 font-medium tracking-wide">Done...</span>}
                     </div>
                 </div>
             </div>

@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -10,16 +11,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Missing data' }, { status: 400 })
         }
 
-        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        if (!serviceKey) {
-            console.error('[SCAN] CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing!')
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-        }
-
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            serviceKey
-        )
+        const supabase = createSupabaseAdminClient()
 
         // 1. Find User by Access Code
         const { data: user, error: userError } = await supabase

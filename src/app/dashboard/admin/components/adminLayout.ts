@@ -60,6 +60,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
     title: 'Quest Templates',
     description: 'Manage recurring quest templates and auto-generation.',
   },
+  streaks: {
+    title: 'Streak Events',
+    description: 'Manage streak challenges with multiplier rewards.',
+  },
 }
 
 export function getAdminPageMeta(activeTab: AdminTab): AdminPageMeta {

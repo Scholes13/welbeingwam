@@ -1,9 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+type AttendanceProfile = {
+    id: number
+    username: string | null
+    full_name: string | null
+    instagram_username: string | null
+    avatar_url: string | null
+}
+
+type ActivityAttendanceRow = {
+    user_id: number
+    scanned_at: string | null
+    scan_in_at: string | null
+    scan_out_at: string | null
+    state: string | null
+    final_points: number | null
+    is_penalized: boolean | null
+    user: AttendanceProfile | AttendanceProfile[] | null
+}
+
+type ProfileRow = {
+    id: number
+    username: string | null
+    full_name: string | null
+    instagram_username: string | null
+    avatar_url: string | null
+}
+
+function normalizeAttendanceProfile(user: AttendanceProfile | AttendanceProfile[] | null): AttendanceProfile | null {
+    if (!user) return null
+    return Array.isArray(user) ? (user[0] ?? null) : user
+}
+
 export async function GET(request: Request) {
+    const { authorized } = await verifyAdminPermission('manage_activities')
+    if (!authorized) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     try {
         const { searchParams } = new URL(request.url)
         const id = searchParams.get('id')
@@ -12,15 +50,11 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Activity ID required' }, { status: 400 })
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const supabase = createSupabaseAdminClient()
 
-        // 1. Fetch Activity Details
         const { data: activity, error: actError } = await supabase
             .from('admin_activities')
-            .select('*')
+            .select('*, activity_type:activity_types(id, name)')
             .eq('id', id)
             .single()
 
@@ -28,13 +62,16 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Activity not found' }, { status: 404 })
         }
 
-        // 2. Fetch Attendees (Users who have a record in 'attendance' table)
-        // We join with profiles to get names
         const { data: attendeesRaw, error: attError } = await supabase
             .from('attendance')
             .select(`
                 user_id,
                 scanned_at,
+                scan_in_at,
+                scan_out_at,
+                state,
+                final_points,
+                is_penalized,
                 user:profiles (
                     id,
                     username,
@@ -48,22 +85,38 @@ export async function GET(request: Request) {
 
         if (attError) throw attError
 
-        // Process attendees
-        const attendeeIds = new Set<string>()
-        const attendees = attendeesRaw.map((att: any) => {
-            if (att.user_id) attendeeIds.add(att.user_id)
+        const typedAttendance = (attendeesRaw ?? []) as ActivityAttendanceRow[]
+
+        const completedRows = typedAttendance.filter((att) =>
+            att.state === 'completed' || att.state === 'completed_penalty' || Boolean(att.scan_out_at)
+        )
+        const inProgressRows = typedAttendance.filter((att) => att.state === 'in_progress' && !att.scan_out_at)
+
+        const completedIds = new Set<string>()
+        const inProgressIds = new Set<string>()
+
+        const attendees = completedRows.map((att) => {
+            const user = normalizeAttendanceProfile(att.user)
+            if (att.user_id) completedIds.add(String(att.user_id))
             return {
                 user_id: att.user_id,
-                joined_at: att.scanned_at,
-                username: att.user?.username || 'Unknown',
-                full_name: att.user?.full_name || 'Unknown User',
-                instagram: att.user?.instagram_username,
-                avatar_url: att.user?.avatar_url
+                joined_at: att.scan_out_at || att.scanned_at,
+                scan_in_at: att.scan_in_at,
+                scan_out_at: att.scan_out_at,
+                points: typeof att.final_points === 'number' ? att.final_points : activity.points,
+                is_penalized: Boolean(att.is_penalized),
+                status: att.state,
+                username: user?.username || 'Unknown',
+                full_name: user?.full_name || 'Unknown User',
+                instagram: user?.instagram_username,
+                avatar_url: user?.avatar_url
             }
         })
 
-        // 3. Fetch All Users to calculate Pending
-        // Fetch minimal fields for performance
+        inProgressRows.forEach((att) => {
+            if (att.user_id) inProgressIds.add(String(att.user_id))
+        })
+
         const { data: allUsers, error: userError } = await supabase
             .from('profiles')
             .select('id, username, full_name, instagram_username, avatar_url')
@@ -71,11 +124,13 @@ export async function GET(request: Request) {
 
         if (userError) throw userError
 
-        // Filter for Pending (Users NOT in attendeeIds)
-        const pending = allUsers
-            .filter(u => !attendeeIds.has(u.id))
+        const typedUsers = (allUsers ?? []) as ProfileRow[]
+
+        const pending = typedUsers
+            .filter(u => !completedIds.has(String(u.id)))
             .map(u => ({
                 user_id: u.id,
+                status: inProgressIds.has(String(u.id)) ? 'in_progress' : 'not_started',
                 username: u.username || 'Unknown',
                 full_name: u.full_name || 'Unknown User',
                 instagram: u.instagram_username,
@@ -85,11 +140,12 @@ export async function GET(request: Request) {
         return NextResponse.json({
             activity,
             stats: {
-                total_users: allUsers.length,
+                total_users: typedUsers.length,
                 attended: attendees.length,
+                in_progress: inProgressIds.size,
                 pending: pending.length,
-                attendance_rate: allUsers.length > 0 
-                    ? Math.round((attendees.length / allUsers.length) * 100) 
+                attendance_rate: typedUsers.length > 0 
+                    ? Math.round((attendees.length / typedUsers.length) * 100) 
                     : 0
             },
             attendees,

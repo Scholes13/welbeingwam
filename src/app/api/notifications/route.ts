@@ -1,22 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const context = await getAuthProfileContext()
+  if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = context.profileId
 
   const { searchParams } = new URL(request.url)
   const countOnly = searchParams.get('count_only') === 'true'
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabase = createSupabaseAdminClient()
 
   try {
       if (countOnly) {
@@ -47,19 +41,13 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-  
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const context = await getAuthProfileContext()
+    if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = context.profileId
 
     const { notificationId } = await request.json()
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     try {
         if (notificationId === 'all') {
@@ -80,7 +68,7 @@ export async function PUT(request: Request) {
 
         return NextResponse.json({ success: true })
         
-    } catch (error) {
+    } catch {
         return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
     }
 }

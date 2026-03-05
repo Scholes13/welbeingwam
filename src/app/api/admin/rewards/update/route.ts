@@ -1,50 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { parseAdminUpdateRewardInput } from '@/lib/rewards/schemas'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  
-  // 1. Check Admin Access
-  const sessionId = cookieStore.get('strava_athlete_id')?.value
-  const accessCode = cookieStore.get('manual_access_code')?.value
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  let isAdmin = false
-  if (accessCode) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('access_code', accessCode).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
-  } 
-  if (!isAdmin && sessionId) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('id', sessionId).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
-  }
-
-  if (!isAdmin) {
+  const { authorized } = await verifyAdminPermission('manage_rewards')
+  if (!authorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    const { id, title, description, image_url, required_points, max_claims, type } = await request.json()
+  const supabase = createSupabaseAdminClient()
 
-    if (!id || !title) {
-        return NextResponse.json({ error: 'ID and Title are required' }, { status: 400 })
+  try {
+    const payload = await request.json()
+    const parsedPayload = parseAdminUpdateRewardInput(payload)
+    if (!parsedPayload.success) {
+      return NextResponse.json({ error: 'Invalid reward payload' }, { status: 400 })
     }
+
+    const { id, title, description, image_url, required_points, required_steps, max_claims, type } = parsedPayload.data
+
+    const updatePayload: {
+      title: string
+      description?: string
+      image_url?: string | null
+      required_points?: number
+      required_steps?: number
+      max_claims?: number
+      type?: 'reveal' | 'progress' | 'mystery'
+    } = {
+      title,
+    }
+
+    if (description !== undefined) updatePayload.description = description
+    if (image_url !== undefined) updatePayload.image_url = image_url
+    if (required_points !== undefined) updatePayload.required_points = required_points
+    if (required_steps !== undefined) updatePayload.required_steps = required_steps
+    if (max_claims !== undefined) updatePayload.max_claims = max_claims
+    if (type !== undefined) updatePayload.type = type
 
     const { data, error } = await supabase
       .from('rewards')
-      .update({
-        title,
-        description,
-        image_url,
-        required_points: parseInt(required_points) || 0,
-        max_claims: parseInt(max_claims) || 0,
-        type: type || 'reveal'
-      })
+      .update(updatePayload)
       .eq('id', id)
       .select()
 

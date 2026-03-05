@@ -1,34 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
     const { id } = await request.json()
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
     // 1. Check Admin Access (Support both Manual Code and Standard Login)
-    const accessCode = cookieStore.get('manual_access_code')?.value
-    const sessionId = cookieStore.get('strava_athlete_id')?.value
-
-    let isAdmin = false
-    
-    if (accessCode) {
-        const { data: adminUser } = await supabase.from('profiles').select('username').eq('access_code', accessCode).single()
-        if (adminUser?.username === 'admin_wam') isAdmin = true
-    } 
-    
-    if (!isAdmin && sessionId) {
-        const { data: adminUser } = await supabase.from('profiles').select('username').eq('id', sessionId).single()
-        if (adminUser?.username === 'admin_wam') isAdmin = true
-    }
-
-    if (!isAdmin) {
+    const { authorized } = await verifyAdminPermission('admin')
+    if (!authorized) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

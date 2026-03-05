@@ -1,12 +1,12 @@
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 import LoginForm from '@/components/LoginForm'
 
 export default async function Home() {
-  const cookieStore = await cookies()
-  const session = cookieStore.get('strava_athlete_id')
+  const supabase = await createSupabaseServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (session) {
+  if (user) {
     redirect('/dashboard')
   }
 
