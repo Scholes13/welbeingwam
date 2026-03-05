@@ -1,22 +1,19 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkPositiveSentiment } from '@/lib/openrouter'
 
 export async function POST(request: Request) {
   try {
-    const { questId } = await request.json()
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
+    const { questId, photo_url, verification_note } = await request.json()
+    const context = await getAuthProfileContext()
 
-    if (!currentUserId || !questId) {
+    if (!context || !questId) {
         return NextResponse.json({ error: 'Missing data' }, { status: 400 })
     }
+    const currentUserId = context.profileId
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     const { data: quest } = await supabase
         .from('quests')
@@ -97,7 +94,9 @@ export async function POST(request: Request) {
         .insert({
             user_id: currentUserId,
             quest_id: questId,
-            status: 'approved'
+            status: 'approved',
+            photo_url: photo_url || null,
+            verification_note: verification_note || null,
         })
 
     if (error) {
