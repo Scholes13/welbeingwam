@@ -1,6 +1,6 @@
 import { Loader2 } from 'lucide-react'
 
-export default function Loader({ text = 'LOADING WAM25...' }: { text?: string }) {
+export default function Loader({ text = 'LOADING WLM...' }: { text?: string }) {
     return (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
             <div className="relative">

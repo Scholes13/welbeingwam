@@ -18,8 +18,24 @@ export default function ProfilePage() {
     const [scannedUser, setScannedUser] = useState<any>(null)
     const [message, setMessage] = useState('')
     const [sending, setSending] = useState(false)
+    const [activityScanMode, setActivityScanMode] = useState<'scan_in' | 'scan_out'>('scan_in')
     const router = useRouter()
     const { success, error } = useToast()
+
+    const persistActivityScanMode = (mode: 'scan_in' | 'scan_out') => {
+        setActivityScanMode(mode)
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('activityScanMode', mode)
+        }
+    }
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const savedMode = localStorage.getItem('activityScanMode')
+        if (savedMode === 'scan_out') {
+            setActivityScanMode('scan_out')
+        }
+    }, [])
 
     // Auto-fetched by SWR
 
@@ -35,6 +51,29 @@ export default function ProfilePage() {
         if (scannedUser) return
 
         try {
+            if (code.startsWith('ACT:')) {
+                const res = await fetch('/api/activity/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: code })
+                })
+                const data = await res.json()
+
+                if (res.ok && data.success) {
+                    if (data.action === 'scan_in') {
+                        persistActivityScanMode('scan_out')
+                    } else {
+                        persistActivityScanMode('scan_in')
+                    }
+                    success(data.message || 'Data tersimpan')
+                } else {
+                    error(data.error || data.message || 'Gagal scan activity')
+                }
+
+                setIsScannerOpen(false)
+                return
+            }
+
             // Check if it's a SPOT code (starts with SPOT-)
             if (code.startsWith('SPOT-')) {
                 const res = await fetch('/api/spots/scan', {
@@ -121,7 +160,9 @@ export default function ProfilePage() {
                         <div className="w-full max-w-sm aspect-square bg-black border-2 border-[#FC4C02] rounded-2xl overflow-hidden relative">
                             <Scanner onScan={handleScan} />
                         </div>
-                        <p className="text-white mt-4 font-mono text-sm">Scan user QR Code</p>
+                        <p className="text-white mt-4 font-mono text-sm">
+                            {activityScanMode === 'scan_out' ? 'Scan Activity QR (Scan Out)' : 'Scan Activity QR (Scan In)'}
+                        </p>
                     </div>
                 )}
 
@@ -182,9 +223,12 @@ export default function ProfilePage() {
                     <div className="flex gap-2 relative">
                         <button
                             onClick={() => setIsScannerOpen(true)}
-                            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+                            className="px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10 flex items-center gap-2"
                         >
                             <Scan size={20} className="text-[#FC4C02]" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-300">
+                                {activityScanMode === 'scan_out' ? 'Scan Out' : 'Scan In'}
+                            </span>
                         </button>
 
                         <Link href="/profile/settings" className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10">
@@ -293,7 +337,7 @@ export default function ProfilePage() {
 
                 <div className="mt-12 text-center">
                     <p className="text-xs text-gray-600">
-                        ScalingImpact v1.0 Beta
+                        WLM v2.0 — Scaling Impact 2026
                     </p>
                 </div>
             </div>

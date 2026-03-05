@@ -28,7 +28,7 @@ async function callOpenRouter(apiKey: string, messages: { role: string, content:
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://wam25.vercel.app',
-            'X-Title': 'WAM25 Wellbeing App'
+            'X-Title': 'WLM Wellbeing App'
         },
         body: JSON.stringify({
             model: MODEL,

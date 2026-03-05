@@ -94,7 +94,7 @@ export default function IntegrationsPage() {
                     <div className="flex gap-4">
                         <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center font-bold flex-shrink-0">2</div>
                         <div>
-                            <h4 className="font-bold mb-1">Install the WAM25 Shortcut</h4>
+                            <h4 className="font-bold mb-1">Install the WLM Shortcut</h4>
                             <p className="text-gray-400 text-sm mb-2">Click the link below to add the shortcut to your iPhone.</p>
                             <a
                                 href="https://www.icloud.com/shortcuts/example" // Placeholder
@@ -113,7 +113,7 @@ export default function IntegrationsPage() {
                             <h4 className="font-bold mb-1">Paste Key & Automate</h4>
                             <p className="text-gray-400 text-sm">
                                 Open the Shortcut settings, paste your Secret Key.<br />
-                                Then go to "Automation" tab &rarr; Create Personal Automation &rarr; Time of Day (e.g. 23:00) &rarr; Run Shortcut "WAM25 Sync".
+                                Then go to "Automation" tab &rarr; Create Personal Automation &rarr; Time of Day (e.g. 23:00) &rarr; Run Shortcut "WLM Sync".
                             </p>
                         </div>
                     </div>

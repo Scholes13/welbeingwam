@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/mobile/BottomNav";
@@ -14,21 +14,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "WAM25",
-  description: "Your personal wellness companion.",
-  manifest: "/manifest.json",
+export const viewport: Viewport = {
   themeColor: "#000000",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false, // Prevents zooming for app-like feel
-  },
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Prevents zooming for app-like feel
+};
+
+export const metadata: Metadata = {
+  title: "Werkudara Life Mode",
+  description: "Balance Within. Impact Beyond.",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "WAM25",
+    title: "WLM",
   },
 };
 
