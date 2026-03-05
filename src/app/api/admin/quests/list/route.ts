@@ -1,16 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     const { data: quests, error } = await supabase
         .from('quests')
-        .select('*')
+        .select('*, dimension:dimensions(id, name, display_name, icon)')
         .order('is_active', { ascending: false })
         .order('created_at', { ascending: false })
 
