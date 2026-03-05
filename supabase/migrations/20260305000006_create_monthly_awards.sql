@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS public.monthly_awards (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    user_id BIGINT REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     dimension_id UUID REFERENCES public.dimensions(id) NOT NULL,
     period TEXT NOT NULL,
     award_title TEXT NOT NULL,

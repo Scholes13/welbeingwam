@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS public.streak_events (
 -- User streak tracking
 CREATE TABLE IF NOT EXISTS public.user_streaks (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+    user_id BIGINT REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
     streak_event_id UUID REFERENCES public.streak_events(id) ON DELETE CASCADE NOT NULL,
     dimension_id UUID REFERENCES public.dimensions(id) NOT NULL,
     current_streak INT DEFAULT 0,
@@ -39,9 +39,9 @@ CREATE POLICY "Allow authenticated read streak_events"
 CREATE POLICY "Allow service role full access streak_events"
     ON public.streak_events FOR ALL TO service_role USING (true);
 
-CREATE POLICY "Users can read own streaks"
+CREATE POLICY "Allow authenticated read user_streaks"
     ON public.user_streaks FOR SELECT TO authenticated
-    USING (user_id = auth.uid());
+    USING (true);
 
 CREATE POLICY "Allow service role full access user_streaks"
     ON public.user_streaks FOR ALL TO service_role USING (true);
