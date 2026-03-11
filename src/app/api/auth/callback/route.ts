@@ -2,12 +2,14 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 import { resolveProfileIdFromAuthUser } from '@/utils/auth'
 import { NextResponse } from 'next/server'
 
+import { buildStravaCallbackRedirect } from './redirect'
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/dashboard?error=missing_code`)
+    return NextResponse.redirect(buildStravaCallbackRedirect({ origin, error: 'missing_code' }))
   }
 
   try {
@@ -45,7 +47,7 @@ export async function GET(request: Request) {
     })
 
     if (profileId === null) {
-      return NextResponse.redirect(`${origin}/dashboard?error=profile_not_found`)
+      return NextResponse.redirect(buildStravaCallbackRedirect({ origin, error: 'profile_not_found' }))
     }
 
     // 3. Update profile with Strava data (Connect Strava to existing account)
@@ -67,9 +69,9 @@ export async function GET(request: Request) {
       throw updateError
     }
 
-    return NextResponse.redirect(`${origin}/dashboard?strava=connected`)
+    return NextResponse.redirect(buildStravaCallbackRedirect({ origin, strava: 'connected' }))
   } catch (error) {
     console.error('Strava Connect Error:', error)
-    return NextResponse.redirect(`${origin}/dashboard?error=strava_failed`)
+    return NextResponse.redirect(buildStravaCallbackRedirect({ origin, error: 'strava_failed' }))
   }
 }
