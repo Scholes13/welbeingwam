@@ -6,7 +6,7 @@ import TourMap from '@/components/map/TourMap'
 import ConnectionStatus from '@/components/ui/ConnectionStatus'
 import SessionTimer from '@/components/ui/SessionTimer'
 import Loader from '@/components/ui/Loader'
-import { useSettings } from '@/context/SettingsContext'
+import { SettingsProvider, useSettings } from '@/context/SettingsContext'
 
 interface Participant {
   id: string
@@ -17,7 +17,7 @@ interface Participant {
   is_admin: boolean
 }
 
-export default function MapPage() {
+function MapPageContent() {
   const router = useRouter()
   const [participant, setParticipant] = useState<Participant | null>(null)
   const [loading, setLoading] = useState(true)
@@ -91,5 +91,13 @@ export default function MapPage() {
         currentParticipantId={participant.id}
       />
     </div>
+  )
+}
+
+export default function MapPage() {
+  return (
+    <SettingsProvider>
+      <MapPageContent />
+    </SettingsProvider>
   )
 }

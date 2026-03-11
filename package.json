@@ -10,7 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "ci:clean": "node -e \"const fs=require('node:fs');['.next','.open-next'].forEach((p)=>fs.rmSync(p,{recursive:true,force:true}))\"",
+    "ci:clean": "node scripts/clean-build-artifacts.cjs",
     "ci:verify": "npm run ci:clean && npm run pages:build",
     "pages:build": "opennextjs-cloudflare build",
     "pages:deploy": "npx wrangler deploy",

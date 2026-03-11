@@ -17,7 +17,7 @@ test("ci verify gates only on build and Cloudflare bundle", () => {
   );
   assert.equal(
     pkg.scripts["ci:clean"],
-    "node -e \"const fs=require('node:fs');['.next','.open-next'].forEach((p)=>fs.rmSync(p,{recursive:true,force:true}))\"",
+    "node scripts/clean-build-artifacts.cjs",
   );
 });
 

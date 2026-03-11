@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation'
 import { Settings as SettingsIcon, Loader2 } from 'lucide-react'
 import AdminNav from '@/components/admin/AdminNav'
 import SettingsPanel from '@/components/admin/SettingsPanel'
-import { useSettings } from '@/context/SettingsContext'
+import { SettingsProvider, useSettings } from '@/context/SettingsContext'
 
-export default function AdminSettingsPage() {
+function AdminSettingsPageContent() {
   const router = useRouter()
   const { settings, isLoading, refreshSettings } = useSettings()
   const [isAuthorized, setIsAuthorized] = useState(false)
@@ -81,5 +81,13 @@ export default function AdminSettingsPage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function AdminSettingsPage() {
+  return (
+    <SettingsProvider>
+      <AdminSettingsPageContent />
+    </SettingsProvider>
   )
 }
