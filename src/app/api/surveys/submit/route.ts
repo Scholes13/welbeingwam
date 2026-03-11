@@ -1,45 +1,37 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+
+type SurveyAnswerInput = {
+    questionId: string
+    selectedOptionIndex?: number | null
+    responseText?: string | null
+}
 
 export async function POST(request: Request) {
     try {
-        const cookieStore = await cookies()
-        
-        // Setup Supabase Client with Cookies for Auth
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-        
-        const supabase = createClient(supabaseUrl, supabaseKey, {
-            auth: {
-                persistSession: false
-            }
-        })
+        const supabase = createSupabaseAdminClient()
 
-        // Try to get authenticated user from session cookies
-        // APPS USE CUSTOM AUTH: Cookie 'strava_athlete_id' holds the profiles.id (UUID or BigInt)
-        
+        // Get authenticated user (optional — surveys can be anonymous)
+        const context = await getAuthProfileContext()
         let userId: string | null = null
         let customName: string | null = null
 
-        const authCookie = cookieStore.get('strava_athlete_id')?.value
-        
-        if (authCookie) {
-            userId = authCookie
-            
-            // Fetch User Details from PROFILES table (not auth.users)
+        if (context) {
+            userId = context.authUser.id
+
+            // Fetch User Details from profiles
             try {
                 const { data: profile } = await supabase
                     .from('profiles')
-                    .select('username, full_name, firstname, lastname')
-                    .eq('id', userId)
+                    .select('username, full_name')
+                    .eq('id', context.profileId)
                     .single()
                 
                 if (profile) {
-                    customName = profile.full_name || 
-                                 (profile.firstname ? `${profile.firstname} ${profile.lastname || ''}`.trim() : profile.username)
+                    customName = profile.full_name || profile.username
                 }
-            } catch (ignore) {
+            } catch {
                 console.log('Failed to fetch profile details, proceeding with just ID')
             }
         }
@@ -59,7 +51,7 @@ export async function POST(request: Request) {
             .from('survey_submissions')
             .insert({
                 survey_id: surveyId,
-                user_id: userId, // Now refers to profiles.id (or null) - Constraint dropped
+                user_id: userId,
                 custom_name: customName,
                 created_at: new Date().toISOString()
             })
@@ -73,11 +65,11 @@ export async function POST(request: Request) {
 
         // Save individual answers
         if (submission && answers.length > 0) {
-            const answerRows = answers.map((ans: any) => ({
+            const answerRows = (answers as SurveyAnswerInput[]).map((ans) => ({
                 submission_id: submission.id,
                 question_id: ans.questionId,
-                selected_option_index: ans.selectedOptionIndex ?? null, // Allow null
-                response_text: ans.responseText || null // Map text/url
+                selected_option_index: ans.selectedOptionIndex ?? null,
+                response_text: ans.responseText || null
             }))
 
             const { error: ansError } = await supabase

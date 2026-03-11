@@ -1,41 +1,24 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { parseAdminCreateRewardInput } from '@/lib/rewards/schemas'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  
-  // 1. Check Admin Access (Support both Manual Code and Standard Login)
-  const accessCode = cookieStore.get('manual_access_code')?.value
-  const sessionId = cookieStore.get('strava_athlete_id')?.value
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  let isAdmin = false
-  
-  if (accessCode) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('access_code', accessCode).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
-  } 
-  
-  if (!isAdmin && sessionId) {
-      const { data: adminUser } = await supabase.from('profiles').select('username').eq('id', sessionId).single()
-      if (adminUser?.username === 'admin_wam') isAdmin = true
+  const { authorized } = await verifyAdminPermission('manage_rewards')
+  if (!authorized) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (!isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const supabase = createSupabaseAdminClient()
 
   try {
-    const { title, description, image_url, required_points, required_steps, max_claims, type } = await request.json()
-
-    if (!title || !description) {
-        return NextResponse.json({ error: 'Title and Description are required' }, { status: 400 })
+    const payload = await request.json()
+    const parsedPayload = parseAdminCreateRewardInput(payload)
+    if (!parsedPayload.success) {
+      return NextResponse.json({ error: 'Invalid reward payload' }, { status: 400 })
     }
+
+    const { title, description, image_url, required_points, required_steps, max_claims, type } = parsedPayload.data
 
     const { data, error } = await supabase
       .from('rewards')
@@ -43,10 +26,10 @@ export async function POST(request: Request) {
         title,
         description,
         image_url,
-        required_points: parseInt(required_points) || 0,
-        required_steps: parseInt(required_steps) || 0,
-        max_claims: parseInt(max_claims) || 0, // 0 means unlimited
-        type: type || 'reveal'
+        required_points,
+        required_steps,
+        max_claims,
+        type,
       }])
       .select()
 

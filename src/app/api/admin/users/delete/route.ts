@@ -1,35 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies()
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   try {
-    // 1. Check Admin Access (Support both Manual Code and Standard Login)
-    const accessCode = cookieStore.get('manual_access_code')?.value
-    const sessionId = cookieStore.get('strava_athlete_id')?.value
-
-    let isAdmin = false
-    
-    if (accessCode) {
-        const { data: adminUser } = await supabase.from('profiles').select('username').eq('access_code', accessCode).single()
-        if (adminUser?.username === 'admin_wam') isAdmin = true
-    } 
-    
-    if (!isAdmin && sessionId) {
-        const { data: adminUser } = await supabase.from('profiles').select('username').eq('id', sessionId).single()
-        if (adminUser?.username === 'admin_wam') isAdmin = true
-    }
-
-    if (!isAdmin) {
+    const { authorized } = await verifyAdminPermission('manage_users')
+    if (!authorized) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const supabase = createSupabaseAdminClient()
     const { id } = await req.json()
 
     if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 })
@@ -39,6 +19,10 @@ export async function POST(req: Request) {
     if (targetUser?.username === 'admin_wam') {
         return NextResponse.json({ error: 'Cannot delete Super Admin' }, { status: 403 })
     }
+
+    // Also delete user from Supabase Auth
+    const { error: authError } = await supabase.auth.admin.deleteUser(id)
+    if (authError) console.error('Auth delete error:', authError)
 
     // Manual Cascade: Delete related data
     await supabase.from('activities').delete().eq('user_id', id)

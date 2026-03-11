@@ -1,32 +1,15 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { nanoid } from 'nanoid'
 
 export async function POST(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Check if admin
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single()
-
-    if (!profile?.is_admin) {
+    const { authorized, userId } = await verifyAdminPermission('manage_spots')
+    if (!authorized) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const supabase = createSupabaseAdminClient()
     const { name, description, points, maxClaims, expiresAt, clue } = await request.json()
 
     if (!name || points === undefined) {
@@ -34,7 +17,6 @@ export async function POST(request: Request) {
     }
 
     try {
-        // Generate unique code for QR
         const code = `SPOT-${nanoid(8).toUpperCase()}`
 
         const { data, error } = await supabase
@@ -62,28 +44,12 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Check if admin
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single()
-
-    if (!profile?.is_admin) {
+    const { authorized } = await verifyAdminPermission('manage_spots')
+    if (!authorized) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    const supabase = createSupabaseAdminClient()
 
     try {
         const { data: spots, error } = await supabase
@@ -96,7 +62,6 @@ export async function GET(request: Request) {
 
         if (error) throw error
 
-        // Transform data to include claim count
         const spotsWithCounts = spots?.map(spot => ({
             ...spot,
             claim_count: spot.claims?.[0]?.count || 0
@@ -110,11 +75,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { authorized } = await verifyAdminPermission('manage_spots')
+    if (!authorized) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -124,21 +87,7 @@ export async function DELETE(request: Request) {
         return NextResponse.json({ error: 'Spot ID required' }, { status: 400 })
     }
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Check if admin
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single()
-
-    if (!profile?.is_admin) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const supabase = createSupabaseAdminClient()
 
     try {
         const { error } = await supabase
@@ -156,29 +105,12 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Check if admin
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single()
-
-    if (!profile?.is_admin) {
+    const { authorized } = await verifyAdminPermission('manage_spots')
+    if (!authorized) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const supabase = createSupabaseAdminClient()
     const { id, is_active } = await request.json()
 
     if (!id || is_active === undefined) {

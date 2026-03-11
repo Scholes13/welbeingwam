@@ -1,5 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -7,32 +6,33 @@ export async function POST(request: Request) {
     const { accessCode } = await request.json()
 
     if (!accessCode) {
-        return NextResponse.json({ error: 'Access code required' }, { status: 400 })
+      return NextResponse.json({ error: 'Access code required' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const adminClient = createSupabaseAdminClient()
 
-    // Find user by access code
-    const { data: user, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('access_code', accessCode)
-        .single()
+    // Find user by access code (using admin client to bypass RLS)
+    const { data: user, error } = await adminClient
+      .from('profiles')
+      .select('id, username, password')
+      .eq('access_code', accessCode)
+      .single()
 
     if (error || !user) {
-        return NextResponse.json({ error: 'Invalid access code' }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid access code' }, { status: 401 })
     }
 
-    // Set Session Cookies
-    // We use the same cookie names as Strava login, so the rest of the app works seamlessly
-    const cookieStore = await cookies()
-    cookieStore.set('strava_athlete_id', user.id, { httpOnly: true, secure: true })
-    
-    // We set a special flag cookie to know this is a manual user (skips Strava sync)
-    cookieStore.set('is_manual_user', 'true', { httpOnly: true, secure: true })
+    // Sign in via Supabase Auth using the found user's credentials
+    const supabase = await createSupabaseServerClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: `${user.username}@wam.local`,
+      password: user.password || 'Welcome123!',
+    })
+
+    if (signInError) {
+      console.error('Manual Login Auth Error:', signInError.message)
+      return NextResponse.json({ error: 'Login failed' }, { status: 401 })
+    }
 
     return NextResponse.json({ success: true })
 

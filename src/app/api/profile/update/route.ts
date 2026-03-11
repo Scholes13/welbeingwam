@@ -1,32 +1,35 @@
 
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
     const { password, instagram } = await request.json()
     
-    // Get current user from cookie
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
+    const context = await getAuthProfileContext()
+    if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const currentUserId = context.profileId
 
-    if (!currentUserId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     // Prepare update object
-    const updateData: any = {
+    const updateData: {
+        updated_at: string
+        password?: string
+        instagram_username?: string
+    } = {
         updated_at: new Date().toISOString()
     }
 
     if (password && password.trim() !== '') {
         updateData.password = password
+
+        // Also update password in Supabase Auth
+        const authClient = createSupabaseAdminClient()
+        await authClient.auth.admin.updateUserById(context.authUser.id, {
+            password: password
+        })
     }
 
     if (instagram !== undefined) {

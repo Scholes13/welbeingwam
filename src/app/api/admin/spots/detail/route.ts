@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -10,10 +11,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Spot ID is required' }, { status: 400 })
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const supabase = createSupabaseAdminClient()
 
         // Fetch spot details
         const { data: spot, error: spotError } = await supabase

@@ -1,50 +1,68 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
-import { getParticipantId } from '@/utils/tour-auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import {
+  computeLeaderboardEntries,
+  type LeaderboardActivity,
+  type LeaderboardAdjustment,
+  type LeaderboardProfile,
+  type LeaderboardQuestRow,
+} from '@/lib/gamification'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const dimension = request.nextUrl.searchParams.get('dimension') || null
 
-        // Get current participant ID from session
-        const currentParticipantId = await getParticipantId()
+        // Use Service Role to bypass RLS and see all user data
+        const supabase = createSupabaseAdminClient()
 
-        // Fetch leaderboard data from the view
-        const { data: leaderboard, error } = await supabase
-            .from('leaderboard_view')
-            .select('*')
-            .order('rank', { ascending: true })
+        // 1. Fetch Users
+        const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url, instagram_username, username')
 
-        if (error) {
-            console.error('Leaderboard query error:', error)
-            throw error
-        }
+        if (profileError) throw profileError
 
-        // Find current participant's rank if authenticated
-        let currentParticipantRank = null
-        if (currentParticipantId) {
-            const currentEntry = leaderboard?.find(entry => entry.id === currentParticipantId)
-            if (currentEntry) {
-                currentParticipantRank = {
-                    rank: currentEntry.rank,
-                    id: currentEntry.id,
-                    name: currentEntry.name,
-                    total_points: currentEntry.total_points,
-                    spots_visited: currentEntry.spots_visited,
-                    badge_count: currentEntry.badge_count
-                }
-            }
-        }
+        // 2. Fetch Activities (Steps)
+        const { data: activities, error: activityError } = await supabase
+            .from('activities')
+            .select('user_id, steps')
 
-        return NextResponse.json({ 
-            leaderboard: leaderboard || [],
-            currentParticipant: currentParticipantRank
+        if (activityError) throw activityError
+
+        // 3. Fetch Completed Quests (Points) — include dimension_id
+        const { data: userQuests, error: questError } = await supabase
+            .from('user_quests')
+            .select('user_id, quest:quests(points, dimension_id)')
+            .eq('status', 'approved')
+
+        if (questError) throw questError
+
+        // 4. Fetch Point Adjustments — include dimension_id
+        const { data: adjustments, error: adjError } = await supabase
+            .from('point_adjustments')
+            .select('user_id, points, dimension_id')
+
+        if (adjError) throw adjError
+
+        let leaderboard = computeLeaderboardEntries({
+            profiles: (profiles ?? []) as LeaderboardProfile[],
+            activities: (activities ?? []) as LeaderboardActivity[],
+            userQuests: (userQuests ?? []) as LeaderboardQuestRow[],
+            adjustments: (adjustments ?? []) as LeaderboardAdjustment[],
         })
+
+        // Sort by dimension points if a dimension filter is provided
+        if (dimension) {
+            leaderboard = leaderboard.sort(
+                (a, b) => (b.dimension_points[dimension] ?? 0) - (a.dimension_points[dimension] ?? 0)
+            )
+        } else {
+            leaderboard = leaderboard.sort((a, b) => b.overall_points - a.overall_points)
+        }
+
+        return NextResponse.json({ leaderboard })
     } catch (error) {
         console.error('Leaderboard API Error:', error)
         return NextResponse.json({ error: 'Failed to fetch leaderboard' }, { status: 500 })

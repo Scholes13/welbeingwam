@@ -1,13 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
     
     // Hardcoded survey ID from user request
     const surveyId = "ee9c8932-6817-431a-b207-a129c0435a98" 

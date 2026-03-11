@@ -1,37 +1,22 @@
-
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
 import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   try {
-    // 1. Verify Admin Status
-    const { authorized } = await verifyAdminPermission(supabase, userId, 'manage_points')
-
+    const { authorized, userId } = await verifyAdminPermission('manage_points')
     if (!authorized) {
-        return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const supabase = createSupabaseAdminClient()
     const { targetUserId, points, reason } = await request.json()
     
     if (!targetUserId || !points || !reason) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // 2. Insert Adjustment
+    // Insert Adjustment
     const { error: adjError } = await supabase
         .from('point_adjustments')
         .insert({
@@ -46,7 +31,7 @@ export async function POST(request: Request) {
         throw adjError
     }
 
-    // 3. Create Notification
+    // Create Notification
     const type = points > 0 ? 'success' : 'warning'
     const title = points > 0 ? 'Points Received!' : 'Points Deducted'
     const message = points > 0 

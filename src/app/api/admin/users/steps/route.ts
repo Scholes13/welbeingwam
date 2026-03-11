@@ -1,32 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { authorized } = await verifyAdminPermission('manage_users')
+  if (!authorized) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabase = createSupabaseAdminClient()
 
   try {
-    // 1. Verify Admin Status
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', userId)
-        .single()
-
-    if (profile?.username !== 'admin_wam') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     const { targetUserId, steps, reason } = await request.json()
     
     if (!targetUserId || !steps || !reason) {
@@ -54,12 +38,12 @@ export async function POST(request: Request) {
 
     console.log(`[Admin] Splitting ${stepsInt} steps into ${chunks.length} chunks:`, chunks)
 
-    // 2. Insert Manual Activity for Steps (Loop through chunks)
+    // Insert Manual Activity for Steps (Loop through chunks)
     for (const [index, stepChunk] of chunks.entries()) {
         const { error: actError } = await supabase
             .from('activities')
             .insert({
-                id: Date.now() + index, // Ensure unique ID per chunk
+                id: Date.now() + index,
                 user_id: targetUserId,
                 name: `Manual Adjustment: ${reason} ${chunks.length > 1 ? `(Part ${index + 1}/${chunks.length})` : ''}`,
                 type: 'Manual',

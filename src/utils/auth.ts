@@ -1,55 +1,138 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server'
 
 export type Permission = 
   | '*' 
+  | 'admin'
   | 'manage_users' 
   | 'manage_points' 
   | 'manage_rewards' 
+  | 'manage_quests'
+  | 'manage_surveys'
+  | 'manage_spots'
+  | 'manage_activities'
   | 'view_activity'
   | 'manage_admins'
   | 'manage_content';
 
+type AuthIdentity = {
+  id: string
+  email?: string | null
+}
+
+function extractUsernameFromEmail(email: string | null | undefined): string | null {
+  if (!email) return null
+  const [username] = email.split('@')
+  const normalized = username?.trim()
+  return normalized ? normalized : null
+}
+
+export async function resolveProfileIdFromAuthUser(user: AuthIdentity): Promise<number | null> {
+  if (/^-?\d+$/.test(user.id)) {
+    const asNumber = Number(user.id)
+    if (Number.isFinite(asNumber)) return asNumber
+  }
+
+  const username = extractUsernameFromEmail(user.email)
+  if (!username) return null
+
+  const adminClient = createSupabaseAdminClient()
+  const { data, error } = await adminClient
+    .from('profiles')
+    .select('id')
+    .ilike('username', username)
+    .limit(1)
+
+  if (error) {
+    console.error('Error resolving profile by username:', error)
+    return null
+  }
+
+  const profile = data?.[0] as { id: number } | undefined
+  return profile?.id ?? null
+}
+
+export async function getAuthProfileContext() {
+  const authUser = await getAuthUser()
+  if (!authUser) return null
+
+  const profileId = await resolveProfileIdFromAuthUser({
+    id: authUser.id,
+    email: authUser.email,
+  })
+
+  if (profileId === null) return null
+
+  return {
+    authUser,
+    profileId,
+  }
+}
+
+/**
+ * Get the currently authenticated user from the Supabase session.
+ * Returns null if not authenticated.
+ */
+export async function getAuthUser() {
+  const supabase = await createSupabaseServerClient()
+  const { data: { user }, error } = await supabase.auth.getUser()
+  if (error || !user) return null
+  return user
+}
+
+/**
+ * Check if a user has a specific permission.
+ * Reads from the `profiles.permissions` JSONB array.
+ */
 export async function hasPermission(
-  supabase: SupabaseClient, 
-  userId: string, 
+  userId: string | number,
   requiredPermission: Permission
 ): Promise<boolean> {
-  if (!userId) return false;
+  if (!userId) return false
 
-  const { data: user, error } = await supabase
+  const adminClient = createSupabaseAdminClient()
+  const { data: user, error } = await adminClient
     .from('profiles')
     .select('permissions, is_admin')
     .eq('id', userId)
-    .single();
+    .single()
 
   if (error || !user) {
-    console.error('Error checking permissions:', error);
-    return false;
+    console.error('Error checking permissions:', error)
+    return false
   }
 
-  // Legacy support or fallback: if checks pass, good.
-  // We strictly check permissions array now.
-
-  const permissions: string[] = user.permissions || [];
+  const permissions: string[] = user.permissions || []
   
-  if (permissions.includes('*')) return true;
+  if (permissions.includes('*')) return true
   
-  return permissions.includes(requiredPermission);
+  return permissions.includes(requiredPermission)
 }
 
+/**
+ * Verify current user has admin permission.
+ * Combines getAuthUser() + hasPermission() in one call.
+ * Returns userId on success for convenience.
+ */
 export async function verifyAdminPermission(
-    supabase: SupabaseClient,
-    userId: string,
-    requiredPermission: Permission
-): Promise<{ authorized: boolean; errorResponse?: any }> {
-    const authorized = await hasPermission(supabase, userId, requiredPermission);
-    
-    if (!authorized) {
-        return { 
-            authorized: false, 
-            errorResponse: { error: 'Forbidden: Insufficient permissions' } // Plain object, caller wraps in NextResponse or uses status logic
-        };
-    }
+  requiredPermission: Permission
+): Promise<{ authorized: boolean; userId?: string; errorResponse?: { error: string } }> {
+  const context = await getAuthProfileContext()
 
-    return { authorized: true };
+  if (!context) {
+    return { 
+      authorized: false, 
+      errorResponse: { error: 'Unauthorized' }
+    }
+  }
+
+  const authorized = await hasPermission(context.profileId, requiredPermission)
+  
+  if (!authorized) {
+    return { 
+      authorized: false, 
+      errorResponse: { error: 'Forbidden: Insufficient permissions' }
+    }
+  }
+
+  return { authorized: true, userId: String(context.profileId) }
 }

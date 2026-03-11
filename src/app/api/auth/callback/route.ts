@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server'
+import { resolveProfileIdFromAuthUser } from '@/utils/auth'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -7,11 +7,11 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/?error=missing_code`)
+    return NextResponse.redirect(`${origin}/dashboard?error=missing_code`)
   }
 
   try {
-    // 1. Exchange code for tokens
+    // 1. Exchange code for Strava tokens
     const tokenRes = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -31,52 +31,45 @@ export async function GET(request: Request) {
 
     const { athlete, access_token, refresh_token, expires_at } = tokenData
 
-    // 2. Upsert user to Supabase (using Service Role for full access)
-    // Note: client side client can't write to profiles typically without auth.users, 
-    // so we use service role here since we are in a trusted API route.
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    // 2. Get current logged-in user (must be authenticated first)
+    const supabase = await createSupabaseServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    const { error: upsertError } = await supabase.from('profiles').upsert({
-      id: athlete.id,
-      username: athlete.username,
-      full_name: `${athlete.firstname} ${athlete.lastname}`,
-      avatar_url: athlete.profile,
-      access_token,
-      refresh_token,
-      expires_at,
-      updated_at: new Date().toISOString(),
-    })
-
-    if (upsertError) {
-        console.error('Supabase Upsert Error:', upsertError)
-        throw upsertError
+    if (!user) {
+      return NextResponse.redirect(`${origin}/?error=not_logged_in`)
     }
 
-    // 3. Set Cookie
-    const cookieStore = await cookies()
-    cookieStore.set('strava_athlete_id', athlete.id.toString(), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
-      path: '/',
-    })
-    
-    // Also store access token in cookie for easier client-side fetching if needed, 
-    // though safer to fetch via server action or API. 
-    // For now we'll put it in cookie to match previous logic simply.
-    cookieStore.set('strava_access_token', access_token, {
-        httpOnly: true, // Changing to httpOnly for security, we'll pass it to client via page props or API if needed
-        secure: process.env.NODE_ENV === 'production',
-        maxAge: expires_at - Math.floor(Date.now() / 1000), 
-        path: '/',
+    const profileId = await resolveProfileIdFromAuthUser({
+      id: user.id,
+      email: user.email,
     })
 
-    return NextResponse.redirect(`${origin}/dashboard`)
+    if (profileId === null) {
+      return NextResponse.redirect(`${origin}/dashboard?error=profile_not_found`)
+    }
+
+    // 3. Update profile with Strava data (Connect Strava to existing account)
+    const adminClient = createSupabaseAdminClient()
+    const { error: updateError } = await adminClient
+      .from('profiles')
+      .update({
+        strava_athlete_id: athlete.id,
+        strava_access_token: access_token,
+        strava_refresh_token: refresh_token,
+        strava_expires_at: expires_at,
+        avatar_url: athlete.profile,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profileId)
+
+    if (updateError) {
+      console.error('Strava Link Error:', updateError)
+      throw updateError
+    }
+
+    return NextResponse.redirect(`${origin}/dashboard?strava=connected`)
   } catch (error) {
-    console.error('Auth Error:', error)
-    return NextResponse.redirect(`${origin}/?error=auth_failed`)
+    console.error('Strava Connect Error:', error)
+    return NextResponse.redirect(`${origin}/dashboard?error=strava_failed`)
   }
 }

@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -12,10 +13,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Survey ID is required' }, { status: 400 })
         }
 
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const supabase = createSupabaseAdminClient()
 
         const { data, error } = await supabase
             .from('surveys')

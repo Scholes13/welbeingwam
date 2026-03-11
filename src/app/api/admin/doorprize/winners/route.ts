@@ -1,11 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
     const { searchParams } = new URL(request.url)
     const activityId = searchParams.get('activityId')
     const doorprizeId = searchParams.get('doorprizeId')
@@ -41,10 +39,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
     
     const { activity_id, user_id, prize_name, doorprize_id } = await request.json()
 
@@ -91,10 +86,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
     const { searchParams } = new URL(request.url)
     const activityId = searchParams.get('activityId')
     const doorprizeId = searchParams.get('doorprizeId')

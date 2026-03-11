@@ -1,16 +1,40 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, Gift, Loader2, Timer, XCircle } from 'lucide-react'
+import { Check, Gift, Loader2, Timer, XCircle, Activity, Heart, Brain, Users, Sparkles, Briefcase } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useToast } from '@/context/ToastContext'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
-export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false }: any) {
+const dimensionIcons: Record<string, React.ComponentType<{className?: string}>> = {
+    activity: Activity,
+    heart: Heart,
+    brain: Brain,
+    users: Users,
+    sparkles: Sparkles,
+    briefcase: Briefcase,
+}
+
+export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false, hideHeader = false }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
     const [successIds, setSuccessIds] = useState<string[]>([])
     const [errorData, setErrorData] = useState<{ [key: string]: string }>({})
+    const [showPhotoModal, setShowPhotoModal] = useState(false)
+    const [selectedQuest, setSelectedQuest] = useState<any>(null)
+    const [photoFile, setPhotoFile] = useState<File | null>(null)
+    const [verificationNote, setVerificationNote] = useState('')
+    const [uploading, setUploading] = useState(false)
+    const [streakMap, setStreakMap] = useState<Record<string, { current_streak: number; multiplier: number; event_title: string }>>({})
 
     const { success, error } = useToast()
+
+    // Fetch user streaks
+    useEffect(() => {
+        fetch('/api/streaks')
+            .then(r => r.json())
+            .then(d => { if (d.streaks) setStreakMap(d.streaks) })
+            .catch(() => {})
+    }, [])
 
     const getCountdown = (expiresAt: string) => {
         const total = Date.parse(expiresAt) - Date.parse(new Date().toString())
@@ -34,14 +58,45 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
         return () => clearInterval(timer)
     }, [quests])
 
-    const handleClaim = async (questId: string) => {
+    const uploadQuestPhoto = async (file: File, questId: string) => {
+        const supabase = createSupabaseBrowserClient()
+        const ext = file.name.split('.').pop()
+        const path = `proofs/${questId}/${Date.now()}.${ext}`
+
+        const { data, error: uploadError } = await supabase.storage
+            .from('quest-proofs')
+            .upload(path, file, { contentType: file.type })
+
+        if (uploadError) throw uploadError
+
+        const { data: urlData } = supabase.storage
+            .from('quest-proofs')
+            .getPublicUrl(data.path)
+
+        return urlData.publicUrl
+    }
+
+    const handleClaim = async (quest: any, photoUrl?: string) => {
+        const questId = quest.id ?? quest
+
+        // If quest requires photo and no photo provided yet, show modal
+        if (quest.requires_photo && !photoUrl) {
+            setSelectedQuest(quest)
+            setShowPhotoModal(true)
+            return
+        }
+
         setLoadingIds(prev => [...prev, questId])
         setErrorData(prev => { const n = { ...prev }; delete n[questId]; return n }) // Clear previous errors
 
         try {
             const res = await fetch('/api/quests/claim', {
                 method: 'POST',
-                body: JSON.stringify({ questId })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    questId,
+                    photo_url: photoUrl || null,
+                }),
             })
             const data = await res.json()
 
@@ -63,17 +118,55 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
         }
     }
 
+    const handlePhotoSubmit = async () => {
+        if (!photoFile || !selectedQuest) return
+        setUploading(true)
+        try {
+            const url = await uploadQuestPhoto(photoFile, selectedQuest.id)
+            // Now call the claim API with photo_url
+            const res = await fetch('/api/quests/claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    questId: selectedQuest.id,
+                    photo_url: url,
+                    verification_note: verificationNote || null,
+                }),
+            })
+            const data = await res.json()
+            if (data.error) throw new Error(data.error)
+            // Success - close modal, refresh
+            setShowPhotoModal(false)
+            setPhotoFile(null)
+            setVerificationNote('')
+            setSelectedQuest(null)
+            onClaim()
+        } catch (err: any) {
+            alert(err.message || 'Upload failed')
+        } finally {
+            setUploading(false)
+        }
+    }
+
     // Filter logic: if includeCompleted is true, show all. Else show only uncompleted.
     const filteredQuests = includeCompleted
         ? quests
         : quests.filter((q: any) => !userQuests.some((uq: any) => uq.quest_id === q.id))
 
-    if (filteredQuests.length === 0) return null
-    const visibleQuests = showAll ? filteredQuests : filteredQuests.slice(0, 3)
+    // Pre-filter expired+uncompleted so they don't consume visible slots (especially in dashboard 3-item view)
+    const renderableQuests = filteredQuests.filter((q: any) => {
+        const isCompleted = userQuests.some((uq: any) => uq.quest_id === q.id)
+        if (!q.expires_at) return true // no deadline → always show
+        const isExpired = Date.parse(q.expires_at) - Date.now() <= 0
+        return !isExpired || isCompleted // hide expired+uncompleted
+    })
+
+    if (renderableQuests.length === 0) return null
+    const visibleQuests = showAll ? renderableQuests : renderableQuests.slice(0, 3)
 
     return (
         <section className="mb-8">
-            {!showAll && (
+            {!showAll && !hideHeader && (
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <Gift className="text-[#FC4C02]" /> Daily Quests
@@ -119,9 +212,24 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
 
                                     {/* Footer Info: Badge + Timer */}
                                     <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                        {quest.dimension && (
+                                            <span className="flex items-center gap-1 text-xs text-orange-300/70 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                {(() => {
+                                                    const IconComp = dimensionIcons[quest.dimension.icon]
+                                                    return IconComp ? <IconComp className="w-3 h-3" /> : null
+                                                })()}
+                                                {quest.dimension.display_name}
+                                            </span>
+                                        )}
                                         <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
                                             +{quest.points} PTS
                                         </span>
+
+                                        {quest.dimension_id && streakMap[quest.dimension_id] && streakMap[quest.dimension_id].current_streak > 0 && (
+                                            <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md shrink-0 font-bold">
+                                                🔥 {streakMap[quest.dimension_id].current_streak}d — {streakMap[quest.dimension_id].multiplier}x
+                                            </span>
+                                        )}
 
                                         <div className="h-5 flex items-center">
                                             {errorMessage ? (
@@ -140,7 +248,7 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
 
                                 <div className="z-10 shrink-0 self-center">
                                     <motion.button
-                                        onClick={() => !isCompleted && handleClaim(quest.id)}
+                                        onClick={() => !isCompleted && handleClaim(quest)}
                                         disabled={isLoading || isSuccess || isCompleted}
                                         whileTap={{ scale: 0.95 }}
                                         className={`px-5 py-2.5 rounded-xl font-bold text-xs min-w-[90px] flex justify-center items-center overflow-hidden relative transition-all shadow-lg ${isSuccess || isCompleted
@@ -187,6 +295,47 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                     })}
                 </AnimatePresence>
             </div>
+
+            {showPhotoModal && selectedQuest && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                    <div className="bg-[#1a1a1a] rounded-2xl p-6 max-w-md w-full">
+                        <h3 className="text-lg font-bold mb-2">Upload Bukti</h3>
+                        <p className="text-sm text-gray-400 mb-4">{selectedQuest.title}</p>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                            className="w-full mb-4 text-sm text-gray-400"
+                        />
+                        {photoFile && (
+                            <p className="text-xs text-green-400 mb-2">{photoFile.name}</p>
+                        )}
+                        <textarea
+                            placeholder="Catatan (opsional)..."
+                            value={verificationNote}
+                            onChange={(e) => setVerificationNote(e.target.value)}
+                            className="w-full bg-[#0a0a0a] border border-gray-800 rounded-lg px-3 py-2 text-sm mb-4 text-white"
+                            rows={2}
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setShowPhotoModal(false); setPhotoFile(null); setVerificationNote('') }}
+                                className="flex-1 py-2 rounded-lg bg-gray-800 text-sm text-white"
+                            >
+                                Batal
+                            </button>
+                            <button
+                                onClick={handlePhotoSubmit}
+                                disabled={!photoFile || uploading}
+                                className="flex-1 py-2 rounded-lg bg-[#FC4C02] text-sm font-bold text-white disabled:opacity-50"
+                            >
+                                {uploading ? 'Uploading...' : 'Submit'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </section>
     )
 }

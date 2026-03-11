@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Lock, ArrowRight, Loader2 } from 'lucide-react'
+import { resolveLoginCredentials } from '@/lib/auth/login'
 
 export default function LoginForm() {
     const [username, setUsername] = useState('')
@@ -11,15 +12,24 @@ export default function LoginForm() {
     const [error, setError] = useState('')
     const router = useRouter()
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
-        setLoading(true)
         setError('')
+
+        const formData = new FormData(e.currentTarget)
+        const credentials = resolveLoginCredentials(formData, { username, password })
+
+        if (!credentials.username || !credentials.password) {
+            setError('Username and password are required')
+            return
+        }
+
+        setLoading(true)
 
         try {
             const res = await fetch('/api/auth/standard-login', {
                 method: 'POST',
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify(credentials),
             })
 
             if (res.ok) {
@@ -28,7 +38,7 @@ export default function LoginForm() {
                 const data = await res.json()
                 setError(data.error || 'Login failed')
             }
-        } catch (e) {
+        } catch {
             setError('Something went wrong')
         } finally {
             setLoading(false)
@@ -40,10 +50,10 @@ export default function LoginForm() {
             {/* Header */}
             <div className="text-center mb-10">
                 <h1 className="text-6xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-gray-500 mb-2">
-                    WAM25
+                    WLM
                 </h1>
                 <p className="text-gray-400 font-light tracking-wide">
-                    Scaling Impact
+                    Balance Within. Impact Beyond.
                 </p>
             </div>
 
@@ -53,6 +63,8 @@ export default function LoginForm() {
                     <User className="absolute left-4 top-3.5 text-gray-500 w-5 h-5 group-focus-within:text-[#FC4C02] transition-colors" />
                     <input
                         type="text"
+                        name="username"
+                        autoComplete="username"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="Username"
@@ -64,6 +76,8 @@ export default function LoginForm() {
                     <Lock className="absolute left-4 top-3.5 text-gray-500 w-5 h-5 group-focus-within:text-[#FC4C02] transition-colors" />
                     <input
                         type="password"
+                        name="password"
+                        autoComplete="current-password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Password"
@@ -79,7 +93,7 @@ export default function LoginForm() {
 
                 <button
                     type="submit"
-                    disabled={!username || !password || loading}
+                    disabled={loading}
                     className="w-full bg-[#FC4C02] hover:bg-[#e04402] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition-all shadow-[0_0_20px_rgba(252,76,2,0.3)] hover:shadow-[0_0_30px_rgba(252,76,2,0.5)] flex items-center justify-center gap-2 group"
                 >
                     {loading ? (

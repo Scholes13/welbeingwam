@@ -4,68 +4,57 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
-import { Coins, Award, LogOut, Settings, User, Trophy, CreditCard, Scan, Send, X, Loader2, Footprints, MapPin, Calendar, Camera } from 'lucide-react'
+import { Coins, Award, LogOut, Settings, User, Trophy, CreditCard, Scan, Send, X, Loader2, Footprints } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { useProfile } from '@/hooks/use-swr-hooks'
 import { useToast } from '@/context/ToastContext'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import Loader from '@/components/ui/Loader'
-import BadgeGallery from '@/components/profile/BadgeGallery'
-import { useSettings } from '@/context/SettingsContext'
-import { format } from 'date-fns'
-import CompletionCelebration from '@/components/map/CompletionCelebration'
 
 export default function ProfilePage() {
     const { profile, stats, totalPoints, coins, isLoading: loading } = useProfile()
-    const { settings } = useSettings()
     const [showIdCard, setShowIdCard] = useState(false)
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [scannedUser, setScannedUser] = useState<any>(null)
     const [message, setMessage] = useState('')
     const [sending, setSending] = useState(false)
-    const [tourProfile, setTourProfile] = useState<any>(null)
-    const [loadingTourProfile, setLoadingTourProfile] = useState(true)
-    const [showCompletionCelebration, setShowCompletionCelebration] = useState(false)
-    const [hasShownCelebration, setHasShownCelebration] = useState(false)
+    const [activityScanMode, setActivityScanMode] = useState<'scan_in' | 'scan_out'>('scan_in')
+    const [userAwards, setUserAwards] = useState<any[]>([])
     const router = useRouter()
     const { success, error } = useToast()
 
-    // Fetch city tour profile data
-    useEffect(() => {
-        async function fetchTourProfile() {
-            try {
-                const res = await fetch('/api/profile')
-                if (res.ok) {
-                    const data = await res.json()
-                    setTourProfile(data)
-                }
-            } catch (err) {
-                console.error('Error fetching tour profile:', err)
-            } finally {
-                setLoadingTourProfile(false)
-            }
+    const persistActivityScanMode = (mode: 'scan_in' | 'scan_out') => {
+        setActivityScanMode(mode)
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('activityScanMode', mode)
         }
-        fetchTourProfile()
+    }
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        const savedMode = localStorage.getItem('activityScanMode')
+        if (savedMode === 'scan_out') {
+            setActivityScanMode('scan_out')
+        }
     }, [])
 
-    // Check for completion and show celebration
+    // Auto-fetched by SWR
+
+    // Fetch user awards
     useEffect(() => {
-        if (tourProfile && !hasShownCelebration) {
-            const { stats } = tourProfile
-            const isComplete = stats.total_spots > 0 && stats.spots_visited === stats.total_spots
-            
-            if (isComplete) {
-                // Check if we've already shown the celebration in this session
-                const celebrationShown = sessionStorage.getItem('completion_celebration_shown')
-                
-                if (!celebrationShown) {
-                    setShowCompletionCelebration(true)
-                    setHasShownCelebration(true)
-                    sessionStorage.setItem('completion_celebration_shown', 'true')
-                }
-            }
+        if (!profile) return
+        const fetchAwards = async () => {
+            try {
+                const { data } = await supabase
+                    .from('monthly_awards')
+                    .select('*, dimension:dimensions(name, display_name, icon)')
+                    .eq('user_id', profile.id)
+                    .order('period', { ascending: false })
+                setUserAwards(data || [])
+            } catch { /* ignore */ }
         }
-    }, [tourProfile, hasShownCelebration])
+        fetchAwards()
+    }, [profile])
 
     const handleLogout = () => {
         router.push('/api/auth/logout')
@@ -79,6 +68,29 @@ export default function ProfilePage() {
         if (scannedUser) return
 
         try {
+            if (code.startsWith('ACT:')) {
+                const res = await fetch('/api/activity/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: code })
+                })
+                const data = await res.json()
+
+                if (res.ok && data.success) {
+                    if (data.action === 'scan_in') {
+                        persistActivityScanMode('scan_out')
+                    } else {
+                        persistActivityScanMode('scan_in')
+                    }
+                    success(data.message || 'Data tersimpan')
+                } else {
+                    error(data.error || data.message || 'Gagal scan activity')
+                }
+
+                setIsScannerOpen(false)
+                return
+            }
+
             // Check if it's a SPOT code (starts with SPOT-)
             if (code.startsWith('SPOT-')) {
                 const res = await fetch('/api/spots/scan', {
@@ -141,14 +153,11 @@ export default function ProfilePage() {
         }
     }
 
-    if (loading || loadingTourProfile) {
+    if (loading) {
         return <Loader text="LOADING PROFILE..." />
     }
 
-    if (!profile && !tourProfile) return null
-
-    // Use tour profile if available, otherwise fall back to legacy profile
-    const displayProfile = tourProfile?.participant || profile
+    if (!profile) return null
 
     return (
         <div className="min-h-screen bg-black text-white p-4 pb-32">
@@ -168,7 +177,9 @@ export default function ProfilePage() {
                         <div className="w-full max-w-sm aspect-square bg-black border-2 border-[#FC4C02] rounded-2xl overflow-hidden relative">
                             <Scanner onScan={handleScan} />
                         </div>
-                        <p className="text-white mt-4 font-mono text-sm">Scan user QR Code</p>
+                        <p className="text-white mt-4 font-mono text-sm">
+                            {activityScanMode === 'scan_out' ? 'Scan Activity QR (Scan Out)' : 'Scan Activity QR (Scan In)'}
+                        </p>
                     </div>
                 )}
 
@@ -212,7 +223,7 @@ export default function ProfilePage() {
                     <div className="flex items-center gap-3">
                         <div className="relative">
                             <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-[#FC4C02]">
-                                <img src={displayProfile.profile_photo_url || profile?.avatar_url || 'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix'} alt="Profile" className="w-full h-full object-cover" />
+                                <img src={profile.avatar_url || 'https://api.dicebear.com/9.x/avataaars/svg?seed=Felix'} alt="Profile" className="w-full h-full object-cover" />
                             </div>
                             <div className="absolute -bottom-1 -right-1 bg-black rounded-full p-0.5 border border-[#FC4C02]">
                                 <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4" xmlns="http://www.w3.org/2000/svg">
@@ -222,16 +233,19 @@ export default function ProfilePage() {
                             </div>
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold">{displayProfile.name || profile?.full_name || `@${profile?.username}`}</h1>
-                            <p className="text-xs text-gray-400 font-mono">{tourProfile ? `#${displayProfile.code}` : `@${profile?.username}`}</p>
+                            <h1 className="text-xl font-bold">{profile.full_name || `@${profile.username}`}</h1>
+                            <p className="text-xs text-gray-400 font-mono">@{profile.username}</p>
                         </div>
                     </div>
                     <div className="flex gap-2 relative">
                         <button
                             onClick={() => setIsScannerOpen(true)}
-                            className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+                            className="px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10 flex items-center gap-2"
                         >
                             <Scan size={20} className="text-[#FC4C02]" />
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-300">
+                                {activityScanMode === 'scan_out' ? 'Scan Out' : 'Scan In'}
+                            </span>
                         </button>
 
                         <Link href="/profile/settings" className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10">
@@ -244,8 +258,8 @@ export default function ProfilePage() {
                 <div className="flex flex-col items-center mb-10">
                     <div className="relative mb-4">
                         <img
-                            src={displayProfile.profile_photo_url || profile?.avatar_url || 'https://api.dicebear.com/9.x/avataaars/svg?seed=default'}
-                            alt={displayProfile.name || profile?.username}
+                            src={profile.avatar_url}
+                            alt={profile.username}
                             className="w-28 h-28 rounded-full border-4 border-[#FC4C02]/20 object-cover shadow-[0_0_30px_rgba(252,76,2,0.2)]"
                         />
                         <div className="absolute bottom-0 right-0 bg-[#FC4C02] text-white p-1.5 rounded-full border-4 border-black">
@@ -258,174 +272,43 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    <h1 className="text-2xl font-bold">{displayProfile.name || `${profile?.firstname} ${profile?.lastname}`}</h1>
-                    {tourProfile ? (
-                        <p className="text-gray-500 font-mono">#{displayProfile.code}</p>
-                    ) : (
-                        <>
-                            <p className="text-gray-500">@{profile?.username}</p>
-                            <p className="text-xs text-stone-500 mt-1 uppercase tracking-widest">{profile?.city}, {profile?.country}</p>
-                        </>
-                    )}
+                    <h1 className="text-2xl font-bold">{profile.firstname} {profile.lastname}</h1>
+                    <p className="text-gray-500">@{profile.username}</p>
+                    <p className="text-xs text-stone-500 mt-1 uppercase tracking-widest">{profile.city}, {profile.country}</p>
                 </div>
 
-                {/* Stats Grid - City Tour Stats */}
-                {tourProfile ? (
-                    <>
-                        <div className="grid grid-cols-3 gap-3 mb-6">
-                            <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                                <Trophy className="w-5 h-5 text-[#FC4C02] mb-2" />
-                                <span className="text-xl font-bold font-mono">{tourProfile.stats.total_points.toLocaleString()}</span>
-                                <span className="text-xs text-gray-500 uppercase">Points</span>
-                            </div>
-                            <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                                <MapPin className="w-5 h-5 text-green-500 mb-2" />
-                                <span className="text-xl font-bold font-mono">{tourProfile.stats.spots_visited}</span>
-                                <span className="text-xs text-gray-500 uppercase">Visited</span>
-                            </div>
-                            <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                                <MapPin className="w-5 h-5 text-gray-500 mb-2" />
-                                <span className="text-xl font-bold font-mono">{tourProfile.stats.spots_remaining}</span>
-                                <span className="text-xs text-gray-500 uppercase">Remaining</span>
-                            </div>
-                        </div>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
+                        <Footprints className="w-6 h-6 text-[#FC4C02] mb-2" />
+                        <span className="text-2xl font-bold font-mono">{stats.steps.toLocaleString()}</span>
+                        <span className="text-xs text-gray-500 uppercase">Steps</span>
+                    </div>
+                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
+                        <Trophy className="w-6 h-6 text-yellow-500 mb-2" />
+                        <span className="text-2xl font-bold font-mono">{totalPoints.toLocaleString()}</span>
+                        <span className="text-xs text-gray-500 uppercase">Total Points</span>
+                    </div>
+                </div>
 
-                        {/* Progress Bar */}
-                        <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl mb-6">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm font-medium text-gray-400">Tour Progress</span>
-                                <span className="text-sm font-bold text-[#FC4C02]">
-                                    {tourProfile.stats.total_spots > 0 
-                                        ? Math.round((tourProfile.stats.spots_visited / tourProfile.stats.total_spots) * 100)
-                                        : 0}%
-                                </span>
-                            </div>
-                            <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
-                                <div 
-                                    className="bg-gradient-to-r from-[#FC4C02] to-orange-500 h-full rounded-full transition-all duration-500"
-                                    style={{ 
-                                        width: `${tourProfile.stats.total_spots > 0 
-                                            ? (tourProfile.stats.spots_visited / tourProfile.stats.total_spots) * 100 
-                                            : 0}%` 
-                                    }}
-                                />
-                            </div>
-                            <p className="text-xs text-gray-500 mt-2 text-center">
-                                {tourProfile.stats.spots_visited} of {tourProfile.stats.total_spots} spots completed
-                            </p>
+                {/* Coins Wallet */}
+                <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-md border border-[#FC4C02]/30 p-5 rounded-2xl flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-[#FC4C02]/20 rounded-xl text-[#FC4C02]">
+                            <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
+                                <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
                         </div>
-
-                        {/* Badges Section */}
-                        {settings?.features.badges && (
-                            <div className="mb-6">
-                                <BadgeGallery 
-                                    badges={tourProfile.badges || []} 
-                                    isEnabled={settings.features.badges}
-                                />
-                            </div>
-                        )}
-
-                        {/* Visited Spots List */}
-                        {tourProfile.visits && tourProfile.visits.length > 0 && (
-                            <div className="bg-gray-900/30 backdrop-blur-md border border-white/5 rounded-2xl p-6 mb-6">
-                                <h2 className="text-xl font-bold flex items-center gap-2 mb-4">
-                                    <MapPin className="w-5 h-5 text-[#FC4C02]" />
-                                    Visited Spots
-                                </h2>
-                                <div className="space-y-3 max-h-96 overflow-y-auto">
-                                    {tourProfile.visits.map((visit: any) => (
-                                        <div 
-                                            key={visit.id}
-                                            className="bg-black/30 border border-white/10 rounded-xl p-4 hover:border-white/20 transition-colors"
-                                        >
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        {visit.category_icon && (
-                                                            <img 
-                                                                src={visit.category_icon} 
-                                                                alt={visit.category_name}
-                                                                className="w-4 h-4 object-contain"
-                                                            />
-                                                        )}
-                                                        <h3 className="font-bold text-sm">{visit.spot_name}</h3>
-                                                    </div>
-                                                    {visit.spot_description && (
-                                                        <p className="text-xs text-gray-500 mb-2 line-clamp-2">
-                                                            {visit.spot_description}
-                                                        </p>
-                                                    )}
-                                                    <div className="flex items-center gap-3 text-xs">
-                                                        <span className="flex items-center gap-1 text-gray-400">
-                                                            <Calendar className="w-3 h-3" />
-                                                            {format(new Date(visit.checked_in_at), 'MMM d, HH:mm')}
-                                                        </span>
-                                                        <span className="flex items-center gap-1 text-yellow-500 font-mono">
-                                                            +{visit.points_earned}
-                                                            <svg viewBox="0 0 24 24" fill="none" className="w-3 h-3" xmlns="http://www.w3.org/2000/svg">
-                                                                <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
-                                                                <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                            </svg>
-                                                        </span>
-                                                        {visit.photo_url && (
-                                                            <span className="flex items-center gap-1 text-blue-400">
-                                                                <Camera className="w-3 h-3" />
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {visit.photo_url && (
-                                                    <div className="w-16 h-16 rounded-lg overflow-hidden border border-white/10 flex-shrink-0">
-                                                        <img 
-                                                            src={visit.photo_url} 
-                                                            alt="Check-in photo"
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </>
-                ) : (
-                    /* Legacy Stats Grid */
-                    <>
-                        <div className="grid grid-cols-2 gap-4 mb-8">
-                            <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
-                                <Footprints className="w-6 h-6 text-[#FC4C02] mb-2" />
-                                <span className="text-2xl font-bold font-mono">{stats.steps.toLocaleString()}</span>
-                                <span className="text-xs text-gray-500 uppercase">Steps</span>
-                            </div>
-                            <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
-                                <Trophy className="w-6 h-6 text-yellow-500 mb-2" />
-                                <span className="text-2xl font-bold font-mono">{totalPoints.toLocaleString()}</span>
-                                <span className="text-xs text-gray-500 uppercase">Total Points</span>
-                            </div>
+                        <div>
+                            <span className="block text-2xl font-bold font-mono text-white">{coins?.toLocaleString() || 0}</span>
+                            <span className="text-xs text-orange-400 font-bold uppercase tracking-wider">Available Coins</span>
                         </div>
-
-                        {/* Coins Wallet */}
-                        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-md border border-[#FC4C02]/30 p-5 rounded-2xl flex items-center justify-between mb-8">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-[#FC4C02]/20 rounded-xl text-[#FC4C02]">
-                                    <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="12" cy="12" r="10" className="fill-yellow-500" />
-                                        <path d="M12 6V18M12 6C14 6 15 7 15 9C15 11 13.5 12 12 12M12 6C10.5 6 9 7 9 9C9 10 9.5 11 11 11.5M12 18C10.5 18 9 17 9 15C9 13 10.5 12 12 12M12 18C13.5 18 15 17 15 15C15 14 14.5 13 13 12.5" stroke="#B45309" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <span className="block text-2xl font-bold font-mono text-white">{coins?.toLocaleString() || 0}</span>
-                                    <span className="text-xs text-orange-400 font-bold uppercase tracking-wider">Available Coins</span>
-                                </div>
-                            </div>
-                            <Link href="/rewards" className="px-4 py-2 bg-[#FC4C02] hover:bg-orange-600 text-white text-xs font-bold uppercase rounded-lg transition-colors">
-                                Redeem
-                            </Link>
-                        </div>
-                    </>
-                )}
+                    </div>
+                    <Link href="/rewards" className="px-4 py-2 bg-[#FC4C02] hover:bg-orange-600 text-white text-xs font-bold uppercase rounded-lg transition-colors">
+                        Redeem
+                    </Link>
+                </div>
 
                 {/* Menu */}
                 <div className="space-y-3">
@@ -469,9 +352,26 @@ export default function ProfilePage() {
                     </div>
                 </div>
 
+                {/* Awards Section */}
+                {userAwards.length > 0 && (
+                    <div className="mt-6">
+                        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">🏆 Awards</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {userAwards.map((award) => (
+                                <div key={award.id} className="bg-white/5 border border-yellow-500/20 rounded-xl p-3 text-center">
+                                    <div className="text-2xl mb-1">🏆</div>
+                                    <div className="text-xs font-bold text-orange-400 line-clamp-2">{award.award_title}</div>
+                                    <div className="text-[10px] text-gray-500 mt-1">{award.dimension?.display_name}</div>
+                                    <div className="text-[10px] text-gray-600">{award.period}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="mt-12 text-center">
                     <p className="text-xs text-gray-600">
-                        ScalingImpact v1.0 Beta
+                        WLM v2.0 — Scaling Impact 2026
                     </p>
                 </div>
             </div>
@@ -531,17 +431,6 @@ export default function ProfilePage() {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Completion Celebration */}
-            {tourProfile && (
-                <CompletionCelebration
-                    isOpen={showCompletionCelebration}
-                    onClose={() => setShowCompletionCelebration(false)}
-                    participantName={tourProfile.participant?.name || 'Explorer'}
-                    totalPoints={tourProfile.stats?.total_points || 0}
-                    spotsVisited={tourProfile.stats?.spots_visited || 0}
-                />
             )}
         </div>
     )

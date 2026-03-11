@@ -1,5 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -7,35 +6,21 @@ export async function POST(request: Request) {
     const { username, password } = await request.json()
 
     if (!username || !password) {
-        return NextResponse.json({ error: 'Username/Password required' }, { status: 400 })
+      return NextResponse.json({ error: 'Username/Password required' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = await createSupabaseServerClient()
 
-    // Find user by username
-    const { data: user, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .single()
+    // Sign in with Supabase Auth (username@wam.local email pattern)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: `${username}@werkudara.com`,
+      password: password,
+    })
 
-    if (error || !user) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
+    if (error) {
+      console.error('Login Error:', error.message)
+      return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
-
-    // Check Password (Plain text for MVP as requested "user password akan di set oleh super admin")
-    if (user.password !== password) {
-        return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
-    }
-
-    // Set Session Cookies (Valid for 400 days)
-    const cookieStore = await cookies()
-    const oneYear = 60 * 60 * 24 * 400
-    cookieStore.set('strava_athlete_id', user.id, { httpOnly: true, secure: true, maxAge: oneYear }) 
-    cookieStore.set('is_manual_user', 'true', { httpOnly: true, secure: true, maxAge: oneYear })
 
     return NextResponse.json({ success: true })
 

@@ -1,34 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
+    const { authorized } = await verifyAdminPermission('manage_content')
+    if (!authorized) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+
     const { surveyId, questionText, orderIndex, options } = await request.json()
-    // options: [{ label: '...', value: '...', tags: ['...'] }]
-
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!currentUserId || !questionText || !surveyId) {
+    if (!questionText || !surveyId) {
         return NextResponse.json({ error: 'Missing data' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Verify Admin
-    const { data: adminUser } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', currentUserId)
-        .single()
-
-    if (adminUser?.username !== 'admin_wam') {
-         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
+    const supabase = createSupabaseAdminClient()
 
     // 1. Create Question
     const { data: questionData, error: qError } = await supabase

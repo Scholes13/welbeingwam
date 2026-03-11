@@ -1,14 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-    const cookieStore = await cookies()
-    const userId = cookieStore.get('strava_athlete_id')?.value
-
-    if (!userId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const context = await getAuthProfileContext()
+    if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = context.profileId
 
     const { backgroundId } = await request.json()
 
@@ -16,10 +13,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Background ID required' }, { status: 400 })
     }
 
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createSupabaseAdminClient()
 
     try {
         const { error } = await supabase

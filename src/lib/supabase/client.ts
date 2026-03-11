@@ -1,25 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from './types'
+import { createBrowserClient } from '@supabase/ssr'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
-
-// Create typed Supabase client with Realtime enabled
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  realtime: {
-    params: {
-      eventsPerSecond: 10
-    }
-  }
-})
-
-// Helper to create a typed client (for use in API routes with service role)
-export function createTypedClient(url: string, key: string) {
-  return createClient<Database>(url, key, {
-    realtime: {
-      params: {
-        eventsPerSecond: 10
-      }
-    }
-  })
+export function createSupabaseBrowserClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 }
+
+// Legacy export for backward compatibility during migration
+// Components that import { supabase } from '@/lib/supabase/client' still work
+export const supabase = createSupabaseBrowserClient()

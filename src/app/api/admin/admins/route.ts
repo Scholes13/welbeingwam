@@ -1,31 +1,15 @@
-
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
 import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const currentUserId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!currentUserId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { authorized } = await verifyAdminPermission(supabase, currentUserId, 'manage_admins')
-
+  const { authorized } = await verifyAdminPermission('manage_admins')
   if (!authorized) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Fetch all users who have some permissions or is_admin flag
-  // We want to list potential admins or existing admins
-  // For simplicity, let's fetch all users with is_admin = true OR permissions != empty
+  const supabase = createSupabaseAdminClient()
+
   const { data: admins, error } = await supabase
     .from('profiles')
     .select('id, username, full_name, permissions, is_admin')
@@ -39,37 +23,22 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-    const cookieStore = await cookies()
-    const currentUserId = cookieStore.get('strava_athlete_id')?.value
-  
-    if (!currentUserId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-  
-    const { authorized } = await verifyAdminPermission(supabase, currentUserId, 'manage_admins')
-  
+    const { authorized } = await verifyAdminPermission('manage_admins')
     if (!authorized) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-  
+
+    const supabase = createSupabaseAdminClient()
     const { targetUserId, permissions } = await request.json()
 
     if (!targetUserId || !Array.isArray(permissions)) {
         return NextResponse.json({ error: 'Invalid data' }, { status: 400 })
     }
 
-    // Update the user
     const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
             permissions: permissions,
-            // If permissions is not empty, set is_admin to true so checks related to strict is_admin pass if needed, 
-            // OR we rely solely on permissions. For backward compatibility, keep is_admin = true if permissions > 0
             is_admin: true 
         })
         .eq('id', targetUserId)

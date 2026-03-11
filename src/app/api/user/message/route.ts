@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthProfileContext } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkPositiveSentiment } from '@/lib/openrouter'
 
@@ -7,12 +7,9 @@ import { checkPositiveSentiment } from '@/lib/openrouter'
 const REPLY_REWARD_POINTS = 10
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  const senderId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!senderId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const context = await getAuthProfileContext()
+  if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const senderId = context.profileId
 
   const { targetUserId, message, isReply = false } = await request.json()
 
@@ -20,10 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing data' }, { status: 400 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const supabase = createSupabaseAdminClient()
 
   try {
       // Save the message

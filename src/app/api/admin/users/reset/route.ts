@@ -1,41 +1,23 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { verifyAdminPermission } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  const userId = cookieStore.get('strava_athlete_id')?.value
-
-  if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   try {
-    // 1. Verify Admin Status (Strict check)
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', userId)
-        .single()
-
-    if (profile?.username !== 'admin_wam') {
+    const { authorized } = await verifyAdminPermission('manage_users')
+    if (!authorized) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const supabase = createSupabaseAdminClient()
     const { targetUserId, type } = await request.json()
     
     if (!targetUserId || !type) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // 2. Perform Reset
+    // Perform Reset
     if (type === 'steps' || type === 'all') {
-        // Delete all activities for this user (resets step count)
         const { error: stepsError } = await supabase
             .from('activities')
             .delete()
@@ -45,7 +27,6 @@ export async function POST(request: Request) {
     }
 
     if (type === 'quests' || type === 'all') {
-        // Delete all refined quests (resets quest status and points)
         const { error: questError } = await supabase
             .from('user_quests')
             .delete()
@@ -53,9 +34,6 @@ export async function POST(request: Request) {
         
         if (questError) throw questError
         
-        // Also reset manual point adjustments if 'all' or specific type if needed
-        // Assuming 'quests' implies points from quests. 
-        // We might want to clear 'point_adjustments' too if 'all'.
         if (type === 'all') {
              const { error: adjError } = await supabase
                 .from('point_adjustments')
@@ -66,7 +44,6 @@ export async function POST(request: Request) {
     }
 
     if (type === 'rewards' || type === 'all') {
-         // Delete all reward claims (resets spending history)
          const { error: rewardError } = await supabase
             .from('user_rewards')
             .delete()

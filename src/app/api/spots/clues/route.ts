@@ -1,20 +1,13 @@
-import { createClient } from '@supabase/supabase-js'
-import { cookies } from 'next/headers'
+import { getAuthUser } from '@/utils/auth'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
 export async function GET() {
     try {
-        const cookieStore = await cookies()
-        const userId = cookieStore.get('strava_athlete_id')?.value
+        const user = await getAuthUser()
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-        if (!userId) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        )
+        const supabase = createSupabaseAdminClient()
 
         // Fetch all active spots with clues
         const { data: spots } = await supabase

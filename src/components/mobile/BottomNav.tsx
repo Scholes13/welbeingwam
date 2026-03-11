@@ -2,42 +2,22 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Map, Trophy, User, Settings } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Home, Trophy, User, Gift, Target } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 export default function BottomNav() {
     const pathname = usePathname()
-    const [isAdmin, setIsAdmin] = useState(false)
-
-    useEffect(() => {
-        // Check if user is admin
-        async function checkAdmin() {
-            try {
-                const res = await fetch('/api/tour/auth/me')
-                if (res.ok) {
-                    const data = await res.json()
-                    setIsAdmin(data.participant?.is_admin || false)
-                }
-            } catch (error) {
-                console.error('Failed to check admin status:', error)
-            }
-        }
-        checkAdmin()
-    }, [])
 
     const links = [
-        { href: '/map', label: 'Map', icon: Map },
+        { href: '/dashboard', label: 'Home', icon: Home },
+        { href: '/quests', label: 'Quests', icon: Target },
+        { href: '/rewards', label: 'Rewards', icon: Gift },
         { href: '/leaderboard', label: 'Rank', icon: Trophy },
         { href: '/profile', label: 'Profile', icon: User },
     ]
 
-    // Add admin button if user is admin
-    if (isAdmin) {
-        links.push({ href: '/dashboard/admin', label: 'Admin', icon: Settings })
-    }
-
-    // Don't show on login page, tour page, survey, doorprize, or within admin dashboard pages
-    if (pathname === '/' || pathname === '/tour' || pathname?.startsWith('/survey') || pathname?.startsWith('/doorprize') || pathname?.startsWith('/dashboard/admin')) return null
+    // Don't show on login page, survey, doorprize, or admin dashboard
+    if (pathname === '/' || pathname?.startsWith('/survey') || pathname?.startsWith('/doorprize') || pathname === '/dashboard/admin') return null
 
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50 p-4 pb-6">

@@ -2,13 +2,47 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, Shield, Search, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, Pencil, BarChart2, Trophy } from 'lucide-react'
-import { Scanner } from '@yudiel/react-qr-scanner'
+import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu, FileText, Zap } from 'lucide-react'
+import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
 import { supabase } from '@/lib/supabase/client'
 
 import ManageAdmins from './ManageAdmins'
+import type { AdminTab } from './components/AdminTabs'
+import { AdminSidebar } from './components/AdminSidebar'
+import {
+    ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY,
+    getAdminCreateLabel,
+    getAdminPageMeta,
+    resolveAdminSidebarCollapsedState,
+} from './components/adminLayout'
+import {
+    formatActivityTypeOptionLabel,
+    getChildActivityTypes,
+    getTopLevelActivityTypes,
+    resolveInitialActivityTypeSelection,
+    resolveTypeBadgeLabel,
+    type ActivityTypeNode,
+} from './components/activityTypeHierarchy'
+import { buildActivityTypePayload, shouldSubmitActivityTypeByKey } from './components/activityTypeForm'
+import { getMissingDefaultTopCategories } from './components/activityTypeDefaults'
+import {
+    getActivityTypeFormGridClass,
+    getActivityTypeModalContainerClass,
+    getActivityTypeModalListClass,
+} from './components/activityTypeModalLayout'
+import {
+    getCreateActivityModalContainerClass,
+    getCreateActivityModalFormClass,
+    getCreateActivityModalHeaderClass,
+    getCreateActivityTimeGridClass,
+    getCreateActivityTypeGridClass,
+} from './components/createActivityModalLayout'
+import { RewardsTab } from './components/RewardsTab'
+import { UsersTab } from './components/UsersTab'
+import { useUserSelection } from './hooks/useUserSelection'
+import type { AdminReward, AdminUser } from './types'
 
 export default function AdminPage() {
     const { success, error: toastError, info } = useToast()
@@ -18,43 +52,28 @@ export default function AdminPage() {
     const [isEditingSurvey, setIsEditingSurvey] = useState(false)
     const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
 
-    const [activeTab, setActiveTab] = useState<'users' | 'quests' | 'surveys' | 'rewards' | 'activities' | 'spots' | 'doorprize' | 'admins'>('users')
+    const [activeTab, setActiveTab] = useState<AdminTab>('users')
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [myPermissions, setMyPermissions] = useState<string[]>([])
 
     useEffect(() => {
-        // Fetch my permissions
+        // Fetch my permissions using Supabase Auth
         const checkMe = async () => {
             const { data: { user } } = await supabase.auth.getUser()
-            // supabase.auth.getUser() might be empty if using custom auth? 
-            // The existing code uses cookies 'strava_athlete_id'.
-            // Let's rely on an API call to /api/me or just /api/admin/check_auth if it existed.
-            // Or we just accept that some tabs will 403 if we click them.
-            // Better: Let's fetch /api/admin/me (we need to make this?) OR just fetch profile by ID from cookie logic if possible client side?
-            // Actually, we can just do a fetch to a new endpoint or existing one to get my role.
-            // let's use a quick RPC or just select from profiles if RLS allows reading own profile.
-            // The existing code initializes supabase client.
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('permissions, is_admin')
+                    .eq('id', user.id)
+                    .single()
 
-            // Actually, let's just add the tab and handle 403s gracefully for now, 
-            // OR fetch profile content.
-            // "profiles" table RLS usually allows "Users can view own profile".
-            // So:
-            /*
-            const { data: { session } } = await supabase.auth.getSession()
-            if (session) { ... }
-            */
-            // But we use custom auth with strava_athlete_id cookie.
-            // Client side `supabase` might not have the session if it's custom cookie based.
-            // Use a server action or an API route to get "my permissions".
-
-            // For now, let's just enable the tab and let the API reject if unauthorized. 
-            // But to hide the tab... we need to know.
-
-            // I'll skip hiding tabs for *security* but hide them for *UX* if I can.
-            // Let's assume for now we show all tabs, and if they click 'manage admins' and fail, so be it.
-            // Or better, let's fetch profile using a direct query if we can.
-
-            // Existing code doesn't seem to fetch "my profile" on mount for admin check.
+                if (profile?.permissions) {
+                    setMyPermissions(profile.permissions)
+                }
+            }
         }
+        checkMe()
     }, [])
 
     // ... (keep existing state) ...
@@ -77,13 +96,36 @@ export default function AdminPage() {
         setIsModalOpen(true)
     }
 
-    // Activity & Scanner State
-    // Activity & Scanner State
+    // Activity State
     const [activities, setActivities] = useState<any[]>([])
-    const [activityForm, setActivityForm] = useState({ title: '', date: new Date().toISOString().split('T')[0], points: 0 })
+    const [activityTypes, setActivityTypes] = useState<ActivityTypeNode[]>([])
+    const [newActivityTypeName, setNewActivityTypeName] = useState('')
+    const [newActivityTypeDescription, setNewActivityTypeDescription] = useState('')
+    const [newActivityTypeParentId, setNewActivityTypeParentId] = useState('')
+    const [newActivityTypeDimensionId, setNewActivityTypeDimensionId] = useState('')
+    const [isActivityTypeModalOpen, setIsActivityTypeModalOpen] = useState(false)
+    const [isActivityTypeHierarchyEnabled, setIsActivityTypeHierarchyEnabled] = useState(true)
+    const [selectedTypeFilter, setSelectedTypeFilter] = useState('')
+    const [activityForm, setActivityForm] = useState({
+        title: '',
+        date: new Date().toISOString().split('T')[0],
+        startTime: '19:00',
+        endTime: '21:00',
+        points: 0,
+        parentTypeId: '',
+        typeId: '',
+        isPublished: true,
+        scheduleMode: 'one_time',
+        recurringWeeks: 4,
+    })
+
+    // Activity QR Display State
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
-    const [scanResult, setScanResult] = useState<{ success: boolean, message: string, user?: any } | null>(null)
+    const [activityQrValue, setActivityQrValue] = useState<string | null>(null)
+    const [activityQrExpiresAt, setActivityQrExpiresAt] = useState<string | null>(null)
+    const [activityQrTitle, setActivityQrTitle] = useState('')
+    const [activityQrLoading, setActivityQrLoading] = useState(false)
 
     // Doorprize State
     const [doorprizeSessions, setDoorprizeSessions] = useState<any[]>([])
@@ -94,11 +136,47 @@ export default function AdminPage() {
     const [doorprizeWinners, setDoorprizeWinners] = useState<any[]>([])
     const [isUploading, setIsUploading] = useState(false)
 
+    // Quest Template State
+    const [questTemplates, setQuestTemplates] = useState<any[]>([])
+    const [templateTitle, setTemplateTitle] = useState('')
+    const [templateDesc, setTemplateDesc] = useState('')
+    const [templatePoints, setTemplatePoints] = useState('')
+    const [templateDimensionId, setTemplateDimensionId] = useState('')
+    const [templateRecurrence, setTemplateRecurrence] = useState('daily')
+    const [templateTriggerType, setTemplateTriggerType] = useState('scheduled')
+    const [templateVerificationType, setTemplateVerificationType] = useState('none')
+    const [templateRequiresPhoto, setTemplateRequiresPhoto] = useState(false)
+    const [templateLinkedActivityTypeId, setTemplateLinkedActivityTypeId] = useState('')
+
+    // Streak Events State
+    const [streakEvents, setStreakEvents] = useState<any[]>([])
+    const [streakTitle, setStreakTitle] = useState('')
+    const [streakDesc, setStreakDesc] = useState('')
+    const [streakDimensionId, setStreakDimensionId] = useState('')
+    const [streakStartDate, setStreakStartDate] = useState('')
+    const [streakEndDate, setStreakEndDate] = useState('')
+    const [streakMultiplierTiers, setStreakMultiplierTiers] = useState(
+        JSON.stringify([
+            { days: 3, multiplier: 1.25 },
+            { days: 7, multiplier: 1.5 },
+            { days: 14, multiplier: 1.75 },
+            { days: 30, multiplier: 2.0 },
+        ], null, 2)
+    )
+
+    // Monthly Awards State
+    const [awardPeriod, setAwardPeriod] = useState(() => {
+        const now = new Date()
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    })
+    const [pastAwards, setPastAwards] = useState<any[]>([])
+    const [isFinalizingAwards, setIsFinalizingAwards] = useState(false)
+
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files || e.target.files.length === 0) return
 
         const file = e.target.files[0]
-        const activityId = sessionForm.activityId
+        const activityId = selectedDoorprize?.id || 'default'
 
         if (!activityId) {
             toastError('Please select an activity first')
@@ -113,9 +191,10 @@ export default function AdminPage() {
 
         try {
             setIsUploading(true)
+            const uploadClient = supabase
             const fileName = `bg-${activityId}` // Fixed name to replace old one
 
-            const { data, error } = await supabase.storage
+            const { data, error } = await uploadClient.storage
                 .from('doorprize-assets')
                 .upload(fileName, file, {
                     cacheControl: '3600',
@@ -125,7 +204,7 @@ export default function AdminPage() {
             if (error) throw error
 
             // Get Public URL
-            const { data: { publicUrl } } = supabase.storage
+            const { data: { publicUrl } } = uploadClient.storage
                 .from('doorprize-assets')
                 .getPublicUrl(fileName)
 
@@ -275,11 +354,11 @@ export default function AdminPage() {
     // Survey State for Navigation
     const [selectedSurvey, setSelectedSurvey] = useState<any | null>(null)
 
-    const [users, setUsers] = useState<any[]>([])
+    const [users, setUsers] = useState<AdminUser[]>([])
     const [quests, setQuests] = useState<any[]>([])
     const [surveys, setSurveys] = useState<any[]>([])
     const [questions, setQuestions] = useState<any[]>([])
-    const [rewards, setRewards] = useState<any[]>([])
+    const [rewards, setRewards] = useState<AdminReward[]>([])
     const [spots, setSpots] = useState<any[]>([])
     const [spotForm, setSpotForm] = useState({ name: '', description: '', points: '', maxClaims: '', expiresAt: '', clue: '' })
     const [selectedSpot, setSelectedSpot] = useState<any>(null)
@@ -304,7 +383,9 @@ export default function AdminPage() {
     const [questPoints, setQuestPoints] = useState('')
     const [questExpiresAt, setQuestExpiresAt] = useState('')
     const [questVerificationType, setQuestVerificationType] = useState('none') // New state
-
+    const [questRequiresPhoto, setQuestRequiresPhoto] = useState(false)
+    const [questDimensionId, setQuestDimensionId] = useState('')
+    const [dimensions, setDimensions] = useState<Array<{id: string, name: string, display_name: string, icon: string}>>([])
 
     // Form State (Survey Container)
     const [surveyContainerData, setSurveyContainerData] = useState({
@@ -352,40 +433,357 @@ export default function AdminPage() {
 
     // Search & Bulk Actions
     const [searchTerm, setSearchTerm] = useState('')
-    const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
+    const normalizedSearchTerm = searchTerm.toLowerCase()
     const filteredUsers = users.filter(user =>
-        user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.username?.toLowerCase().includes(searchTerm.toLowerCase())
+        (user.full_name || '').toLowerCase().includes(normalizedSearchTerm) ||
+        (user.username || '').toLowerCase().includes(normalizedSearchTerm)
     )
 
-    const toggleSelectAll = () => {
-        if (selectedUserIds.length === filteredUsers.length) {
-            setSelectedUserIds([])
-        } else {
-            setSelectedUserIds(filteredUsers.map(u => u.id))
+    const {
+        selectedIds: selectedUserIds,
+        setSelectedIds: setSelectedUserIds,
+        isAllSelected,
+        toggleSelectAll,
+        toggleSelectOne,
+    } = useUserSelection(filteredUsers)
+
+    const handleTabChange = (tab: AdminTab) => {
+        setActiveTab(tab)
+        setSelectedSurvey(null)
+        setIsSidebarOpen(false)
+        setIsActivityTypeModalOpen(false)
+    }
+
+    const pageMeta = getAdminPageMeta(activeTab)
+    const createLabel = getAdminCreateLabel(activeTab, Boolean(selectedSurvey))
+    const activityTypeModalContainerClass = getActivityTypeModalContainerClass()
+    const activityTypeFormGridClass = getActivityTypeFormGridClass(isActivityTypeHierarchyEnabled)
+    const activityTypeModalListClass = getActivityTypeModalListClass()
+    const createActivityModalContainerClass = getCreateActivityModalContainerClass()
+    const createActivityModalHeaderClass = getCreateActivityModalHeaderClass()
+    const createActivityModalFormClass = getCreateActivityModalFormClass()
+    const createActivityTypeGridClass = getCreateActivityTypeGridClass(isActivityTypeHierarchyEnabled)
+    const createActivityTimeGridClass = getCreateActivityTimeGridClass()
+    const topLevelActivityTypes = getTopLevelActivityTypes(activityTypes)
+    const missingDefaultTopCategories = getMissingDefaultTopCategories(activityTypes)
+    const selectedParentForActivity = activityForm.parentTypeId || topLevelActivityTypes[0]?.id || ''
+    const childTypesForSelectedParent = selectedParentForActivity
+        ? getChildActivityTypes(activityTypes, selectedParentForActivity)
+        : []
+
+    const setActivityParentType = (parentTypeId: string) => {
+        const children = getChildActivityTypes(activityTypes, parentTypeId)
+        const activeChildren = children.filter((child) => child.is_active !== false)
+        const preferredChild = activeChildren[0] ?? children[0]
+
+        setActivityForm((prev) => ({
+            ...prev,
+            parentTypeId,
+            typeId: preferredChild?.id ?? parentTypeId,
+        }))
+    }
+
+    const setActivitySubType = (typeId: string) => {
+        setActivityForm((prev) => ({ ...prev, typeId: typeId || prev.parentTypeId }))
+    }
+
+    useEffect(() => {
+        document.body.style.overflow = isSidebarOpen ? 'hidden' : ''
+        return () => {
+            document.body.style.overflow = ''
+        }
+    }, [isSidebarOpen])
+
+    useEffect(() => {
+        const storedValue = window.localStorage.getItem(ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY)
+        setIsSidebarCollapsed(resolveAdminSidebarCollapsedState(storedValue))
+    }, [])
+
+    useEffect(() => {
+        window.localStorage.setItem(ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY, isSidebarCollapsed ? '1' : '0')
+    }, [isSidebarCollapsed])
+
+    useEffect(() => {
+        if (activityTypes.length === 0) return
+
+        if (!isActivityTypeHierarchyEnabled) {
+            setNewActivityTypeParentId('')
+            setActivityForm((prev) => {
+                const hasValidType = activityTypes.some((type) => type.id === prev.typeId)
+                if (hasValidType) return { ...prev, parentTypeId: '' }
+                return {
+                    ...prev,
+                    parentTypeId: '',
+                    typeId: activityTypes[0]?.id || '',
+                }
+            })
+            return
+        }
+
+        const topLevelIds = new Set(getTopLevelActivityTypes(activityTypes).map((type) => type.id))
+        const typeIds = new Set(activityTypes.map((type) => type.id))
+        const initialSelection = resolveInitialActivityTypeSelection(activityTypes)
+
+        setNewActivityTypeParentId((prev) => {
+            if (prev && topLevelIds.has(prev)) return prev
+            return initialSelection.parentTypeId
+        })
+
+        setActivityForm((prev) => {
+            const hasValidParent = prev.parentTypeId && topLevelIds.has(prev.parentTypeId)
+            const hasValidType = prev.typeId && typeIds.has(prev.typeId)
+            if (hasValidParent && hasValidType) return prev
+
+            return {
+                ...prev,
+                parentTypeId: initialSelection.parentTypeId,
+                typeId: initialSelection.typeId,
+            }
+        })
+    }, [activityTypes, isActivityTypeHierarchyEnabled])
+
+    // Quest Template Functions
+    const fetchQuestTemplates = async () => {
+        try {
+            const res = await fetch('/api/admin/quest-templates')
+            const data = await res.json()
+            if (data.templates) setQuestTemplates(data.templates)
+        } catch (e) { console.error('Failed to fetch quest templates', e) }
+    }
+
+    const createQuestTemplate = async () => {
+        if (!templateTitle || !templatePoints) return
+        try {
+            const res = await fetch('/api/admin/quest-templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: templateTitle,
+                    description: templateDesc || null,
+                    dimension_id: templateDimensionId || null,
+                    points: parseInt(templatePoints),
+                    verification_type: templateVerificationType,
+                    requires_photo: templateRequiresPhoto,
+                    recurrence: templateRecurrence,
+                    trigger_type: templateTriggerType,
+                    linked_activity_type_id: templateLinkedActivityTypeId || null,
+                }),
+            })
+            if (res.ok) {
+                setTemplateTitle('')
+                setTemplateDesc('')
+                setTemplatePoints('')
+                setTemplateDimensionId('')
+                setTemplateRecurrence('daily')
+                setTemplateTriggerType('scheduled')
+                setTemplateVerificationType('none')
+                setTemplateRequiresPhoto(false)
+                setTemplateLinkedActivityTypeId('')
+                fetchQuestTemplates()
+                success('Template created!')
+            } else {
+                const data = await res.json()
+                toastError(data.error || 'Failed to create template')
+            }
+        } catch (e) {
+            toastError('Error creating template')
         }
     }
 
-    const toggleSelectUser = (id: string) => {
-        if (selectedUserIds.includes(id)) {
-            setSelectedUserIds(selectedUserIds.filter(uid => uid !== id))
-        } else {
-            setSelectedUserIds([...selectedUserIds, id])
+    const deleteQuestTemplate = async (id: string) => {
+        try {
+            const res = await fetch(`/api/admin/quest-templates?id=${id}`, { method: 'DELETE' })
+            if (res.ok) {
+                fetchQuestTemplates()
+                success('Template deleted!')
+            }
+        } catch (e) {
+            toastError('Error deleting template')
+        }
+    }
+
+    const toggleQuestTemplate = async (id: string, isActive: boolean) => {
+        try {
+            const res = await fetch('/api/admin/quest-templates', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, is_active: !isActive }),
+            })
+            if (res.ok) fetchQuestTemplates()
+        } catch (e) {
+            toastError('Error toggling template')
+        }
+    }
+
+    const generateQuestsNow = async () => {
+        try {
+            const res = await fetch('/api/admin/quest-templates/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trigger_type: 'scheduled' }),
+            })
+            const data = await res.json()
+            success(`Generated ${data.generated || 0} quests from templates`)
+        } catch (e) {
+            toastError('Error generating quests')
+        }
+    }
+
+    // Streak Event Functions
+    const fetchStreakEvents = async () => {
+        try {
+            const res = await fetch('/api/admin/streak-events')
+            const data = await res.json()
+            if (data.streakEvents) setStreakEvents(data.streakEvents)
+        } catch (e) { console.error('Failed to fetch streak events', e) }
+    }
+
+    const createStreakEvent = async () => {
+        if (!streakTitle || !streakStartDate || !streakEndDate) return
+        try {
+            let tiers
+            try { tiers = JSON.parse(streakMultiplierTiers) } catch { toastError('Invalid multiplier tiers JSON'); return }
+
+            const res = await fetch('/api/admin/streak-events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: streakTitle,
+                    description: streakDesc || null,
+                    dimension_id: streakDimensionId || null,
+                    multiplier_tiers: tiers,
+                    start_date: streakStartDate,
+                    end_date: streakEndDate,
+                    is_active: false,
+                }),
+            })
+            if (res.ok) {
+                setStreakTitle('')
+                setStreakDesc('')
+                setStreakDimensionId('')
+                setStreakStartDate('')
+                setStreakEndDate('')
+                setStreakMultiplierTiers(JSON.stringify([
+                    { days: 3, multiplier: 1.25 },
+                    { days: 7, multiplier: 1.5 },
+                    { days: 14, multiplier: 1.75 },
+                    { days: 30, multiplier: 2.0 },
+                ], null, 2))
+                fetchStreakEvents()
+                success('Streak event created!')
+            } else {
+                const data = await res.json()
+                toastError(data.error || 'Failed to create streak event')
+            }
+        } catch (e) {
+            toastError('Error creating streak event')
+        }
+    }
+
+    const deleteStreakEvent = async (id: string) => {
+        try {
+            const res = await fetch(`/api/admin/streak-events?id=${id}`, { method: 'DELETE' })
+            if (res.ok) {
+                fetchStreakEvents()
+                success('Streak event deleted!')
+            }
+        } catch (e) {
+            toastError('Error deleting streak event')
+        }
+    }
+
+    const toggleStreakEvent = async (id: string, isActive: boolean) => {
+        try {
+            const res = await fetch('/api/admin/streak-events', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, is_active: !isActive }),
+            })
+            if (res.ok) fetchStreakEvents()
+        } catch (e) {
+            toastError('Error toggling streak event')
+        }
+    }
+
+    // Monthly Awards Functions
+    const fetchPastAwards = async () => {
+        try {
+            const supabaseClient = supabase
+            const { data } = await supabaseClient
+                .from('monthly_awards')
+                .select('*, dimension:dimensions(id, name, display_name, icon), profile:profiles(id, full_name, avatar_url)')
+                .order('period', { ascending: false })
+                .limit(50)
+            setPastAwards(data || [])
+        } catch (e) { console.error('Failed to fetch awards', e) }
+    }
+
+    const finalizeAwards = async () => {
+        if (!awardPeriod) return
+        setIsFinalizingAwards(true)
+        try {
+            const res = await fetch('/api/admin/awards/finalize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ period: awardPeriod }),
+            })
+            const data = await res.json()
+            if (res.ok) {
+                success(`🏆 Finalized ${data.count} awards for ${awardPeriod}!`)
+                fetchPastAwards()
+            } else {
+                toastError(data.error || 'Failed to finalize awards')
+            }
+        } catch (e) {
+            toastError('Error finalizing awards')
+        } finally {
+            setIsFinalizingAwards(false)
         }
     }
 
     useEffect(() => {
         if (activeTab === 'users') fetchUsers()
-        else if (activeTab === 'quests') fetchQuests()
+        else if (activeTab === 'quests') { fetchQuests(); fetchDimensions() }
         else if (activeTab === 'surveys') fetchSurveys()
         else if (activeTab === 'rewards') fetchRewards()
-        else if (activeTab === 'activities') fetchActivities()
+        else if (activeTab === 'activities') {
+            fetchActivityTypes()
+            fetchActivities()
+            fetchDimensions()
+        }
         else if (activeTab === 'doorprize') {
             fetchActivities()
             fetchDoorprizeSessions()
         }
+        else if (activeTab === 'templates') {
+            fetchQuestTemplates()
+            fetchDimensions()
+            fetchActivityTypes()
+        }
+        else if (activeTab === 'streaks') {
+            fetchStreakEvents()
+            fetchDimensions()
+            fetchPastAwards()
+        }
     }, [activeTab])
+
+    useEffect(() => {
+        if (activeTab === 'activities') {
+            fetchActivities()
+        }
+    }, [selectedTypeFilter])
+
+    useEffect(() => {
+        if (!isScannerOpen || !selectedActivityId) return
+
+        fetchActivityQrToken(selectedActivityId)
+        const intervalId = setInterval(() => {
+            fetchActivityQrToken(selectedActivityId)
+        }, 40000)
+
+        return () => clearInterval(intervalId)
+    }, [isScannerOpen, selectedActivityId])
 
     useEffect(() => {
         if (selectedSurvey) {
@@ -401,17 +799,214 @@ export default function AdminPage() {
                 return
             }
             const data = await res.json()
-            if (data.users) setUsers(data.users)
+            if (data.users) setUsers(data.users as AdminUser[])
         } catch (e) { console.error(e) } finally { setLoading(false) }
     }
 
     const fetchActivities = async () => {
         try {
-            const res = await fetch('/api/admin/activities')
+            const params = new URLSearchParams()
+            if (selectedTypeFilter && activeTab === 'activities') params.set('typeId', selectedTypeFilter)
+            const query = params.toString()
+            const res = await fetch(`/api/admin/activities${query ? `?${query}` : ''}`)
             const data = await res.json()
-            setActivities(data)
+            setActivities(Array.isArray(data) ? data : [])
         } catch (error) {
             console.error('Error fetching activities:', error)
+        }
+    }
+
+    const fetchActivityTypes = async () => {
+        try {
+            const res = await fetch('/api/admin/activity-types')
+            const data = await res.json()
+            if (res.ok) {
+                const types: ActivityTypeNode[] = Array.isArray(data.types) ? data.types : []
+                setIsActivityTypeHierarchyEnabled(data.hierarchyEnabled !== false)
+                setActivityTypes(types)
+
+                const initialSelection = resolveInitialActivityTypeSelection(types)
+                setActivityForm((prev) => {
+                    if (prev.typeId) return prev
+                    return {
+                        ...prev,
+                        parentTypeId: initialSelection.parentTypeId,
+                        typeId: initialSelection.typeId,
+                    }
+                })
+
+                setNewActivityTypeParentId((prev) => {
+                    if (prev) return prev
+                    return initialSelection.parentTypeId
+                })
+            }
+        } catch (error) {
+            console.error('Error fetching activity types:', error)
+        }
+    }
+
+    const openActivityTypeModal = () => {
+        setIsModalOpen(false)
+
+        if (!isActivityTypeHierarchyEnabled) {
+            setNewActivityTypeParentId('')
+            setIsActivityTypeModalOpen(true)
+            return
+        }
+
+        const initialSelection = resolveInitialActivityTypeSelection(activityTypes)
+        if (!newActivityTypeParentId && initialSelection.parentTypeId) {
+            setNewActivityTypeParentId(initialSelection.parentTypeId)
+        }
+        setIsActivityTypeModalOpen(true)
+    }
+
+    const createActivityType = async () => {
+        const payload = buildActivityTypePayload(
+            newActivityTypeName,
+            newActivityTypeDescription,
+            isActivityTypeHierarchyEnabled ? (newActivityTypeParentId || null) : null,
+        )
+        if (!payload) {
+            toastError('Type name is required')
+            return
+        }
+
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, dimension_id: newActivityTypeDimensionId || null })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to create type')
+                return
+            }
+
+            setNewActivityTypeName('')
+            setNewActivityTypeDescription('')
+            setNewActivityTypeDimensionId('')
+            setIsActivityTypeModalOpen(false)
+            success('Activity type created')
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Create activity type error:', error)
+            toastError('Failed to create type')
+        }
+    }
+
+    const createDefaultTopCategory = async (categoryName: string) => {
+        const payload = buildActivityTypePayload(categoryName, '', null)
+        if (!payload) return
+
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to create default category')
+                return
+            }
+
+            success(`${categoryName} created`)
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Create default activity type error:', error)
+            toastError('Failed to create default category')
+        }
+    }
+
+    const deleteActivityType = async (typeId: string) => {
+        try {
+            const res = await fetch(`/api/admin/activity-types?id=${typeId}`, {
+                method: 'DELETE',
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to delete type')
+                return
+            }
+
+            success('Activity type deleted')
+            if (selectedTypeFilter === typeId) setSelectedTypeFilter('')
+            fetchActivityTypes()
+            fetchActivities()
+        } catch (error) {
+            console.error('Delete activity type error:', error)
+            toastError('Failed to delete type')
+        }
+    }
+
+    const toggleActivityTypeActive = async (type: ActivityTypeNode) => {
+        try {
+            const res = await fetch('/api/admin/activity-types', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: type.id, isActive: !type.is_active })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to update type')
+                return
+            }
+
+            success(type.is_active ? 'Type deactivated' : 'Type activated')
+            fetchActivityTypes()
+        } catch (error) {
+            console.error('Toggle activity type error:', error)
+            toastError('Failed to update type')
+        }
+    }
+
+    const fetchActivityQrToken = async (activityId: string) => {
+        try {
+            setActivityQrLoading(true)
+            const res = await fetch(`/api/admin/activities/token?activityId=${activityId}`)
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to refresh QR token')
+                return
+            }
+
+            setActivityQrValue(data.qrValue || null)
+            setActivityQrExpiresAt(data.expiresAt || null)
+            setActivityQrTitle(data.activity?.title || '')
+        } catch (error) {
+            console.error('Error fetching activity token:', error)
+            toastError('Failed to load activity QR')
+        } finally {
+            setActivityQrLoading(false)
+        }
+    }
+
+    const toggleActivityPublish = async (activity: any) => {
+        try {
+            const res = await fetch('/api/admin/activities', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: activity.id, isPublished: !activity.is_published })
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                toastError(data.error || 'Failed to update publish status')
+                return
+            }
+
+            success(activity.is_published ? 'Activity unpublished' : 'Activity published')
+            fetchActivities()
+        } catch (error) {
+            console.error('Toggle activity publish error:', error)
+            toastError('Failed to update publish status')
         }
     }
 
@@ -425,7 +1020,16 @@ export default function AdminPage() {
             })
             if (res.ok) {
                 setIsModalOpen(false)
-                setActivityForm({ title: '', date: new Date().toISOString().split('T')[0], points: 0 })
+                setActivityForm(prev => ({
+                    ...prev,
+                    title: '',
+                    date: new Date().toISOString().split('T')[0],
+                    startTime: '19:00',
+                    endTime: '21:00',
+                    points: 0,
+                    scheduleMode: 'one_time',
+                    recurringWeeks: 4,
+                }))
                 fetchActivities()
             }
         } catch (error) {
@@ -433,39 +1037,15 @@ export default function AdminPage() {
         }
     }
 
-    const handleScan = async (accessCodes: any[]) => {
-        if (!accessCodes || accessCodes.length === 0) return
-        const code = accessCodes[0].rawValue
 
+
+    const fetchDimensions = async () => {
         try {
-            const res = await fetch('/api/admin/attendance/scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    activity_id: selectedActivityId,
-                    access_code: code
-                })
-            })
+            const res = await fetch('/api/dimensions')
             const data = await res.json()
-            setScanResult({
-                success: data.success || false,
-                message: data.message || data.error,
-                user: data.user
-            })
-
-            if (data.success) {
-                // Refresh list to update counts
-                fetchActivities()
-                // Optional: Close scanner after success or keep open for next
-                // setIsScannerOpen(false) 
-            }
-
-        } catch (error) {
-            console.error('Scan Error:', error)
-        }
+            if (data.dimensions) setDimensions(data.dimensions)
+        } catch (e) { console.error(e) }
     }
-
-
 
     const fetchQuests = async () => {
         try {
@@ -487,7 +1067,7 @@ export default function AdminPage() {
         try {
             const res = await fetch('/api/admin/rewards/list')
             const data = await res.json()
-            if (data.rewards) setRewards(data.rewards)
+            if (data.rewards) setRewards(data.rewards as AdminReward[])
         } catch (e) { console.error(e) }
     }
 
@@ -584,6 +1164,7 @@ export default function AdminPage() {
     const [selectedQuest, setSelectedQuest] = useState<any>(null)
     const [questClaims, setQuestClaims] = useState<any[]>([])
     const [showQuestDetail, setShowQuestDetail] = useState(false)
+    const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
     const [isEditingReward, setIsEditingReward] = useState(false)
     const [editingRewardId, setEditingRewardId] = useState<string | null>(null)
 
@@ -685,10 +1266,10 @@ export default function AdminPage() {
         }
     }
 
-    const handleEditReward = (reward: any) => {
+    const handleEditReward = (reward: AdminReward) => {
         setRewardData({
             title: reward.title,
-            description: reward.description,
+            description: reward.description || '',
             image_url: reward.image_url || '',
             required_points: reward.required_points,
             max_claims: reward.max_claims,
@@ -942,7 +1523,9 @@ export default function AdminPage() {
                     description: questDesc,
                     points: parseInt(questPoints) || 0,
                     expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null,
-                    verification_type: questVerificationType
+                    verification_type: questVerificationType,
+                    requires_photo: questVerificationType === 'photo_proof' ? true : questRequiresPhoto,
+                    dimension_id: questDimensionId || null
                 }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
                 // Create OR Update Survey Container
@@ -992,6 +1575,8 @@ export default function AdminPage() {
                     setQuestPoints('')
                     setQuestExpiresAt('')
                     setQuestVerificationType('none')
+                    setQuestRequiresPhoto(false)
+                    setQuestDimensionId('')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
                     setRewardData({ title: '', description: '', image_url: '', required_points: 0, max_claims: 0, type: 'reveal' })
@@ -1070,263 +1655,69 @@ export default function AdminPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-8">
-            <button
-                onClick={() => router.back()}
-                className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition-colors"
-            >
-                <ArrowLeft size={20} />
-                Back to Dashboard
-            </button>
+        <div className="min-h-screen bg-black text-white">
+            <div className="flex min-h-screen">
+                <AdminSidebar
+                    activeTab={activeTab}
+                    isOpen={isSidebarOpen}
+                    isCollapsed={isSidebarCollapsed}
+                    onBack={() => router.back()}
+                    onClose={() => setIsSidebarOpen(false)}
+                    onChange={handleTabChange}
+                    onToggleCollapse={() => setIsSidebarCollapsed(prev => !prev)}
+                />
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
-                        <Shield className="text-[#FC4C02]" />
-                        Admin Panel
-                    </h1>
-                    <p className="text-gray-400 text-sm md:text-base">Manage users, quests, and surveys.</p>
-                </div>
-                {activeTab !== 'admins' && (
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="w-full md:w-auto bg-[#FC4C02] hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                        <Plus size={20} />
-                        Add {activeTab === 'users' ? 'User' : activeTab === 'quests' ? 'Quest' : activeTab === 'rewards' ? 'Reward' : activeTab === 'activities' ? 'Activity' : activeTab === 'spots' ? 'QR Spot' : (!selectedSurvey ? 'Survey' : 'Question')}
-                    </button>
-                )}
-            </div>
+                <div className="min-w-0 flex-1">
+                    <div className="p-4 md:p-8">
+                        <div className="mb-4 flex items-center md:hidden">
+                            <button
+                                onClick={() => setIsSidebarOpen(true)}
+                                className="rounded-lg border border-white/10 p-2 text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                                aria-label="Open admin menu"
+                            >
+                                <Menu size={18} />
+                            </button>
+                        </div>
 
-            {/* Tabs */}
-            <div className="flex gap-2 md:gap-4 mb-6 overflow-x-auto pb-2 scrollbar-none">
-                <button
-                    onClick={() => { setActiveTab('users'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'users' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <User size={18} /> Users
-                </button>
-                <button
-                    onClick={() => { setActiveTab('quests'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'quests' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Gift size={18} /> Daily Quests
-                </button>
-                <button
-                    onClick={() => { setActiveTab('surveys'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'surveys' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <ClipboardList size={18} /> Surveys
-                </button>
-                <button
-                    onClick={() => { setActiveTab('rewards'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'rewards' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Gift size={18} /> Rewards
-                </button>
-                <button
-                    onClick={() => { setActiveTab('activities'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'activities' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Calendar size={18} /> Activities
-                </button>
-                <button
-                    onClick={() => { setActiveTab('spots'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'spots' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <MapPin size={18} /> QR Spots
-                </button>
-                <button
-                    onClick={() => { setActiveTab('doorprize'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'doorprize' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Gift size={18} /> Doorprize
-                </button>
-                <button
-                    onClick={() => { setActiveTab('admins'); setSelectedSurvey(null) }}
-                    className={`px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-sm md:text-base ${activeTab === 'admins' ? 'bg-white text-black' : 'bg-white/5 text-gray-400 hover:bg-white/10'} `}
-                >
-                    <Shield size={18} /> Admins
-                </button>
-            </div>
-
-            {/* Users Table */}
-            {activeTab === 'users' && (
-                <>
-                    {/* Desktop Table View */}
-                    <div className="hidden md:block bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden">
-                        <div className="p-4 border-b border-white/10 flex gap-4">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    placeholder="Search users by name or username..."
-                                    className="w-full bg-black border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
-                                />
+                        <div className="mb-8 rounded-2xl border border-white/10 bg-gradient-to-r from-[#121212] via-[#0f0f0f] to-[#141414] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] md:p-6">
+                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#FC4C02]">Admin Workspace</p>
+                                <h1 className="text-2xl font-bold md:text-3xl">{pageMeta.title}</h1>
+                                <p className="text-sm text-gray-400 md:text-base">{pageMeta.description}</p>
+                            </div>
+                            {createLabel && (
+                                <button
+                                    onClick={() => setIsModalOpen(true)}
+                                    className="w-full rounded-xl bg-[#FC4C02] px-6 py-3 font-bold text-white transition-colors hover:bg-orange-600 md:w-auto"
+                                >
+                                    <span className="flex items-center justify-center gap-2">
+                                        <Plus size={20} />
+                                        Add {createLabel}
+                                    </span>
+                                </button>
+                            )}
                             </div>
                         </div>
 
-                        {/* Bulk Actions Toolbar */}
-                        {selectedUserIds.length > 0 && (
-                            <div className="bg-[#FC4C02]/10 p-4 flex items-center justify-between border-b border-[#FC4C02]/20 animate-in fade-in slide-in-from-top-2">
-                                <div className="text-[#FC4C02] font-bold text-sm">
-                                    {selectedUserIds.length} Users Selected
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => openBulkPointsModal()} // Need to implement
-                                        className="px-4 py-2 bg-[#FC4C02] text-white rounded-lg text-sm font-bold hover:bg-orange-600 transition-colors flex items-center gap-2"
-                                    >
-                                        <Plus size={16} /> Bulk Add Points
-                                    </button>
-                                    <button
-                                        onClick={() => openBulkResetModal()} // Need to implement
-                                        className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-bold hover:bg-red-600 transition-colors flex items-center gap-2"
-                                    >
-                                        <RotateCcw size={16} /> Bulk Reset
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        <table className="w-full text-left">
-                            <thead className="bg-black/50 text-gray-400 text-sm uppercase">
-                                <tr>
-                                    <th className="p-4 w-12 text-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length}
-                                            onChange={toggleSelectAll}
-                                            className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
-                                        />
-                                    </th>
-                                    <th className="p-4">User</th>
-                                    <th className="p-4">Username</th>
-                                    <th className="p-4">Access Code</th>
-                                    <th className="p-4">Status</th>
-                                    <th className="p-4 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/10">
-                                {loading ? (
-                                    <tr><td colSpan={5} className="p-8 text-center text-gray-500">Loading...</td></tr>
-                                ) : filteredUsers.map((user) => (
-                                    <tr key={user.id} className="hover:bg-white/5 transition-colors">
-                                        <td className="p-4 text-center">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUserIds.includes(user.id)}
-                                                onChange={() => toggleSelectUser(user.id)}
-                                                className="w-4 h-4 rounded border-gray-600 bg-black/50 text-[#FC4C02] focus:ring-[#FC4C02]"
-                                            />
-                                        </td>
-                                        <td className="p-4 flex items-center gap-3">
-                                            <img src={user.avatar_url} className="w-10 h-10 rounded-full" alt="" />
-                                            <span className="font-medium">{user.full_name}</span>
-                                        </td>
-                                        <td className="p-4 font-mono text-gray-400">@{user.username}</td>
-                                        <td className="p-4 font-mono text-[#FC4C02]">{user.access_code || '-'}</td>
-                                        <td className="p-4">
-                                            <span className="bg-green-500/20 text-green-500 px-2 py-1 rounded-full text-xs font-bold">
-                                                Active
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            {user.username !== 'admin_wam' && (
-                                                <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={() => openPointsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Adjust Points"
-                                                        className="p-2 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500/20 transition-colors"
-                                                    >
-                                                        <Target size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Adjust Steps"
-                                                        className="p-2 bg-purple-500/10 text-purple-500 rounded-lg hover:bg-purple-500/20 transition-colors"
-                                                    >
-                                                        <Footprints size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                                        title="Reset Points"
-                                                        className="p-2 bg-orange-500/10 text-orange-500 rounded-lg hover:bg-orange-500/20 transition-colors"
-                                                    >
-                                                        <RotateCcw size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => promptDeleteUser(user.id, user.username)}
-                                                        className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20 transition-colors"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Card View */}
-                    <div className="md:hidden space-y-4">
-                        {loading ? (
-                            <div className="text-center text-gray-500 py-8">Loading...</div>
-                        ) : users.map((user) => (
-                            <div key={user.id} className="bg-[#1a1a1a] border border-white/10 p-4 rounded-xl flex items-center justify-between gap-4">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <img src={user.avatar_url} className="w-10 h-10 rounded-full shrink-0 object-cover" alt="" />
-                                    <div className="min-w-0">
-                                        <div className="font-bold truncate">{user.full_name}</div>
-                                        <div className="text-xs text-gray-500 font-mono truncate">@{user.username}</div>
-                                        <div className="text-xs text-[#FC4C02] font-mono mt-1 bg-[#FC4C02]/10 inline-block px-1.5 py-0.5 rounded">
-                                            {user.access_code || 'NO-CODE'}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {user.username !== 'admin_wam' && (
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => openPointsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Target size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openStepsModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-purple-500 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Footprints size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <RotateCcw size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => openResetModal({ id: user.id, name: user.full_name || user.username || 'User' })}
-                                            className="p-2 text-orange-500 bg-orange-500/10 hover:bg-orange-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <RotateCcw size={18} />
-                                        </button>
-                                        <button
-                                            onClick={() => promptDeleteUser(user.id, user.username)}
-                                            className="p-2 text-red-500 bg-red-500/10 hover:bg-red-500/20 rounded-lg shrink-0 transition-colors"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </>
+            {activeTab === 'users' && (
+                <UsersTab
+                    loading={loading}
+                    users={users}
+                    filteredUsers={filteredUsers}
+                    searchTerm={searchTerm}
+                    selectedUserIds={selectedUserIds}
+                    isAllSelected={isAllSelected}
+                    onSearchTermChange={setSearchTerm}
+                    onToggleSelectAll={toggleSelectAll}
+                    onToggleSelectUser={toggleSelectOne}
+                    onOpenBulkPointsModal={openBulkPointsModal}
+                    onOpenBulkResetModal={openBulkResetModal}
+                    onOpenPointsModal={openPointsModal}
+                    onOpenStepsModal={openStepsModal}
+                    onOpenResetModal={openResetModal}
+                    onPromptDeleteUser={promptDeleteUser}
+                />
             )}
 
             {/* Quests Table */}
@@ -1346,6 +1737,11 @@ export default function AdminPage() {
                                             <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap">
                                                 {quest.points} PTS
                                             </span>
+                                            {quest.dimension && (
+                                                <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                    {quest.dimension.display_name}
+                                                </span>
+                                            )}
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -1371,85 +1767,421 @@ export default function AdminPage() {
                 )
             }
 
-            {/* Rewards Table */}
-            {
-                activeTab === 'rewards' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {rewards.map((reward) => (
-                            <div
-                                key={reward.id}
-                                onClick={() => fetchRewardDetail(reward.id)}
-                                className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl flex flex-col justify-between cursor-pointer hover:border-[#FC4C02] transition-colors group"
-                            >
-                                <div>
-                                    <div className="flex justify-between items-start mb-4 gap-4">
-                                        <h3 className="text-xl font-bold flex-1 break-words group-hover:text-[#FC4C02] transition-colors">{reward.title}</h3>
-                                        <div className="flex flex-col items-end gap-2">
-                                            <div className="flex flex-col items-end">
-                                                {reward.required_points > 0 && (
-                                                    <span className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap mb-1">
-                                                        {reward.required_points} PTS
+            {activeTab === 'rewards' && (
+                <RewardsTab
+                    rewards={rewards}
+                    onOpenRewardDetail={fetchRewardDetail}
+                    onEditReward={handleEditReward}
+                    onDeleteReward={promptDeleteReward}
+                />
+            )}
+
+            {activeTab === 'admins' && <ManageAdmins />}
+
+            {activeTab === 'templates' && (
+                <div className="space-y-6">
+                    {/* Generate Button */}
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-white">Quest Templates</h3>
+                        <button
+                            onClick={generateQuestsNow}
+                            className="flex items-center gap-2 bg-[#FC4C02] hover:bg-[#FC4C02]/80 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                        >
+                            <Zap size={16} /> Generate Quests Now
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Template List */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {questTemplates.length === 0 && (
+                                <div className="text-gray-500 text-sm text-center py-8">No templates yet. Create one to get started.</div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {questTemplates.map((tpl) => (
+                                    <div
+                                        key={tpl.id}
+                                        className="bg-[#1a1a1a] border border-gray-800 p-5 rounded-2xl flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3 gap-3">
+                                                <h4 className="text-base font-bold text-white flex-1 break-words">{tpl.title}</h4>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <span className="bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-lg font-mono text-xs font-bold">
+                                                        {tpl.points} PTS
                                                     </span>
-                                                )}
-                                                {reward.required_steps > 0 && (
-                                                    <span className="bg-blue-500/20 text-blue-500 px-2 py-1 rounded-lg font-mono text-xs font-bold whitespace-nowrap">
-                                                        {reward.required_steps} STEPS
-                                                    </span>
-                                                )}
+                                                    <button
+                                                        onClick={() => deleteQuestTemplate(tpl.id)}
+                                                        className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+                                                        title="Delete Template"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex gap-1">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        handleEditReward(reward)
-                                                    }}
-                                                    className="text-gray-500 hover:text-blue-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
-                                                    title="Edit Reward"
-                                                >
-                                                    <Pencil size={18} />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault()
-                                                        e.stopPropagation()
-                                                        promptDeleteReward(reward.id, reward.title)
-                                                    }}
-                                                    className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors z-10"
-                                                    title="Delete Reward"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+                                            {tpl.description && (
+                                                <p className="text-gray-400 text-xs mb-3 line-clamp-2">{tpl.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {tpl.dimension && (
+                                                    <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                        {tpl.dimension.display_name}
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-blue-300/60 bg-blue-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                    {tpl.recurrence}
+                                                </span>
+                                                <span className="text-xs text-purple-300/60 bg-purple-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                    {tpl.trigger_type === 'activity_linked' ? 'Activity Linked' : 'Scheduled'}
+                                                </span>
+                                                {tpl.verification_type && tpl.verification_type !== 'none' && (
+                                                    <span className="text-xs text-cyan-300/60 bg-cyan-500/10 px-2 py-0.5 rounded-full capitalize">
+                                                        {tpl.verification_type.replace(/_/g, ' ')}
+                                                    </span>
+                                                )}
+                                                {tpl.requires_photo && (
+                                                    <span className="text-xs text-pink-300/60 bg-pink-500/10 px-2 py-0.5 rounded-full">
+                                                        Photo Required
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                onClick={() => toggleQuestTemplate(tpl.id, tpl.is_active)}
+                                                className={`text-xs font-bold uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${tpl.is_active ? 'text-green-500' : 'text-red-500'}`}
+                                            >
+                                                {tpl.is_active ? '● Active' : '● Inactive'}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <p className="text-gray-400 text-sm mb-4 line-clamp-3">{reward.description}</p>
-                                </div>
-                                <div className="flex justify-between items-end border-t border-white/5 pt-4">
-                                    <div className="text-xs text-gray-500">
-                                        <div className="uppercase font-bold mb-1">Claims</div>
-                                        <span className={reward.max_claims > 0 && reward.total_claimed >= reward.max_claims ? 'text-red-500' : 'text-white'}>
-                                            {reward.total_claimed} / {reward.max_claims === 0 ? '∞' : reward.max_claims}
-                                        </span>
-                                    </div>
-                                    <div className={`text-xs font-bold uppercase tracking-wider ${reward.is_active ? 'text-green-500' : 'text-red-500'} `}>
-                                        {reward.is_active ? '● Active' : '● Inactive'}
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        ))}
-                        {rewards.length === 0 && (
-                            <div className="col-span-full text-center py-12 text-gray-500">
-                                No rewards found. Create one to get started.
+                        </div>
+
+                        {/* Create Template Form */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl h-fit">
+                            <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                                <FileText size={16} className="text-[#FC4C02]" /> Create Template
+                            </h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Title</label>
+                                    <input
+                                        type="text"
+                                        value={templateTitle}
+                                        onChange={(e) => setTemplateTitle(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. Morning Meditation"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Points</label>
+                                    <input
+                                        type="number"
+                                        value={templatePoints}
+                                        onChange={(e) => setTemplatePoints(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="100"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description</label>
+                                    <textarea
+                                        value={templateDesc}
+                                        onChange={(e) => setTemplateDesc(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02] h-20 resize-none"
+                                        placeholder="Optional description..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                    <select
+                                        value={templateDimensionId}
+                                        onChange={(e) => setTemplateDimensionId(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="">No Dimension</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Recurrence</label>
+                                    <select
+                                        value={templateRecurrence}
+                                        onChange={(e) => setTemplateRecurrence(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Trigger Type</label>
+                                    <select
+                                        value={templateTriggerType}
+                                        onChange={(e) => {
+                                            setTemplateTriggerType(e.target.value)
+                                            if (e.target.value !== 'activity_linked') setTemplateLinkedActivityTypeId('')
+                                        }}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="scheduled">Scheduled</option>
+                                        <option value="activity_linked">Activity Linked</option>
+                                    </select>
+                                </div>
+                                {templateTriggerType === 'activity_linked' && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Activity Type</label>
+                                        <select
+                                            value={templateLinkedActivityTypeId}
+                                            onChange={(e) => setTemplateLinkedActivityTypeId(e.target.value)}
+                                            className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        >
+                                            <option value="">Select Activity Type</option>
+                                            {activityTypes.map((at) => (
+                                                <option key={at.id} value={at.id}>{at.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Verification Type</label>
+                                    <select
+                                        value={templateVerificationType}
+                                        onChange={(e) => {
+                                            setTemplateVerificationType(e.target.value)
+                                            if (e.target.value === 'photo_proof') setTemplateRequiresPhoto(true)
+                                        }}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="none">None (Instant Claim)</option>
+                                        <option value="self_report">Self Report</option>
+                                        <option value="photo_proof">Photo Proof</option>
+                                        <option value="step_count">Step Count</option>
+                                        <option value="activity_attendance">Activity Attendance</option>
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <input
+                                        type="checkbox"
+                                        id="templateRequiresPhoto"
+                                        checked={templateRequiresPhoto}
+                                        onChange={(e) => setTemplateRequiresPhoto(e.target.checked)}
+                                        className="w-4 h-4 rounded border-white/10 bg-black accent-[#FC4C02]"
+                                    />
+                                    <label htmlFor="templateRequiresPhoto" className="text-xs font-medium text-gray-400 uppercase">
+                                        Requires Photo
+                                    </label>
+                                </div>
+                                <button
+                                    onClick={createQuestTemplate}
+                                    disabled={!templateTitle || !templatePoints}
+                                    className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/80 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2.5 rounded-lg font-bold text-sm transition-colors mt-2"
+                                >
+                                    Create Template
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'streaks' && (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-bold text-white">🔥 Streak Events</h3>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Streak Events List */}
+                        <div className="lg:col-span-2 space-y-4">
+                            {streakEvents.length === 0 && (
+                                <div className="text-gray-500 text-sm text-center py-8">No streak events yet. Create one to get started.</div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {streakEvents.map((evt) => (
+                                    <div
+                                        key={evt.id}
+                                        className="bg-[#1a1a1a] border border-gray-800 p-5 rounded-2xl flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex justify-between items-start mb-3 gap-3">
+                                                <h4 className="text-base font-bold text-white flex-1 break-words">🔥 {evt.title}</h4>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <button
+                                                        onClick={() => deleteStreakEvent(evt.id)}
+                                                        className="text-gray-500 hover:text-red-500 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+                                                        title="Delete Streak Event"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {evt.description && (
+                                                <p className="text-gray-400 text-xs mb-3 line-clamp-2">{evt.description}</p>
+                                            )}
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {evt.dimension && (
+                                                    <span className="text-xs text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                        {evt.dimension.display_name}
+                                                    </span>
+                                                )}
+                                                {!evt.dimension && (
+                                                    <span className="text-xs text-gray-400/60 bg-white/5 px-2 py-0.5 rounded-full">
+                                                        All Dimensions
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-blue-300/60 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                                                    {evt.start_date} → {evt.end_date}
+                                                </span>
+                                            </div>
+                                            <div className="text-xs text-gray-500 mb-2">
+                                                Tiers: {(evt.multiplier_tiers || []).map((t: any) => `${t.days}d=${t.multiplier}x`).join(', ')}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <button
+                                                onClick={() => toggleStreakEvent(evt.id, evt.is_active)}
+                                                className={`text-xs font-bold uppercase tracking-wider cursor-pointer hover:opacity-80 transition-opacity ${evt.is_active ? 'text-green-500' : 'text-red-500'}`}
+                                            >
+                                                {evt.is_active ? '● Active' : '● Inactive'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Create Streak Event Form */}
+                        <div className="bg-[#1a1a1a] border border-gray-800 p-6 rounded-2xl h-fit">
+                            <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                                🔥 Create Streak Event
+                            </h4>
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Title</label>
+                                    <input
+                                        type="text"
+                                        value={streakTitle}
+                                        onChange={(e) => setStreakTitle(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                        placeholder="e.g. March Wellness Sprint"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Description</label>
+                                    <textarea
+                                        value={streakDesc}
+                                        onChange={(e) => setStreakDesc(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02] h-16 resize-none"
+                                        placeholder="Optional description..."
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                    <select
+                                        value={streakDimensionId}
+                                        onChange={(e) => setStreakDimensionId(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    >
+                                        <option value="">All Dimensions</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Start Date</label>
+                                    <input
+                                        type="date"
+                                        value={streakStartDate}
+                                        onChange={(e) => setStreakStartDate(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">End Date</label>
+                                    <input
+                                        type="date"
+                                        value={streakEndDate}
+                                        onChange={(e) => setStreakEndDate(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Multiplier Tiers (JSON)</label>
+                                    <textarea
+                                        value={streakMultiplierTiers}
+                                        onChange={(e) => setStreakMultiplierTiers(e.target.value)}
+                                        className="w-full bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-xs font-mono focus:outline-none focus:border-[#FC4C02] h-28 resize-none"
+                                    />
+                                </div>
+                                <button
+                                    onClick={createStreakEvent}
+                                    disabled={!streakTitle || !streakStartDate || !streakEndDate}
+                                    className="w-full bg-[#FC4C02] hover:bg-[#FC4C02]/80 disabled:bg-gray-700 disabled:text-gray-500 text-white py-2.5 rounded-lg font-bold text-sm transition-colors mt-2"
+                                >
+                                    Create Streak Event
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Monthly Awards Section */}
+                    <div className="border-t border-white/10 pt-6 mt-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white">🏆 Monthly Awards</h3>
+                            <div className="flex items-center gap-3">
+                                <input
+                                    type="month"
+                                    value={awardPeriod}
+                                    onChange={(e) => setAwardPeriod(e.target.value)}
+                                    className="bg-black border border-white/10 rounded-lg py-2 px-3 text-white text-sm focus:outline-none focus:border-[#FC4C02]"
+                                />
+                                <button
+                                    onClick={finalizeAwards}
+                                    disabled={isFinalizingAwards || !awardPeriod}
+                                    className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-gray-700 disabled:text-gray-500 text-black px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                    {isFinalizingAwards ? 'Finalizing...' : '🏆 Finalize Awards'}
+                                </button>
+                            </div>
+                        </div>
+                        {pastAwards.length === 0 ? (
+                            <div className="text-gray-500 text-sm text-center py-6">No awards finalized yet.</div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {pastAwards.map((award) => (
+                                    <div key={award.id} className="bg-[#1a1a1a] border border-yellow-500/20 rounded-xl p-4">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <img
+                                                src={award.profile?.avatar_url || 'https://via.placeholder.com/40'}
+                                                alt={award.profile?.full_name}
+                                                className="w-8 h-8 rounded-full border border-yellow-500/30"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-bold text-white truncate">{award.profile?.full_name || 'Unknown'}</div>
+                                                <div className="text-[10px] text-gray-500">{award.period}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs font-bold text-yellow-400 mb-1">🏆 {award.award_title}</div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-orange-300/60 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                                                {award.dimension?.display_name || 'Unknown'}
+                                            </span>
+                                            <span className="text-xs text-gray-400 font-mono">{award.points_earned} pts</span>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
-                )
-            }
-
-            {activeTab === 'admins' && <ManageAdmins />}
+                </div>
+            )}
 
             {
                 activeTab === 'surveys' && (
@@ -1822,8 +2554,56 @@ export default function AdminPage() {
             {
                 activeTab === 'activities' && (
                     <div className="space-y-6">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
                             <h2 className="text-xl font-bold">Manage Activities</h2>
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                <button
+                                    onClick={openActivityTypeModal}
+                                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gray-200 transition-colors hover:bg-white/10"
+                                >
+                                    Manage Types
+                                </button>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-gray-500 uppercase tracking-widest">Type</label>
+                                    <select
+                                        value={selectedTypeFilter}
+                                        onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                                        className="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    >
+                                        <option value="">All Types</option>
+                                        {activityTypes.map((type) => (
+                                            <option key={type.id} value={type.id}>{formatActivityTypeOptionLabel(type, activityTypes)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="border border-white/10 rounded-2xl p-4 bg-black/30 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-gray-500 uppercase tracking-widest">Activity Types</div>
+                                <button
+                                    onClick={openActivityTypeModal}
+                                    className="text-xs font-bold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                >
+                                    Add New Type
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {activityTypes.map((type) => {
+                                    const label = resolveTypeBadgeLabel(type.id, activityTypes)
+                                    return (
+                                    <div key={type.id} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-3 py-1.5 text-xs">
+                                        <span className={`font-bold ${type.is_active ? 'text-green-400' : 'text-red-400'}`}>
+                                            {type.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                        <span className="text-gray-200">
+                                            {label.category}{label.subcategory ? ` / ${label.subcategory}` : ''}
+                                        </span>
+                                    </div>
+                                )})}
+                                {activityTypes.length === 0 && <span className="text-xs text-gray-500">No types yet.</span>}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1840,8 +2620,40 @@ export default function AdminPage() {
                                                 <Calendar className="w-4 h-4" />
                                                 {activity.activity_date}
                                             </div>
+                                            <div className="mt-2 flex items-center gap-2">
+                                                {(() => {
+                                                    const badge = resolveTypeBadgeLabel(activity.type_id, activityTypes)
+                                                    return (
+                                                        <>
+                                                            <span className="text-[10px] uppercase tracking-wider bg-white/10 px-2 py-1 rounded-full text-gray-300">
+                                                                {badge.category}
+                                                            </span>
+                                                            {badge.subcategory && (
+                                                                <span className="text-[10px] uppercase tracking-wider bg-[#FC4C02]/15 px-2 py-1 rounded-full text-[#ff8a57]">
+                                                                    {badge.subcategory}
+                                                                </span>
+                                                            )}
+                                                        </>
+                                                    )
+                                                })()}
+                                                <span className="text-[10px] text-gray-500 font-mono">
+                                                    {activity.start_at ? new Date(activity.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                    {' - '}
+                                                    {activity.end_at ? new Date(activity.end_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                                                </span>
+                                            </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-2">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    toggleActivityPublish(activity)
+                                                }}
+                                                className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${activity.is_published ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'}`}
+                                                title={activity.is_published ? 'Unpublish Activity' : 'Publish Activity'}
+                                            >
+                                                {activity.is_published ? 'Published' : 'Unpublished'}
+                                            </button>
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation()
@@ -1855,6 +2667,11 @@ export default function AdminPage() {
                                             <div className="bg-white/10 px-3 py-1 rounded-full text-xs font-medium">
                                                 {activity.attendance_count || 0} Present
                                             </div>
+                                            {typeof activity.in_progress_count === 'number' && activity.in_progress_count > 0 && (
+                                                <div className="bg-yellow-500/15 text-yellow-400 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                                    {activity.in_progress_count} In Progress
+                                                </div>
+                                            )}
                                             {activity.points > 0 && (
                                                 <span className="text-[#FC4C02] text-xs font-bold bg-[#FC4C02]/10 px-2 py-1 rounded-lg">
                                                     +{activity.points} PTS
@@ -1868,12 +2685,11 @@ export default function AdminPage() {
                                             e.stopPropagation()
                                             setSelectedActivityId(activity.id)
                                             setIsScannerOpen(true)
-                                            setScanResult(null)
                                         }}
                                         className="w-full flex items-center justify-center gap-2 bg-white text-black font-bold py-3 rounded-xl hover:bg-gray-200 transition-colors z-10 relative"
                                     >
-                                        <Scan className="w-4 h-4" />
-                                        Scan Attendance
+                                        <QrCode className="w-4 h-4" />
+                                        Show Event QR
                                     </button>
                                 </div>
                             ))}
@@ -2376,30 +3192,107 @@ export default function AdminPage() {
                                     <p>No one has completed this quest yet.</p>
                                 </div>
                             ) : (
-                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                                     {questClaims.map((claim, idx) => (
-                                        <div key={idx} className="flex items-center gap-3 bg-black/30 rounded-xl p-3">
-                                            <img
-                                                src={claim.avatar_url || '/avatar-placeholder.png'}
-                                                alt={claim.full_name}
-                                                className="w-10 h-10 rounded-full object-cover"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium truncate">{claim.full_name || 'User'}</p>
-                                                <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                        <div key={idx} className="bg-black/30 rounded-xl p-3 space-y-2">
+                                            <div className="flex items-center gap-3">
+                                                <img
+                                                    src={claim.avatar_url || '/avatar-placeholder.png'}
+                                                    alt={claim.full_name}
+                                                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium truncate">{claim.full_name || 'User'}</p>
+                                                    <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                                </div>
+                                                <div className="text-right flex-shrink-0">
+                                                    <p className="text-xs text-gray-400">
+                                                        {new Date(claim.completed_at).toLocaleDateString('id-ID')}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {new Date(claim.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-400">
-                                                    {new Date(claim.completed_at).toLocaleDateString('id-ID')}
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {new Date(claim.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
-                                            </div>
+                                            {/* Photo Proof */}
+                                            {claim.photo_url && (
+                                                <div className="flex items-start gap-3 pt-1 pl-1 border-t border-white/5">
+                                                    <button
+                                                        onClick={() => setPhotoPreviewUrl(claim.photo_url)}
+                                                        className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-white/10 hover:border-[#FC4C02] transition-colors group"
+                                                    >
+                                                        <img
+                                                            src={claim.photo_url}
+                                                            alt="Proof"
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <span className="text-white text-[10px] font-bold">View</span>
+                                                        </div>
+                                                    </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-[#FC4C02] font-semibold mb-0.5">📷 Photo Proof</p>
+                                                        {claim.verification_note && (
+                                                            <p className="text-xs text-gray-400 line-clamp-3">{claim.verification_note}</p>
+                                                        )}
+                                                        <a
+                                                            href={claim.photo_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-[10px] text-gray-500 hover:text-white underline mt-1 inline-block"
+                                                        >
+                                                            Open full size ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
                             )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Photo Lightbox */}
+            <AnimatePresence>
+                {photoPreviewUrl && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setPhotoPreviewUrl(null)}
+                            className="absolute inset-0 bg-black/95 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.85, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.85, opacity: 0 }}
+                            className="relative z-10 max-w-3xl w-full"
+                        >
+                            <button
+                                onClick={() => setPhotoPreviewUrl(null)}
+                                className="absolute -top-10 right-0 text-gray-400 hover:text-white flex items-center gap-1 text-sm"
+                            >
+                                <X size={16} /> Close
+                            </button>
+                            <img
+                                src={photoPreviewUrl}
+                                alt="Photo Proof"
+                                className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+                            />
+                            <div className="mt-3 flex justify-center">
+                                <a
+                                    href={photoPreviewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-400 hover:text-white underline"
+                                >
+                                    Open original ↗
+                                </a>
+                            </div>
                         </motion.div>
                     </div>
                 )}
@@ -2530,12 +3423,29 @@ export default function AdminPage() {
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Verification Type</label>
                                             <select
                                                 value={questVerificationType}
-                                                onChange={(e) => setQuestVerificationType(e.target.value)}
+                                                onChange={(e) => {
+                                                    setQuestVerificationType(e.target.value)
+                                                    setQuestRequiresPhoto(e.target.value === 'photo_proof')
+                                                }}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                             >
                                                 <option value="none">None (Instant Claim)</option>
+                                                <option value="photo_proof">Photo Upload (Image Proof)</option>
                                                 <option value="instagram_username">Check Instagram Username</option>
                                                 <option value="positive_message">Send Positive Message (AI Check)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Dimension</label>
+                                            <select
+                                                className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                value={questDimensionId}
+                                                onChange={(e) => setQuestDimensionId(e.target.value)}
+                                            >
+                                                <option value="">No Dimension</option>
+                                                {dimensions.map((d) => (
+                                                    <option key={d.id} value={d.id}>{d.display_name}</option>
+                                                ))}
                                             </select>
                                         </div>
                                     </>
@@ -2905,6 +3815,155 @@ export default function AdminPage() {
                 }
             </AnimatePresence >
 
+            {/* Activity Type Modal */}
+            <AnimatePresence>
+                {isActivityTypeModalOpen && activeTab === 'activities' && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsActivityTypeModalOpen(false)}
+                        className="fixed inset-0 z-[55] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={activityTypeModalContainerClass}
+                        >
+                            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#121212] px-4 py-3 sm:px-6 sm:py-4">
+                                <div>
+                                    <h2 className="text-lg font-bold text-white sm:text-xl">Manage Activity Types</h2>
+                                    <p className="text-xs text-gray-500">Create, activate, or delete activity categories.</p>
+                                </div>
+                                <button
+                                    onClick={() => setIsActivityTypeModalOpen(false)}
+                                    className="text-gray-400 hover:text-white"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            <div className="flex max-h-[calc(88vh-72px)] flex-col gap-4 p-4 sm:p-6">
+                                {!isActivityTypeHierarchyEnabled && (
+                                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                        Hierarchy mode belum aktif di database. Jalankan migration `20260217000004_activity_type_hierarchy.sql` untuk pakai kategori + subkategori.
+                                    </div>
+                                )}
+                                {missingDefaultTopCategories.length > 0 && (
+                                    <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Quick Add Default Categories</p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {missingDefaultTopCategories.map((category) => (
+                                                <button
+                                                    key={category}
+                                                    onClick={() => createDefaultTopCategory(category)}
+                                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-gray-200 transition-colors hover:bg-white/10"
+                                                >
+                                                    + {category}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className={activityTypeFormGridClass}>
+                                    {isActivityTypeHierarchyEnabled && (
+                                        <select
+                                            value={newActivityTypeParentId}
+                                            onChange={(e) => setNewActivityTypeParentId(e.target.value)}
+                                            className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                        >
+                                            <option value="">Top Category</option>
+                                            {topLevelActivityTypes.map((type) => (
+                                                <option key={type.id} value={type.id}>{type.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    <input
+                                        value={newActivityTypeName}
+                                        onChange={(e) => setNewActivityTypeName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (!shouldSubmitActivityTypeByKey(e.key)) return
+                                            e.preventDefault()
+                                            createActivityType()
+                                        }}
+                                        placeholder="Type name"
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    />
+                                    <input
+                                        value={newActivityTypeDescription}
+                                        onChange={(e) => setNewActivityTypeDescription(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (!shouldSubmitActivityTypeByKey(e.key)) return
+                                            e.preventDefault()
+                                            createActivityType()
+                                        }}
+                                        placeholder="Description (optional)"
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    />
+                                    <select
+                                        value={newActivityTypeDimensionId}
+                                        onChange={(e) => setNewActivityTypeDimensionId(e.target.value)}
+                                        className="rounded-lg border border-white/10 bg-black/50 px-3 py-2 text-sm text-white"
+                                    >
+                                        <option value="">No Dimension</option>
+                                        {dimensions.map((d) => (
+                                            <option key={d.id} value={d.id}>{d.display_name}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={createActivityType}
+                                        className="rounded-lg bg-[#FC4C02] px-4 py-2 text-sm font-bold text-white hover:bg-[#e04302] xl:min-w-[128px]"
+                                    >
+                                        Add Type
+                                    </button>
+                                </div>
+
+                                <div className={activityTypeModalListClass}>
+                                    {activityTypes.map((type) => {
+                                        const label = resolveTypeBadgeLabel(type.id, activityTypes)
+                                        return (
+                                            <div
+                                                key={type.id}
+                                                className="flex flex-col gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                                            >
+                                                <div className="min-w-0">
+                                                    <div className="text-sm font-semibold text-white">{type.name}</div>
+                                                    <div className="truncate text-xs text-gray-500">
+                                                        {label.subcategory ? `${label.category} / ${label.subcategory}` : `${label.category} (Category)`}
+                                                    </div>
+                                                    {type.description && <div className="text-xs text-gray-500">{type.description}</div>}
+                                                </div>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => toggleActivityTypeActive(type)}
+                                                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${type.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
+                                                    >
+                                                        {type.is_active ? 'Active' : 'Inactive'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteActivityType(type.id)}
+                                                        className="text-red-400 hover:text-red-300"
+                                                        title="Delete type"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+
+                                    {activityTypes.length === 0 && (
+                                        <p className="py-6 text-center text-sm text-gray-500">No activity types yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Create Activity Modal */}
             <AnimatePresence>
                 {
@@ -2913,22 +3972,24 @@ export default function AdminPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                            onClick={() => setIsModalOpen(false)}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
                         >
                             <motion.div
                                 initial={{ scale: 0.95 }}
                                 animate={{ scale: 1 }}
                                 exit={{ scale: 0.95 }}
-                                className="bg-[#121212] border border-white/10 w-full max-w-md rounded-2xl overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                                className={createActivityModalContainerClass}
                             >
-                                <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                                    <h2 className="text-xl font-bold">New Activity</h2>
+                                <div className={createActivityModalHeaderClass}>
+                                    <h2 className="text-lg font-bold sm:text-xl">New Activity</h2>
                                     <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
 
-                                <form onSubmit={handleCreateActivity} className="p-6 space-y-4">
+                                <form onSubmit={handleCreateActivity} className={createActivityModalFormClass}>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Activity Title</label>
                                         <input
@@ -2940,6 +4001,86 @@ export default function AdminPage() {
                                             placeholder="e.g. Morning Run"
                                         />
                                     </div>
+
+                                    {isActivityTypeHierarchyEnabled ? (
+                                        <div className={createActivityTypeGridClass}>
+                                            <div>
+                                                <div className="mb-1 flex items-center justify-between gap-2">
+                                                    <label className="block text-sm font-medium text-gray-400">Category</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={openActivityTypeModal}
+                                                        className="text-xs font-semibold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                                    >
+                                                        Add Type
+                                                    </button>
+                                                </div>
+                                                <select
+                                                    required
+                                                    value={selectedParentForActivity}
+                                                    onChange={e => setActivityParentType(e.target.value)}
+                                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                >
+                                                    <option value="">Select category</option>
+                                                    {topLevelActivityTypes.map((type) => (
+                                                        <option key={type.id} value={type.id}>{type.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-400 mb-1">Sub Category</label>
+                                                <select
+                                                    value={childTypesForSelectedParent.length > 0 ? activityForm.typeId : selectedParentForActivity}
+                                                    onChange={e => setActivitySubType(e.target.value)}
+                                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                >
+                                                    {childTypesForSelectedParent.length === 0 && (
+                                                        <option value={selectedParentForActivity}>No sub category (use category)</option>
+                                                    )}
+                                                    {childTypesForSelectedParent.map((type) => (
+                                                        <option key={type.id} value={type.id}>{type.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                <label className="block text-sm font-medium text-gray-400">Activity Type</label>
+                                                <button
+                                                    type="button"
+                                                    onClick={openActivityTypeModal}
+                                                    className="text-xs font-semibold text-[#FC4C02] hover:text-[#ff6b2f]"
+                                                >
+                                                    Add Type
+                                                </button>
+                                            </div>
+                                            <select
+                                                required
+                                                value={activityForm.typeId}
+                                                onChange={e => setActivityForm({ ...activityForm, typeId: e.target.value, parentTypeId: '' })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            >
+                                                <option value="">Select type</option>
+                                                {activityTypes.map((type) => (
+                                                    <option key={type.id} value={type.id}>{type.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-400 mb-1">Schedule Mode</label>
+                                        <select
+                                            value={activityForm.scheduleMode}
+                                            onChange={e => setActivityForm({ ...activityForm, scheduleMode: e.target.value })}
+                                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                        >
+                                            <option value="one_time">One-time</option>
+                                            <option value="weekly">Recurring Weekly</option>
+                                        </select>
+                                    </div>
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Date</label>
                                         <input
@@ -2950,6 +4091,44 @@ export default function AdminPage() {
                                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
                                         />
                                     </div>
+
+                                    <div className={createActivityTimeGridClass}>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Start Time</label>
+                                            <input
+                                                type="time"
+                                                required
+                                                value={activityForm.startTime}
+                                                onChange={e => setActivityForm({ ...activityForm, startTime: e.target.value })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">End Time</label>
+                                            <input
+                                                type="time"
+                                                required
+                                                value={activityForm.endTime}
+                                                onChange={e => setActivityForm({ ...activityForm, endTime: e.target.value })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {activityForm.scheduleMode === 'weekly' && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-400 mb-1">Generate Weeks Ahead</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="12"
+                                                value={activityForm.recurringWeeks}
+                                                onChange={e => setActivityForm({ ...activityForm, recurringWeeks: Math.min(Math.max(parseInt(e.target.value) || 1, 1), 12) })}
+                                                className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            />
+                                        </div>
+                                    )}
+
                                     <div>
                                         <label className="block text-sm font-medium text-gray-400 mb-1">Points Reward (Optional)</label>
                                         <input
@@ -2961,6 +4140,16 @@ export default function AdminPage() {
                                             placeholder="0"
                                         />
                                     </div>
+
+                                    <label className="flex items-center justify-between rounded-xl border border-white/10 px-4 py-3 bg-black/30">
+                                        <span className="text-sm text-gray-300">Published</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={activityForm.isPublished}
+                                            onChange={e => setActivityForm({ ...activityForm, isPublished: e.target.checked })}
+                                            className="w-4 h-4"
+                                        />
+                                    </label>
 
                                     <button
                                         type="submit"
@@ -2975,7 +4164,7 @@ export default function AdminPage() {
                 }
             </AnimatePresence >
 
-            {/* QR Scanner Modal */}
+            {/* Activity QR Modal */}
             <AnimatePresence>
                 {
                     isScannerOpen && (
@@ -2987,31 +4176,38 @@ export default function AdminPage() {
                         >
                             <div className="w-full max-w-md bg-[#121212] rounded-3xl overflow-hidden border border-white/10 relative">
                                 <button
-                                    onClick={() => setIsScannerOpen(false)}
+                                    onClick={() => {
+                                        setIsScannerOpen(false)
+                                        setSelectedActivityId(null)
+                                        setActivityQrValue(null)
+                                        setActivityQrExpiresAt(null)
+                                        setActivityQrTitle('')
+                                    }}
                                     className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full text-white"
                                 >
                                     <X className="w-6 h-6" />
                                 </button>
 
                                 <div className="p-6 text-center">
-                                    <h2 className="text-2xl font-bold mb-2">Scan QR Code</h2>
-                                    <p className="text-gray-400 text-sm mb-6">Point camera at user's ID Card</p>
+                                    <h2 className="text-2xl font-bold mb-2">Rotating Activity QR</h2>
+                                    <p className="text-gray-400 text-sm mb-2">Users scan this QR for Scan In / Scan Out.</p>
+                                    {activityQrTitle && <p className="text-[#FC4C02] text-sm font-bold mb-5">{activityQrTitle}</p>}
 
-                                    <div className="rounded-xl overflow-hidden border-2 border-[#FC4C02]/50 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-6">
-                                        <Scanner
-                                            onScan={handleScan}
-                                        />
+                                    <div className="rounded-xl bg-white p-5 border border-[#FC4C02]/40 shadow-[0_0_30px_rgba(252,76,2,0.2)] mb-5 flex items-center justify-center min-h-64">
+                                        {activityQrLoading && !activityQrValue ? (
+                                            <Loader2 className="w-7 h-7 animate-spin text-[#FC4C02]" />
+                                        ) : activityQrValue ? (
+                                            <QRCode value={activityQrValue} size={220} />
+                                        ) : (
+                                            <p className="text-black/60 text-sm">QR token unavailable</p>
+                                        )}
                                     </div>
 
-                                    {scanResult && (
-                                        <div className={`p-4 rounded-xl border ${scanResult.success ? 'bg-green-500/10 border-green-500/30 text-green-500' : 'bg-red-500/10 border-red-500/30 text-red-500'}`}>
-                                            <div className="font-bold flex items-center justify-center gap-2 mb-1">
-                                                {scanResult.success ? <Shield className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                                                {scanResult.success ? 'Success!' : 'Error'}
-                                            </div>
-                                            <p className="text-sm">{scanResult.message}</p>
-                                        </div>
-                                    )}
+                                    <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-left text-xs text-gray-300 space-y-1">
+                                        <p><span className="text-gray-500">TTL:</span> 45 seconds (auto rotate)</p>
+                                        <p><span className="text-gray-500">Expires:</span> {activityQrExpiresAt ? new Date(activityQrExpiresAt).toLocaleTimeString() : '-'}</p>
+                                        <p className="text-amber-400">After first scan user state becomes Scan Out.</p>
+                                    </div>
                                 </div>
                             </div>
                         </motion.div>
@@ -3312,8 +4508,8 @@ export default function AdminPage() {
                                                                     )}
                                                                 </div>
                                                                 <div className="col-span-3 text-right">
-                                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#FC4C02] bg-[#FC4C02]/10 px-2 py-1 rounded-full border border-[#FC4C02]/20">
-                                                                        Pending
+                                                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full border ${user.status === 'in_progress' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' : 'text-[#FC4C02] bg-[#FC4C02]/10 border-[#FC4C02]/20'}`}>
+                                                                        {user.status === 'in_progress' ? 'In Progress' : 'Pending'}
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -3329,6 +4525,9 @@ export default function AdminPage() {
                     )
                 }
             </AnimatePresence >
-        </div >
+                    </div>
+                </div>
+            </div>
+        </div>
     )
 }
