@@ -21,6 +21,8 @@ export async function GET(request: Request) {
             .select(`
                 id,
                 completed_at,
+                photo_url,
+                verification_note,
                 user:profiles (
                     id,
                     username,
@@ -41,6 +43,8 @@ export async function GET(request: Request) {
         const formattedClaims = claims.map((claim: any) => ({
             id: claim.id,
             completed_at: claim.completed_at,
+            photo_url: claim.photo_url || null,
+            verification_note: claim.verification_note || null,
             user_id: claim.user?.id,
             username: claim.user?.username || 'unknown',
             full_name: claim.user?.full_name || 'Unknown User',

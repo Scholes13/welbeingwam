@@ -9,7 +9,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { title, description, points, expires_at, verification_type, dimension_id } = await request.json()
+    const { title, description, points, expires_at, verification_type, requires_photo, dimension_id } = await request.json()
     if (!title || !points) {
         return NextResponse.json({ error: 'Missing data' }, { status: 400 })
     }
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
             is_active: true,
             expires_at: expires_at || null,
             verification_type: verification_type || 'none',
+            requires_photo: requires_photo ?? (verification_type === 'photo_proof'),
             dimension_id: dimension_id || null
         })
 

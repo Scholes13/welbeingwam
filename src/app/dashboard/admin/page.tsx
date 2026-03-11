@@ -383,6 +383,7 @@ export default function AdminPage() {
     const [questPoints, setQuestPoints] = useState('')
     const [questExpiresAt, setQuestExpiresAt] = useState('')
     const [questVerificationType, setQuestVerificationType] = useState('none') // New state
+    const [questRequiresPhoto, setQuestRequiresPhoto] = useState(false)
     const [questDimensionId, setQuestDimensionId] = useState('')
     const [dimensions, setDimensions] = useState<Array<{id: string, name: string, display_name: string, icon: string}>>([])
 
@@ -1163,6 +1164,7 @@ export default function AdminPage() {
     const [selectedQuest, setSelectedQuest] = useState<any>(null)
     const [questClaims, setQuestClaims] = useState<any[]>([])
     const [showQuestDetail, setShowQuestDetail] = useState(false)
+    const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
     const [isEditingReward, setIsEditingReward] = useState(false)
     const [editingRewardId, setEditingRewardId] = useState<string | null>(null)
 
@@ -1522,6 +1524,7 @@ export default function AdminPage() {
                     points: parseInt(questPoints) || 0,
                     expires_at: questExpiresAt ? new Date(questExpiresAt).toISOString() : null,
                     verification_type: questVerificationType,
+                    requires_photo: questVerificationType === 'photo_proof' ? true : questRequiresPhoto,
                     dimension_id: questDimensionId || null
                 }
             } else if (activeTab === 'surveys' && !selectedSurvey) {
@@ -1572,6 +1575,7 @@ export default function AdminPage() {
                     setQuestPoints('')
                     setQuestExpiresAt('')
                     setQuestVerificationType('none')
+                    setQuestRequiresPhoto(false)
                     setQuestDimensionId('')
                     fetchQuests()
                 } else if (activeTab === 'rewards') {
@@ -3188,30 +3192,107 @@ export default function AdminPage() {
                                     <p>No one has completed this quest yet.</p>
                                 </div>
                             ) : (
-                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                                     {questClaims.map((claim, idx) => (
-                                        <div key={idx} className="flex items-center gap-3 bg-black/30 rounded-xl p-3">
-                                            <img
-                                                src={claim.avatar_url || '/avatar-placeholder.png'}
-                                                alt={claim.full_name}
-                                                className="w-10 h-10 rounded-full object-cover"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium truncate">{claim.full_name || 'User'}</p>
-                                                <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                        <div key={idx} className="bg-black/30 rounded-xl p-3 space-y-2">
+                                            <div className="flex items-center gap-3">
+                                                <img
+                                                    src={claim.avatar_url || '/avatar-placeholder.png'}
+                                                    alt={claim.full_name}
+                                                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                                />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium truncate">{claim.full_name || 'User'}</p>
+                                                    <p className="text-xs text-gray-500">@{claim.username || 'unknown'}</p>
+                                                </div>
+                                                <div className="text-right flex-shrink-0">
+                                                    <p className="text-xs text-gray-400">
+                                                        {new Date(claim.completed_at).toLocaleDateString('id-ID')}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500">
+                                                        {new Date(claim.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-400">
-                                                    {new Date(claim.completed_at).toLocaleDateString('id-ID')}
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    {new Date(claim.completed_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
-                                            </div>
+                                            {/* Photo Proof */}
+                                            {claim.photo_url && (
+                                                <div className="flex items-start gap-3 pt-1 pl-1 border-t border-white/5">
+                                                    <button
+                                                        onClick={() => setPhotoPreviewUrl(claim.photo_url)}
+                                                        className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-white/10 hover:border-[#FC4C02] transition-colors group"
+                                                    >
+                                                        <img
+                                                            src={claim.photo_url}
+                                                            alt="Proof"
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                            <span className="text-white text-[10px] font-bold">View</span>
+                                                        </div>
+                                                    </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-[#FC4C02] font-semibold mb-0.5">📷 Photo Proof</p>
+                                                        {claim.verification_note && (
+                                                            <p className="text-xs text-gray-400 line-clamp-3">{claim.verification_note}</p>
+                                                        )}
+                                                        <a
+                                                            href={claim.photo_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-[10px] text-gray-500 hover:text-white underline mt-1 inline-block"
+                                                        >
+                                                            Open full size ↗
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
                             )}
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Photo Lightbox */}
+            <AnimatePresence>
+                {photoPreviewUrl && (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setPhotoPreviewUrl(null)}
+                            className="absolute inset-0 bg-black/95 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.85, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.85, opacity: 0 }}
+                            className="relative z-10 max-w-3xl w-full"
+                        >
+                            <button
+                                onClick={() => setPhotoPreviewUrl(null)}
+                                className="absolute -top-10 right-0 text-gray-400 hover:text-white flex items-center gap-1 text-sm"
+                            >
+                                <X size={16} /> Close
+                            </button>
+                            <img
+                                src={photoPreviewUrl}
+                                alt="Photo Proof"
+                                className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10"
+                            />
+                            <div className="mt-3 flex justify-center">
+                                <a
+                                    href={photoPreviewUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-gray-400 hover:text-white underline"
+                                >
+                                    Open original ↗
+                                </a>
+                            </div>
                         </motion.div>
                     </div>
                 )}
@@ -3342,10 +3423,14 @@ export default function AdminPage() {
                                             <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Verification Type</label>
                                             <select
                                                 value={questVerificationType}
-                                                onChange={(e) => setQuestVerificationType(e.target.value)}
+                                                onChange={(e) => {
+                                                    setQuestVerificationType(e.target.value)
+                                                    setQuestRequiresPhoto(e.target.value === 'photo_proof')
+                                                }}
                                                 className="w-full bg-black border border-white/10 rounded-lg py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]"
                                             >
                                                 <option value="none">None (Instant Claim)</option>
+                                                <option value="photo_proof">Photo Upload (Image Proof)</option>
                                                 <option value="instagram_username">Check Instagram Username</option>
                                                 <option value="positive_message">Send Positive Message (AI Check)</option>
                                             </select>

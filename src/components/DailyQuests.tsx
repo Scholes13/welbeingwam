@@ -15,7 +15,7 @@ const dimensionIcons: Record<string, React.ComponentType<{className?: string}>> 
     briefcase: Briefcase,
 }
 
-export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false }: any) {
+export default function DailyQuests({ quests = [], userQuests = [], onClaim, showAll = false, includeCompleted = false, hideHeader = false }: any) {
     const [loadingIds, setLoadingIds] = useState<string[]>([])
     const [successIds, setSuccessIds] = useState<string[]>([])
     const [errorData, setErrorData] = useState<{ [key: string]: string }>({})
@@ -153,12 +153,20 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
         ? quests
         : quests.filter((q: any) => !userQuests.some((uq: any) => uq.quest_id === q.id))
 
-    if (filteredQuests.length === 0) return null
-    const visibleQuests = showAll ? filteredQuests : filteredQuests.slice(0, 3)
+    // Pre-filter expired+uncompleted so they don't consume visible slots (especially in dashboard 3-item view)
+    const renderableQuests = filteredQuests.filter((q: any) => {
+        const isCompleted = userQuests.some((uq: any) => uq.quest_id === q.id)
+        if (!q.expires_at) return true // no deadline → always show
+        const isExpired = Date.parse(q.expires_at) - Date.now() <= 0
+        return !isExpired || isCompleted // hide expired+uncompleted
+    })
+
+    if (renderableQuests.length === 0) return null
+    const visibleQuests = showAll ? renderableQuests : renderableQuests.slice(0, 3)
 
     return (
         <section className="mb-8">
-            {!showAll && (
+            {!showAll && !hideHeader && (
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl font-bold flex items-center gap-2">
                         <Gift className="text-[#FC4C02]" /> Daily Quests
