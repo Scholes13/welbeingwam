@@ -78,7 +78,7 @@ async function applyMigrations() {
   console.log('You need to apply these migrations using one of these methods:');
   console.log('');
   console.log('1. Supabase Dashboard SQL Editor:');
-  console.log('   - Go to: https://supabase.com/dashboard/project/lryryspyvoyfvvfghqns/sql');
+  console.log('   - Go to: https://supabase.com/dashboard/project/ihrutobdomnagnwzwncy/sql');
   console.log('   - Copy and paste each migration file content');
   console.log('   - Run them in order');
   console.log('');

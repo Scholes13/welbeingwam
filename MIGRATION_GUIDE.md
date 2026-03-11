@@ -12,7 +12,7 @@ All city tour database tables, functions, views, and seed data are now live!
 ### Option 1: Supabase Dashboard SQL Editor (RECOMMENDED)
 
 1. Go to your Supabase SQL Editor:
-   **https://supabase.com/dashboard/project/lryryspyvoyfvvfghqns/sql**
+   **https://supabase.com/dashboard/project/ihrutobdomnagnwzwncy/sql**
 
 2. Apply each migration file in order:
 
@@ -63,7 +63,7 @@ npx supabase db push
 After applying migrations, run the verification script:
 
 ```bash
-$env:NEXT_PUBLIC_SUPABASE_URL="https://lryryspyvoyfvvfghqns.supabase.co"
+$env:NEXT_PUBLIC_SUPABASE_URL="https://ihrutobdomnagnwzwncy.supabase.co"
 $env:SUPABASE_SERVICE_ROLE_KEY="sb_secret_KIEIuPuT1mQgZeZdpSKIXw_7gqNntAU"
 npx tsx scripts/verify_database.ts
 ```

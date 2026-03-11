@@ -68,7 +68,7 @@ All database migrations for the City Tour Map feature have been successfully app
 
 ### Method Used: Supabase CLI
 ```bash
-npx supabase link --project-ref lryryspyvoyfvvfghqns
+npx supabase link --project-ref ihrutobdomnagnwzwncy
 npx supabase db push
 ```
 
