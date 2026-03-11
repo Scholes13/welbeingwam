@@ -10,13 +10,19 @@ export function convertStepsToPoints(totalSteps: NumericValue): number {
   return Math.floor(normalizedSteps / 10)
 }
 
+export function convertActivityPoints(totalCalories: NumericValue): number {
+  return Math.max(0, Math.floor(toSafeNumber(totalCalories)))
+}
+
 export function calculateTotalEarnedPoints(input: {
   totalSteps: NumericValue
+  totalActivityPoints?: NumericValue
   questPoints: NumericValue
   adjustmentPoints: NumericValue
 }): number {
   return (
     convertStepsToPoints(input.totalSteps) +
+    convertActivityPoints(input.totalActivityPoints) +
     toSafeNumber(input.questPoints) +
     toSafeNumber(input.adjustmentPoints)
   )

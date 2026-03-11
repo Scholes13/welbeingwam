@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         // 2. Fetch Activities (Steps)
         const { data: activities, error: activityError } = await supabase
             .from('activities')
-            .select('user_id, steps')
+            .select('user_id, steps, activity_points, review_status, dimension_id')
 
         if (activityError) throw activityError
 

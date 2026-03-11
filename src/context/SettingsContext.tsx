@@ -7,6 +7,7 @@ interface Settings {
   photo_bonus_points: number
   category_streak_bonus: number
   speed_demon_bonus: number
+  strava_sync_cooldown_minutes: number
   features: {
     qr_checkin: boolean
     gps_checkin: boolean
@@ -31,6 +32,7 @@ const defaultSettings: Settings = {
   photo_bonus_points: 50,
   category_streak_bonus: 200,
   speed_demon_bonus: 300,
+  strava_sync_cooldown_minutes: 15,
   features: {
     qr_checkin: true,
     gps_checkin: true,

@@ -1,4 +1,4 @@
-import { convertStepsToPoints, sumNumericField, toSafeNumber } from './points'
+import { convertActivityPoints, convertStepsToPoints, sumNumericField, toSafeNumber } from './points'
 
 export type LeaderboardProfile = {
   id: string
@@ -11,6 +11,9 @@ export type LeaderboardProfile = {
 export type LeaderboardActivity = {
   user_id: string
   steps: number | null
+  activity_points?: number | null
+  review_status?: string | null
+  dimension_id?: string | null
 }
 
 type QuestPayload =
@@ -35,6 +38,8 @@ export type LeaderboardEntry = {
   avatar_url: string | null
   instagram_username: string | null
   total_steps: number
+  step_points: number
+  sport_points: number
   quest_points: number
   overall_points: number
   dimension_points: Record<string, number>
@@ -61,6 +66,10 @@ function extractQuestDimensionId(payload: QuestPayload): string | null {
   return payload.dimension_id ?? null
 }
 
+function isVoidedActivityStatus(reviewStatus: string | null | undefined): boolean {
+  return reviewStatus === 'voided' || reviewStatus === 'rejected'
+}
+
 export function computeLeaderboardEntries(input: {
   profiles: LeaderboardProfile[]
   activities: LeaderboardActivity[]
@@ -80,6 +89,8 @@ export function computeLeaderboardEntries(input: {
       avatar_url: profile.avatar_url,
       instagram_username: profile.instagram_username,
       total_steps: 0,
+      step_points: 0,
+      sport_points: 0,
       quest_points: 0,
       overall_points: 0,
       dimension_points: {},
@@ -89,6 +100,15 @@ export function computeLeaderboardEntries(input: {
   input.activities.forEach((activity) => {
     const entry = stats[activity.user_id]
     if (!entry) return
+
+    if (!isVoidedActivityStatus(activity.review_status)) {
+      const activityPoints = convertActivityPoints(activity.activity_points)
+      entry.sport_points += activityPoints
+
+      if (activity.dimension_id) {
+        entry.dimension_points[activity.dimension_id] = (entry.dimension_points[activity.dimension_id] ?? 0) + activityPoints
+      }
+    }
 
     entry.total_steps += toSafeNumber(activity.steps)
   })
@@ -122,7 +142,9 @@ export function computeLeaderboardEntries(input: {
 
   Object.values(stats).forEach((entry) => {
     entry.quest_points += adjustmentsMap[entry.user_id] ?? 0
-    entry.overall_points = convertStepsToPoints(entry.total_steps) + entry.quest_points
+    entry.step_points = convertStepsToPoints(entry.total_steps)
+    entry.overall_points = entry.step_points + entry.sport_points + entry.quest_points
+    entry.dimension_points.physical = (entry.dimension_points.physical ?? 0) + entry.step_points
 
     const dimAdj = dimensionAdjMap[entry.user_id]
     if (dimAdj) {
@@ -135,7 +157,14 @@ export function computeLeaderboardEntries(input: {
   return Object.values(stats)
 }
 
-export type Quest = { id: string; points: number }
+export type Quest = {
+  id: string
+  points: number
+  dimension?: {
+    id?: string
+    name?: string | null
+  } | null
+}
 export type UserQuest = { quest_id: string; status: string | null }
 
 export function sumApprovedQuestPoints(userQuests: UserQuest[], quests: Quest[]): number {
@@ -159,6 +188,13 @@ export type ActivityItem = {
   type: string
   start_date: string
   steps: number
+  mode?: string
+  calories?: number
+  activity_points?: number
+  review_status?: string | null
+  proof_url?: string | null
+  source?: string | null
+  dimension_id?: string | null
 }
 
 export type AttendanceItem = {
@@ -184,6 +220,11 @@ export function buildCombinedActivities(input: {
     type: 'Event',
     start_date: attendance.scanned_at,
     steps: toSafeNumber(attendance.activity.points),
+    mode: 'event',
+    calories: 0,
+    activity_points: 0,
+    review_status: 'approved',
+    proof_url: null,
   }))
 
   return [...input.activities, ...attendanceActivities]

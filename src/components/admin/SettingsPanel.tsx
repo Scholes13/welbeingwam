@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Save, Loader2 } from 'lucide-react'
 import { useToast } from '@/context/ToastContext'
+import { parsePositiveIntegerInput } from './settings'
 
 interface SettingsPanelProps {
   initialSettings: {
@@ -10,6 +11,7 @@ interface SettingsPanelProps {
     photo_bonus_points: number
     category_streak_bonus: number
     speed_demon_bonus: number
+    strava_sync_cooldown_minutes: number
     features: {
       qr_checkin: boolean
       gps_checkin: boolean
@@ -130,6 +132,28 @@ export default function SettingsPanel({ initialSettings, onSave }: SettingsPanel
             />
             <p className="mt-1 text-sm text-gray-500">
               Bonus points for visiting 10 spots within the first hour
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Strava Sync Cooldown (Minutes)
+            </label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={settings.strava_sync_cooldown_minutes}
+              onChange={(e) =>
+                updatePointValue(
+                  'strava_sync_cooldown_minutes',
+                  parsePositiveIntegerInput(e.target.value, settings.strava_sync_cooldown_minutes)
+                )
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              Cooldown global sebelum sistem memanggil Strava lagi untuk sinkronisasi otomatis activity sport.
             </p>
           </div>
         </div>
