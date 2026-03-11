@@ -66,4 +66,29 @@ describe('POST /api/auth/standard-login', () => {
       error: 'Authentication service unavailable',
     })
   })
+
+  it('returns 503 when Supabase project keys are invalid for the configured URL', async () => {
+    createSupabaseServerClientMock.mockResolvedValue({
+      auth: {
+        signInWithPassword: vi.fn().mockResolvedValue({
+          data: { session: null, user: null },
+          error: {
+            message: 'Invalid API key',
+          },
+        }),
+      },
+    } as never)
+
+    const response = await POST(
+      new Request('http://localhost:3000/api/auth/standard-login', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'Pramuji', password: 'werkudara88' }),
+      }),
+    )
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Authentication service unavailable',
+    })
+  })
 })

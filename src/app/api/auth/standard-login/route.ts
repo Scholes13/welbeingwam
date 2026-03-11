@@ -15,6 +15,7 @@ function isSupabaseDependencyFailure(error: unknown) {
   return (
     candidate.name === 'AuthRetryableFetchError' ||
     candidate.message === 'fetch failed' ||
+    candidate.message === 'Invalid API key' ||
     candidate.cause?.code === 'ENOTFOUND' ||
     candidate.cause?.code === 'ECONNREFUSED' ||
     candidate.cause?.code === 'ETIMEDOUT'
