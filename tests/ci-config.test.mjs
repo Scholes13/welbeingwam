@@ -23,6 +23,10 @@ test("ci verify gates only on build and Cloudflare bundle", () => {
     pkg.scripts["ci:clean"],
     "node scripts/clean-build-artifacts.cjs",
   );
+  assert.equal(
+    pkg.scripts["prepages:build"],
+    "node scripts/ensure-ast-grep-linux.cjs",
+  );
 });
 
 test("next config pins turbopack root to this checkout", () => {

@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "ci:clean": "node scripts/clean-build-artifacts.cjs",
     "ci:verify": "npm run ci:clean && npm run pages:build",
+    "prepages:build": "node scripts/ensure-ast-grep-linux.cjs",
     "pages:build": "opennextjs-cloudflare build",
     "pages:deploy": "npx wrangler deploy",
     "verify-db": "tsx scripts/verify_database.ts"
