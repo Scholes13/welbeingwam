@@ -10,7 +10,8 @@ export type RewardsRepository = {
   getRewardByTitle: (title: string) => Promise<RewardRecord | null>
   findRewardByTitlePattern: (pattern: string) => Promise<RewardRecord | null>
   hasClaimedReward: (userId: string | number, rewardId: string) => Promise<boolean>
-  createClaim: (input: { userId: string | number; rewardId: string; cost: number }) => Promise<{ conflict: boolean }>
+  createClaim: (input: { userId: string | number; rewardId: string; cost: number }) => Promise<{ conflict: boolean; claimId?: string }>
+  voidClaim: (claimId: string, status: 'voided_duplicate' | 'voided_oversold') => Promise<void>
   incrementRewardClaims: (rewardId: string, nextValue: number) => Promise<void>
 }
 
@@ -37,9 +38,26 @@ function badRequest(message: string): WorkflowFailure {
   return { ok: false, status: 400, error: message }
 }
 
+function conflict(message: string): WorkflowFailure {
+  return { ok: false, status: 409, error: message }
+}
+
 function normalizeReward(value: unknown): RewardRecord | null {
   if (!value || typeof value !== 'object') return null
   return value as RewardRecord
+}
+
+function isRepeatableReward(reward: RewardRecord): boolean {
+  return reward.is_repeatable === true
+}
+
+function isSoldOutError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const maybeError = error as { code?: string; message?: string }
+  if (maybeError.code === '23514') return true
+
+  const message = String(maybeError.message ?? '').toLowerCase()
+  return message.includes('reward_sold_out') || message.includes('sold out')
 }
 
 export function createRewardsRepository(supabase: SupabaseLike): RewardsRepository {
@@ -85,6 +103,7 @@ export function createRewardsRepository(supabase: SupabaseLike): RewardsReposito
         .select('id')
         .eq('user_id', userId)
         .eq('reward_id', rewardId)
+        .eq('claim_status', 'active')
         .single()
 
       if (error) return false
@@ -92,17 +111,33 @@ export function createRewardsRepository(supabase: SupabaseLike): RewardsReposito
     },
 
     async createClaim(input) {
-      const { error } = await supabase.from('user_rewards').insert([
-        {
-          user_id: input.userId,
-          reward_id: input.rewardId,
-          cost: input.cost,
-        },
-      ])
+      const { data, error } = await supabase
+        .from('user_rewards')
+        .insert([
+          {
+            user_id: input.userId,
+            reward_id: input.rewardId,
+            cost: input.cost,
+          },
+        ])
+        .select('id')
+        .single()
 
-      if (!error) return { conflict: false }
+      if (!error) {
+        const claimId = data && typeof data === 'object' && 'id' in data ? String(data.id) : undefined
+        return { conflict: false, claimId }
+      }
       if (error.code === '23505') return { conflict: true }
       throw error
+    },
+
+    async voidClaim(claimId, status) {
+      const { error } = await supabase
+        .from('user_rewards')
+        .update({ claim_status: status })
+        .eq('id', claimId)
+
+      if (error) throw error
     },
 
     async incrementRewardClaims(rewardId, nextValue) {
@@ -154,8 +189,10 @@ export async function claimRewardWorkflow(input: {
   const validationError = rewardStatusChecks({ reward, availableCoins: input.availableCoins })
   if (validationError) return validationError
 
-  const alreadyClaimed = await input.repository.hasClaimedReward(input.userId, input.rewardId)
-  if (alreadyClaimed) return badRequest('Already claimed')
+  if (!isRepeatableReward(reward)) {
+    const alreadyClaimed = await input.repository.hasClaimedReward(input.userId, input.rewardId)
+    if (alreadyClaimed) return badRequest('Already claimed')
+  }
 
   const cost = toSafeNumber(reward.required_points)
   const insertResult = await input.repository.createClaim({
@@ -166,7 +203,17 @@ export async function claimRewardWorkflow(input: {
 
   if (insertResult.conflict) return badRequest('Already claimed')
 
-  await input.repository.incrementRewardClaims(input.rewardId, toSafeNumber(reward.total_claimed) + 1)
+  try {
+    await input.repository.incrementRewardClaims(input.rewardId, toSafeNumber(reward.total_claimed) + 1)
+  } catch (error) {
+    if (toSafeNumber(reward.max_claims) > 0 && isSoldOutError(error)) {
+      if (insertResult.claimId) {
+        await input.repository.voidClaim(insertResult.claimId, 'voided_oversold')
+      }
+      return conflict('Reward sold out')
+    }
+    throw error
+  }
 
   return { ok: true, data: { rewardId: input.rewardId } }
 }

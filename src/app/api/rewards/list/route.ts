@@ -39,6 +39,7 @@ export async function GET() {
       .from('user_rewards')
       .select('reward_id, user_id')
       .eq('user_id', userId)
+      .eq('claim_status', 'active')
 
     if (userClaimsError) throw userClaimsError
 
@@ -48,6 +49,7 @@ export async function GET() {
     const { data: globalClaimsData, error: globalClaimsError } = await supabase
       .from('user_rewards')
       .select('reward_id, user_id')
+      .eq('claim_status', 'active')
       .order('claimed_at', { ascending: false })
 
     if (globalClaimsError) throw globalClaimsError

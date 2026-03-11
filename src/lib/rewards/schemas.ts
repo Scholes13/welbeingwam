@@ -14,6 +14,7 @@ const adminCreateRewardSchema = z.object({
   required_steps: z.coerce.number().int().nonnegative().optional().default(0),
   max_claims: z.coerce.number().int().nonnegative().optional().default(0),
   type: rewardTypeSchema.optional().default('reveal'),
+  is_repeatable: z.coerce.boolean().optional().default(false),
 })
 
 const adminUpdateRewardSchema = z.object({
@@ -25,6 +26,7 @@ const adminUpdateRewardSchema = z.object({
   required_steps: z.coerce.number().int().nonnegative().optional(),
   max_claims: z.coerce.number().int().nonnegative().optional(),
   type: rewardTypeSchema.optional(),
+  is_repeatable: z.coerce.boolean().optional(),
 })
 
 export type ClaimRewardInput = z.infer<typeof claimRewardSchema>

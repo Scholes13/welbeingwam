@@ -29,9 +29,13 @@ describe('rewards request schemas', () => {
       required_steps: 1000,
       max_claims: 10,
       type: 'reveal',
+      is_repeatable: true,
     })
 
     expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.is_repeatable).toBe(true)
+    }
   })
 
   it('rejects invalid admin create payload', () => {
@@ -57,8 +61,12 @@ describe('rewards request schemas', () => {
       required_steps: '1000',
       max_claims: '0',
       type: 'progress',
+      is_repeatable: false,
     })
 
     expect(parsed.success).toBe(true)
+    if (parsed.success) {
+      expect(parsed.data.is_repeatable).toBe(false)
+    }
   })
 })

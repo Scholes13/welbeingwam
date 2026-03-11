@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid reward payload' }, { status: 400 })
     }
 
-    const { id, title, description, image_url, required_points, required_steps, max_claims, type } = parsedPayload.data
+    const { id, title, description, image_url, required_points, required_steps, max_claims, type, is_repeatable } = parsedPayload.data
 
     const updatePayload: {
       title: string
@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       required_steps?: number
       max_claims?: number
       type?: 'reveal' | 'progress' | 'mystery'
+      is_repeatable?: boolean
     } = {
       title,
     }
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     if (required_steps !== undefined) updatePayload.required_steps = required_steps
     if (max_claims !== undefined) updatePayload.max_claims = max_claims
     if (type !== undefined) updatePayload.type = type
+    if (is_repeatable !== undefined) updatePayload.is_repeatable = is_repeatable
 
     const { data, error } = await supabase
       .from('rewards')

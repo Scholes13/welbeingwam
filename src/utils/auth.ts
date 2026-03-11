@@ -19,11 +19,24 @@ type AuthIdentity = {
   email?: string | null
 }
 
+type ProfileIdRow = {
+  id: number
+}
+
 function extractUsernameFromEmail(email: string | null | undefined): string | null {
   if (!email) return null
   const [username] = email.split('@')
   const normalized = username?.trim()
   return normalized ? normalized : null
+}
+
+function normalizeNumericProfileId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 export async function resolveProfileIdFromAuthUser(user: AuthIdentity): Promise<number | null> {
@@ -32,23 +45,40 @@ export async function resolveProfileIdFromAuthUser(user: AuthIdentity): Promise<
     if (Number.isFinite(asNumber)) return asNumber
   }
 
+  const adminClient = createSupabaseAdminClient()
+  const { data: canonicalProfile, error: canonicalError } = await adminClient
+    .from('profiles')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .single()
+
+  if (!canonicalError) {
+    const canonicalId = normalizeNumericProfileId((canonicalProfile as ProfileIdRow | null)?.id)
+    if (canonicalId !== null) return canonicalId
+  } else if (canonicalError.code !== 'PGRST116') {
+    console.error('Error resolving profile by auth_user_id:', canonicalError)
+  }
+
   const username = extractUsernameFromEmail(user.email)
   if (!username) return null
 
-  const adminClient = createSupabaseAdminClient()
   const { data, error } = await adminClient
     .from('profiles')
     .select('id')
     .ilike('username', username)
-    .limit(1)
+    .limit(2)
 
   if (error) {
     console.error('Error resolving profile by username:', error)
     return null
   }
 
-  const profile = data?.[0] as { id: number } | undefined
-  return profile?.id ?? null
+  if (!data || data.length !== 1) {
+    return null
+  }
+
+  const profile = data?.[0] as ProfileIdRow | undefined
+  return normalizeNumericProfileId(profile?.id) ?? null
 }
 
 export async function getAuthProfileContext() {

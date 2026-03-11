@@ -22,6 +22,7 @@ export async function GET(request: Request) {
                 id,
                 claimed_at,
                 cost,
+                claim_status,
                 user:profiles (
                     id,
                     username,
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
             id: claim.id,
             claimed_at: claim.claimed_at,
             cost: claim.cost,
+            claim_status: claim.claim_status,
             user_id: claim.user?.id,
             username: claim.user?.username || 'unknown',
             full_name: claim.user?.full_name || 'Unknown User',

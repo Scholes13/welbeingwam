@@ -34,11 +34,13 @@ export type RewardRecord = {
   is_active?: boolean | null
   is_system: boolean | null
   type: RewardType | null
+  is_repeatable?: boolean | null
 }
 
 export type ClaimRow = {
   reward_id: string
   user_id: string | number
+  claim_status?: string | null
 }
 
 export type RewardDisplayStatus =
@@ -111,7 +113,7 @@ export async function fetchUserEconomy(supabase: SupabaseClient, userId: string 
     supabase.from('activities').select('steps').eq('user_id', userId),
     supabase.from('user_quests').select('quests ( points )').eq('user_id', userId).eq('status', 'approved'),
     supabase.from('point_adjustments').select('points').eq('user_id', userId),
-    supabase.from('user_rewards').select('cost').eq('user_id', userId),
+    supabase.from('user_rewards').select('cost').eq('user_id', userId).eq('claim_status', 'active'),
     supabase.from('coin_transactions').select('amount').eq('user_id', userId),
   ])
 
@@ -157,8 +159,9 @@ export function buildDisplayedRewards(input: {
     const requiredSteps = toSafeNumber(reward.required_steps)
     const totalClaimed = toSafeNumber(reward.total_claimed)
     const maxClaims = toSafeNumber(reward.max_claims)
+    const isRepeatable = reward.is_repeatable === true
 
-    const isClaimed = input.claimedRewardIds.has(reward.id)
+    const isClaimed = !isRepeatable && input.claimedRewardIds.has(reward.id)
     const rewardClaimers = input.claimersByRewardId[reward.id] ?? []
     const hasBeenClaimedByAnyone = totalClaimed > 0 || rewardClaimers.length > 0
 

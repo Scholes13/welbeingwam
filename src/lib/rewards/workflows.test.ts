@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { fetchUserEconomy } from './service'
 import {
@@ -56,9 +56,23 @@ function createMockSupabaseClient(db: MockDatabase) {
           const result = limitCount ? rows.slice(0, limitCount) : rows
           return { data: result[0] ?? null, error: null }
         },
-        async insert(payload: MockRow[]) {
-          tables[tableName].push(...payload)
-          return { data: payload, error: null }
+        insert(payload: MockRow[]) {
+          const insertedRows = payload.map((row, index) => ({
+            id: row.id ?? `${tableName}-${tables[tableName].length + index + 1}`,
+            ...row,
+          }))
+          tables[tableName].push(...insertedRows)
+
+          const insertChain = {
+            select() {
+              return insertChain
+            },
+            async single() {
+              return { data: insertedRows[0] ?? null, error: null }
+            },
+          }
+
+          return insertChain
         },
         async update(payload: MockRow) {
           const updated = rows.map((row) => ({ ...row, ...payload }))
@@ -110,6 +124,80 @@ describe('rewards workflows with mocked supabase client', () => {
     expect(tables.user_rewards).toHaveLength(1)
   })
 
+  it('returns already claimed when the insert conflicts after a stale pre-check', async () => {
+    const repository = {
+      getRewardById: async () => ({
+        id: 'reward-1',
+        title: 'Voucher',
+        description: null,
+        image_url: null,
+        required_points: 20,
+        required_steps: 0,
+        max_claims: 0,
+        total_claimed: 0,
+        is_active: true,
+        is_system: false,
+        type: 'reveal' as const,
+      }),
+      getRewardByTitle: async () => null,
+      findRewardByTitlePattern: async () => null,
+      hasClaimedReward: async () => false,
+      createClaim: async () => ({ conflict: true }),
+      incrementRewardClaims: async () => undefined,
+    }
+
+    const result = await claimRewardWorkflow({
+      repository,
+      userId: 'user-1',
+      rewardId: 'reward-1',
+      availableCoins: 999,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      error: 'Already claimed',
+    })
+  })
+
+  it('allows repeatable rewards to skip the already-claimed precheck', async () => {
+    const repository = {
+      getRewardById: async () => ({
+        id: 'reward-repeatable',
+        title: 'Background Reroll',
+        description: null,
+        image_url: null,
+        required_points: 20,
+        required_steps: 0,
+        max_claims: 0,
+        total_claimed: 10,
+        is_active: true,
+        is_system: false,
+        type: 'reveal' as const,
+        is_repeatable: true,
+      }),
+      getRewardByTitle: async () => null,
+      findRewardByTitlePattern: async () => null,
+      hasClaimedReward: async () => true,
+      createClaim: async () => ({ conflict: false }),
+      incrementRewardClaims: async () => undefined,
+    }
+
+    const result = await claimRewardWorkflow({
+      repository,
+      userId: 'user-1',
+      rewardId: 'reward-repeatable',
+      availableCoins: 999,
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        rewardId: 'reward-repeatable',
+      },
+    })
+  })
+
   it('blocks avatar reroll when coins are insufficient', async () => {
     const { client } = createMockSupabaseClient({
       rewards: [{ id: 'reward-reroll', title: 'Avatar Reroll', required_points: 100, max_claims: 0, total_claimed: 0, is_active: true, is_system: false, type: 'reveal' }],
@@ -158,6 +246,86 @@ describe('rewards workflows with mocked supabase client', () => {
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.data.background.id).toBe('bali')
     expect(tables.user_rewards).toHaveLength(1)
+  })
+
+  it('fails gracefully when a stale reward counter update loses a sold-out race', async () => {
+    const voidClaim = vi.fn(async () => undefined)
+    const repository = {
+      getRewardById: async () => ({
+        id: 'reward-1',
+        title: 'Voucher',
+        description: null,
+        image_url: null,
+        required_points: 20,
+        required_steps: 0,
+        max_claims: 1,
+        total_claimed: 0,
+        is_active: true,
+        is_system: false,
+        type: 'reveal' as const,
+      }),
+      getRewardByTitle: async () => null,
+      findRewardByTitlePattern: async () => null,
+      hasClaimedReward: async () => false,
+      createClaim: async () => ({ conflict: false, claimId: 'claim-1' }),
+      voidClaim,
+      incrementRewardClaims: async () => {
+        const error = new Error('reward_sold_out')
+        ;(error as Error & { code?: string }).code = '23514'
+        throw error
+      },
+    }
+
+    await expect(
+      claimRewardWorkflow({
+        repository,
+        userId: 'user-1',
+        rewardId: 'reward-1',
+        availableCoins: 999,
+      })
+    ).resolves.toEqual({
+      ok: false,
+      status: 409,
+      error: 'Reward sold out',
+    })
+    expect(voidClaim).toHaveBeenCalledWith('claim-1', 'voided_oversold')
+  })
+
+  it('rethrows unexpected limited-reward counter failures without voiding the claim as sold out', async () => {
+    const voidClaim = vi.fn(async () => undefined)
+    const repository = {
+      getRewardById: async () => ({
+        id: 'reward-1',
+        title: 'Voucher',
+        description: null,
+        image_url: null,
+        required_points: 20,
+        required_steps: 0,
+        max_claims: 1,
+        total_claimed: 0,
+        is_active: true,
+        is_system: false,
+        type: 'reveal' as const,
+      }),
+      getRewardByTitle: async () => null,
+      findRewardByTitlePattern: async () => null,
+      hasClaimedReward: async () => false,
+      createClaim: async () => ({ conflict: false, claimId: 'claim-1' }),
+      voidClaim,
+      incrementRewardClaims: async () => {
+        throw new Error('connection reset')
+      },
+    }
+
+    await expect(
+      claimRewardWorkflow({
+        repository,
+        userId: 'user-1',
+        rewardId: 'reward-1',
+        availableCoins: 999,
+      })
+    ).rejects.toThrow('connection reset')
+    expect(voidClaim).not.toHaveBeenCalled()
   })
 
   it('allows reveal clues flow even when clue reward record does not exist', async () => {

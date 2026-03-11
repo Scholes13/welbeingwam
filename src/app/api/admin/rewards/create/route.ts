@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid reward payload' }, { status: 400 })
     }
 
-    const { title, description, image_url, required_points, required_steps, max_claims, type } = parsedPayload.data
+    const { title, description, image_url, required_points, required_steps, max_claims, type, is_repeatable } = parsedPayload.data
 
     const { data, error } = await supabase
       .from('rewards')
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         required_steps,
         max_claims,
         type,
+        is_repeatable,
       }])
       .select()
 

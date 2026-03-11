@@ -63,14 +63,17 @@ export async function POST(request: Request) {
         avatarUrl += `&top=${randomTop}&facialHairProbability=0`
     }
 
+    const profileId = -Date.now()
+
     // Create profile linked to auth user
     const { error } = await supabase
         .from('profiles')
         .insert({
-            id: authUser.user.id,
+            id: profileId,
+            auth_user_id: authUser.user.id,
             username: username,
-            full_name: fullName || username,
             password: password,
+            full_name: fullName || username,
             avatar_url: avatarUrl,
             gender: gender || null,
             is_manual: true,

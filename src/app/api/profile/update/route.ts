@@ -16,20 +16,19 @@ export async function POST(request: Request) {
     // Prepare update object
     const updateData: {
         updated_at: string
-        password?: string
         instagram_username?: string
+        password?: string
     } = {
         updated_at: new Date().toISOString()
     }
 
     if (password && password.trim() !== '') {
-        updateData.password = password
-
         // Also update password in Supabase Auth
         const authClient = createSupabaseAdminClient()
         await authClient.auth.admin.updateUserById(context.authUser.id, {
             password: password
         })
+        updateData.password = password
     }
 
     if (instagram !== undefined) {

@@ -268,7 +268,11 @@ export async function GET() {
       adjustmentPoints: totalAdjustments,
     })
 
-    const { data: spentRewards } = await supabase.from('user_rewards').select('cost').eq('user_id', userId)
+    const { data: spentRewards } = await supabase
+      .from('user_rewards')
+      .select('cost')
+      .eq('user_id', userId)
+      .eq('claim_status', 'active')
     const totalSpent = sumNumericField(spentRewards as { cost: number | null }[] | null | undefined, (row) => row.cost)
 
     const { data: coinTransactions } = await supabase.from('coin_transactions').select('amount').eq('user_id', userId)

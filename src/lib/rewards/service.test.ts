@@ -123,4 +123,30 @@ describe('buildDisplayedRewards', () => {
     expect(progress?.title).toBe('???')
     expect(mystery?.title).toBe('???')
   })
+
+  it('keeps repeatable rewards available even after the user has already claimed one', () => {
+    const displayed = buildDisplayedRewards({
+      rewards: [
+        {
+          id: 'repeatable-1',
+          title: 'Avatar Reroll',
+          description: 'Reroll again',
+          image_url: null,
+          required_points: 20,
+          required_steps: 0,
+          max_claims: 0,
+          total_claimed: 5,
+          type: 'reveal',
+          is_system: false,
+          is_repeatable: true,
+        },
+      ],
+      claimedRewardIds: new Set<string>(['repeatable-1']),
+      claimersByRewardId: {},
+      availableCoins: 100,
+      totalSteps: 0,
+    })
+
+    expect(displayed[0]?.status).toBe('AVAILABLE')
+  })
 })
