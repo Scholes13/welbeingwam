@@ -9,6 +9,10 @@ function read(relPath) {
   return fs.readFileSync(path.join(repoRoot, relPath), "utf8");
 }
 
+function exists(relPath) {
+  return fs.existsSync(path.join(repoRoot, relPath));
+}
+
 test("ci verify gates only on build and Cloudflare bundle", () => {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(
@@ -39,6 +43,14 @@ test("cloudflare build dependencies are on a compatible version line", () => {
   assert.equal(pkg.devDependencies["@opennextjs/cloudflare"], "^1.17.1");
 });
 
+test("cloudflare build lockfile includes the linux ast-grep native package", () => {
+  const pkg = JSON.parse(read("package.json"));
+  const lock = JSON.parse(read("package-lock.json"));
+
+  assert.equal(pkg.optionalDependencies["@ast-grep/napi-linux-x64-gnu"], "0.40.5");
+  assert.ok(lock.packages["node_modules/@ast-grep/napi-linux-x64-gnu"]);
+});
+
 test("deploy workflow waits for successful CI on staging and main", () => {
   const workflow = read(".github/workflows/deploy-cloudflare.yml");
   assert.match(workflow, /workflow_run:/);
@@ -46,4 +58,9 @@ test("deploy workflow waits for successful CI on staging and main", () => {
   assert.match(workflow, /head_branch == 'staging'/);
   assert.match(workflow, /head_branch == 'main'/);
   assert.match(workflow, /head_sha/);
+});
+
+test("cloudflare deployment keeps auth gate on edge middleware, not node proxy", () => {
+  assert.equal(exists("src/middleware.ts"), true);
+  assert.equal(exists("src/proxy.ts"), false);
 });
