@@ -44,6 +44,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
     title: 'Activities',
     description: 'Manage event schedules, QR attendance, and publication status.',
   },
+  sports: {
+    title: 'Sport Sessions',
+    description: 'Review manual sport submissions, inspect proofs, and void abusive activity points.',
+  },
   spots: {
     title: 'QR Spots',
     description: 'Manage spot codes, claims, and activity status.',
@@ -71,7 +75,7 @@ export function getAdminPageMeta(activeTab: AdminTab): AdminPageMeta {
 }
 
 export function getAdminCreateLabel(activeTab: AdminTab, hasSelectedSurvey: boolean): string | null {
-  if (activeTab === 'admins' || activeTab === 'doorprize' || activeTab === 'templates') return null
+  if (activeTab === 'admins' || activeTab === 'doorprize' || activeTab === 'templates' || activeTab === 'sports') return null
   if (activeTab === 'users') return 'User'
   if (activeTab === 'quests') return 'Quest'
   if (activeTab === 'rewards') return 'Reward'

@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { verifyAdminPermission } from '@/utils/auth'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES = 15
 
 export const dynamic = 'force-dynamic'
+
+function parseCooldownValue(value: unknown): number | null {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    return null
+  }
+
+  return numeric
+}
 
 export async function GET() {
   try {
@@ -25,12 +36,14 @@ export async function GET() {
 
     // Transform settings array into structured object
     const settingsMap = new Map(data?.map(s => [s.key, s.value]) || [])
+    const parsedCooldown = parseCooldownValue(settingsMap.get('strava_sync_cooldown_minutes'))
 
     const settings = {
       base_checkin_points: parseInt(settingsMap.get('base_checkin_points') || '50'),
       photo_bonus_points: parseInt(settingsMap.get('photo_bonus_points') || '50'),
       category_streak_bonus: parseInt(settingsMap.get('category_streak_bonus') || '200'),
       speed_demon_bonus: parseInt(settingsMap.get('speed_demon_bonus') || '300'),
+      strava_sync_cooldown_minutes: parsedCooldown ?? DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES,
       features: {
         qr_checkin: settingsMap.get('feature_qr_checkin') === 'true',
         gps_checkin: settingsMap.get('feature_gps_checkin') === 'true',
@@ -54,6 +67,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const { authorized } = await verifyAdminPermission('*')
+  if (!authorized) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const body = await request.json()
@@ -72,6 +90,17 @@ export async function PUT(request: Request) {
     }
     if (body.speed_demon_bonus !== undefined) {
       updates.push({ key: 'speed_demon_bonus', value: body.speed_demon_bonus.toString() })
+    }
+    if (body.strava_sync_cooldown_minutes !== undefined) {
+      const cooldownMinutes = parseCooldownValue(body.strava_sync_cooldown_minutes)
+      if (cooldownMinutes === null) {
+        return NextResponse.json(
+          { error: `strava_sync_cooldown_minutes must be a positive integer. Default is ${DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES}.` },
+          { status: 400 }
+        )
+      }
+
+      updates.push({ key: 'strava_sync_cooldown_minutes', value: cooldownMinutes.toString() })
     }
 
     if (body.features) {

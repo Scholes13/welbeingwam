@@ -28,6 +28,7 @@ INSERT INTO settings (key, value) VALUES
   ('photo_bonus_points', '50'),
   ('category_streak_bonus', '200'),
   ('speed_demon_bonus', '300'),
+  ('strava_sync_cooldown_minutes', '15'),
   ('feature_photo_checkin', 'true'),
   ('feature_badges', 'true'),
   ('feature_leaderboard', 'true'),

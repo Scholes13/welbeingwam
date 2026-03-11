@@ -1,9 +1,26 @@
 import useSWR from 'swr'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { convertStepsToPoints } from '@/lib/points'
 
 // Generic fetcher
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
+
+type ProfileActivity = {
+    id?: string | number
+    type?: string | null
+    name?: string | null
+    start_date?: string | null
+    distance?: number | null
+    steps?: number | null
+    mode?: string | null
+    calories?: number | null
+    activity_points?: number | null
+    step_points?: number | null
+    review_status?: string | null
+    proof_url?: string | null
+    source?: string | null
+}
 
 // Hook for Quests & User Progress
 export function useQuests() {
@@ -105,13 +122,15 @@ export function useProfile() {
         dedupingInterval: 5000, // Reduced from 60000 to 5000 to allow fresher updates
     })
 
-    const activities = data?.activities || []
+    const activities = (data?.activities || []) as ProfileActivity[]
     
     // Calculate stats derived from activities
     const stats = {
         count: activities.length,
-        distance: activities.reduce((acc: number, curr: any) => acc + (curr.distance || 0), 0),
-        steps: activities.reduce((acc: number, curr: any) => acc + (curr.steps || 0), 0)
+        distance: activities.reduce((acc, curr) => acc + (curr.distance || 0), 0),
+        steps: activities.reduce((acc, curr) => acc + (curr.steps || 0), 0),
+        stepPoints: convertStepsToPoints(activities.reduce((acc, curr) => acc + (curr.steps || 0), 0)),
+        sportPoints: data?.sportPoints || 0,
     }
 
     return {
@@ -121,6 +140,9 @@ export function useProfile() {
         userQuests: data?.userQuests || [],
         surveys: data?.surveys || [],
         totalPoints: data?.totalPoints || 0,
+        stepPoints: data?.stepPoints || 0,
+        sportPoints: data?.sportPoints || 0,
+        totalPhysicalPoints: data?.totalPhysicalPoints || 0,
         coins: data?.coins || 0,
         stats,
         isLoading,

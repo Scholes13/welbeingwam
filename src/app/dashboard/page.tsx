@@ -2,11 +2,31 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useProfile, useNotifications } from '@/hooks/use-swr-hooks'
+import Link from 'next/link'
+import {
+    Activity,
+    Bell,
+    Brain,
+    Briefcase,
+    CalendarDays,
+    Camera,
+    ChevronRight,
+    Dumbbell,
+    Flame,
+    Footprints,
+    Gift,
+    Heart,
+    Medal,
+    Shield,
+    Sparkles,
+    Trophy,
+    Users,
+    Zap,
+} from 'lucide-react'
+
 import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
-import { Activity, Bell, Footprints, Trophy, Heart, Brain, Sparkles, Briefcase, Users, ChevronRight, Gift, Flame, BarChart2, Medal, ClipboardList, Zap, CalendarDays, Shield } from 'lucide-react'
-import Link from 'next/link'
+import { useNotifications, useProfile } from '@/hooks/use-swr-hooks'
 import Loader from '@/components/ui/Loader'
 
 interface Dimension {
@@ -15,15 +35,6 @@ interface Dimension {
     display_name: string
     icon: string
     sort_order: number
-}
-
-const dimensionIconMap: Record<string, React.ComponentType<{ className?: string; size?: number }>> = {
-    activity: Activity,
-    heart: Heart,
-    brain: Brain,
-    users: Users,
-    sparkles: Sparkles,
-    briefcase: Briefcase,
 }
 
 interface Survey {
@@ -38,10 +49,70 @@ interface ActivityItem {
     name: string
     start_date: string
     steps: number
+    distance?: number | null
+    mode?: string | null
+    calories?: number | null
+    activity_points?: number | null
+    step_points?: number | null
+    review_status?: string | null
+    proof_url?: string | null
+    source?: string | null
+}
+
+const dimensionIconMap: Record<string, React.ComponentType<{ className?: string; size?: number }>> = {
+    activity: Activity,
+    heart: Heart,
+    brain: Brain,
+    users: Users,
+    sparkles: Sparkles,
+    briefcase: Briefcase,
+}
+
+function toSafeNumber(value: unknown): number {
+    const numeric = typeof value === 'number' ? value : Number(value)
+    return Number.isFinite(numeric) ? numeric : 0
+}
+
+function normalizeMode(activity: ActivityItem): 'daily' | 'sport' | 'event' {
+    if (activity.type === 'Event') return 'event'
+    if (activity.mode === 'sport' || toSafeNumber(activity.activity_points) > 0 || toSafeNumber(activity.calories) > 0) {
+        return 'sport'
+    }
+    return 'daily'
+}
+
+function formatDistanceMeters(distance: number): string {
+    if (distance >= 1000) return `${(distance / 1000).toFixed(1)} km`
+    return `${Math.round(distance)} m`
+}
+
+function getReviewLabel(status: string | null | undefined): string {
+    if (!status) return 'approved'
+    if (status === 'voided') return 'voided'
+    if (status === 'rejected') return 'rejected'
+    return status
+}
+
+function getSourceLabel(source: string | null | undefined): string {
+    if (source === 'strava') return 'Strava'
+    if (source === 'manual') return 'Manual'
+    return source ? source : 'Unknown'
 }
 
 export default function Dashboard() {
-    const { profile, activities, quests, userQuests, surveys, totalPoints, isLoading: profileLoading, mutate: mutateProfile } = useProfile()
+    const {
+        profile,
+        activities,
+        quests,
+        userQuests,
+        surveys,
+        totalPoints,
+        stepPoints,
+        sportPoints,
+        totalPhysicalPoints,
+        isLoading: profileLoading,
+        mutate: mutateProfile,
+    } = useProfile()
     const { unreadCount } = useNotifications()
     const router = useRouter()
 
@@ -49,72 +120,70 @@ export default function Dashboard() {
     const [dimensionPoints, setDimensionPoints] = useState<Record<string, number>>({})
     const [myRank, setMyRank] = useState<number | null>(null)
     const [maxStreak, setMaxStreak] = useState<number>(0)
+    const [currentTime] = useState(() => Date.now())
 
     const handleRefresh = () => mutateProfile()
 
-    // Fetch dimensions
     useEffect(() => {
         fetch('/api/dimensions')
-            .then(r => r.json())
-            .then(d => setDimensions(d.dimensions || []))
+            .then((response) => response.json())
+            .then((data) => setDimensions(data.dimensions || []))
             .catch(() => {})
     }, [])
 
-    // Fetch rank + dimension points from leaderboard
     useEffect(() => {
         if (!profile) return
+
         fetch('/api/leaderboard')
-            .then(r => r.json())
-            .then(data => {
-                const sorted = (data.leaderboard || []).sort((a: any, b: any) => b.overall_points - a.overall_points)
-                const idx = sorted.findIndex((e: any) => e.user_id === profile.id)
-                if (idx !== -1) setMyRank(idx + 1)
-                const me = sorted[idx]
+            .then((response) => response.json())
+            .then((data) => {
+                const leaderboard = Array.isArray(data.leaderboard) ? data.leaderboard : []
+                const sorted = leaderboard.sort((left: { overall_points: number }, right: { overall_points: number }) => right.overall_points - left.overall_points)
+                const index = sorted.findIndex((entry: { user_id: string }) => entry.user_id === profile.id)
+                if (index !== -1) setMyRank(index + 1)
+                const me = index === -1 ? null : sorted[index]
                 if (me?.dimension_points) setDimensionPoints(me.dimension_points)
             })
             .catch(() => {})
     }, [profile])
 
-    // Fetch max streak
     useEffect(() => {
         fetch('/api/streaks')
-            .then(r => r.json())
-            .then(d => {
-                const streaks = Object.values(d.streaks || {}) as { current_streak: number }[]
-                const max = streaks.reduce((acc, s) => Math.max(acc, s.current_streak), 0)
+            .then((response) => response.json())
+            .then((data) => {
+                const streaks = Object.values(data.streaks || {}) as { current_streak: number }[]
+                const max = streaks.reduce((accumulator, streak) => Math.max(accumulator, streak.current_streak), 0)
                 setMaxStreak(max)
             })
             .catch(() => {})
     }, [])
 
-    // Quest progress — semua quest aktif, sort: harian (expires_at) dulu, lalu permanent
-    const sortedQuests = [...quests].sort((a: any, b: any) => {
-        const aCompleted = userQuests.some((uq: any) => uq.quest_id === a.id)
-        const bCompleted = userQuests.some((uq: any) => uq.quest_id === b.id)
-        // Selesai ke bawah
-        if (aCompleted !== bCompleted) return aCompleted ? 1 : -1
-        // Dalam grup: yang punya expires_at (daily) di atas, lalu by created_at terbaru
-        const aHasExpiry = a.expires_at ? 0 : 1
-        const bHasExpiry = b.expires_at ? 0 : 1
-        if (aHasExpiry !== bHasExpiry) return aHasExpiry - bHasExpiry
-        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    const sortedQuests = [...quests].sort((left: { id: string; expires_at?: string | null; created_at?: string | null }, right: { id: string; expires_at?: string | null; created_at?: string | null }) => {
+        const leftCompleted = userQuests.some((userQuest: { quest_id: string }) => userQuest.quest_id === left.id)
+        const rightCompleted = userQuests.some((userQuest: { quest_id: string }) => userQuest.quest_id === right.id)
+        if (leftCompleted !== rightCompleted) return leftCompleted ? 1 : -1
+
+        const leftHasExpiry = left.expires_at ? 0 : 1
+        const rightHasExpiry = right.expires_at ? 0 : 1
+        if (leftHasExpiry !== rightHasExpiry) return leftHasExpiry - rightHasExpiry
+
+        return new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime()
     })
 
-    // Exclude expired+uncompleted from counter (can't be done anymore)
-    const actionableQuests = sortedQuests.filter((q: any) => {
-        const isCompleted = userQuests.some((uq: any) => uq.quest_id === q.id)
-        if (!q.expires_at) return true
-        const isExpired = Date.parse(q.expires_at) - Date.now() <= 0
+    const actionableQuests = sortedQuests.filter((quest: { id: string; expires_at?: string | null }) => {
+        const isCompleted = userQuests.some((userQuest: { quest_id: string }) => userQuest.quest_id === quest.id)
+        if (!quest.expires_at) return true
+        const isExpired = Date.parse(quest.expires_at) - currentTime <= 0
         return !isExpired || isCompleted
     })
-    const completedQuests = actionableQuests.filter((q: any) =>
-        userQuests.some((uq: any) => uq.quest_id === q.id)
+
+    const completedQuests = actionableQuests.filter((quest: { id: string }) =>
+        userQuests.some((userQuest: { quest_id: string }) => userQuest.quest_id === quest.id)
     ).length
     const totalQuests = actionableQuests.length
     const questPercent = totalQuests > 0 ? Math.round((completedQuests / totalQuests) * 100) : 0
-
-    // Dimension max for % bar
-    const maxDimPoints = Math.max(100, ...Object.values(dimensionPoints).filter(v => v > 0))
+    const maxDimPoints = Math.max(100, ...Object.values(dimensionPoints).filter((value) => value > 0))
+    const dashboardActivities = activities as ActivityItem[]
 
     if (profileLoading && !profile) {
         return <Loader text="LOADING DASHBOARD..." />
@@ -122,7 +191,6 @@ export default function Dashboard() {
 
     return (
         <div className="h-[100dvh] overflow-y-auto bg-black text-white pb-32 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            {/* Ambient glow */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute -top-24 -right-24 w-80 h-80 bg-[#FC4C02] rounded-full mix-blend-screen blur-[120px] opacity-10" />
                 <div className="absolute bottom-1/3 -left-24 w-64 h-64 bg-[#FC4C02] rounded-full mix-blend-screen blur-[120px] opacity-[0.06]" />
@@ -130,8 +198,6 @@ export default function Dashboard() {
 
             {profile && (
                 <div className="relative z-10 max-w-lg mx-auto px-4">
-
-                    {/* ── Sticky Header ── */}
                     <div className="sticky top-0 z-50 flex items-center justify-between bg-black/85 backdrop-blur-xl py-3 -mx-4 px-4 border-b border-white/5">
                         <div className="flex items-center gap-3">
                             <div className="relative">
@@ -174,9 +240,7 @@ export default function Dashboard() {
                         </button>
                     </div>
 
-                    {/* ── 3 Stat Chips ── */}
-                    <div className="grid grid-cols-3 gap-3 mt-5 mb-5">
-                        {/* Total Points */}
+                    <div className="grid grid-cols-2 gap-3 mt-5 mb-5">
                         <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
                             <Trophy size={16} className="text-[#FC4C02] mb-0.5" />
                             <span className="text-base font-mono font-extrabold text-white leading-none">
@@ -184,7 +248,6 @@ export default function Dashboard() {
                             </span>
                             <span className="text-[10px] text-gray-500 uppercase tracking-wide">Points</span>
                         </div>
-                        {/* Rank */}
                         <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
                             <Medal size={16} className="text-[#FC4C02] mb-0.5" />
                             <span className="text-base font-mono font-extrabold text-white leading-none">
@@ -192,17 +255,38 @@ export default function Dashboard() {
                             </span>
                             <span className="text-[10px] text-gray-500 uppercase tracking-wide">Rank</span>
                         </div>
-                        {/* Streak */}
+                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
+                            <Footprints size={16} className="text-[#FC4C02] mb-0.5" />
+                            <span className="text-base font-mono font-extrabold text-white leading-none">
+                                {toSafeNumber(stepPoints).toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Step Points</span>
+                        </div>
                         <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
                             <Flame size={16} className="text-[#FC4C02] mb-0.5" />
                             <span className="text-base font-mono font-extrabold text-white leading-none">
-                                {maxStreak > 0 ? maxStreak : '—'}
+                                {toSafeNumber(sportPoints).toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Streak</span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Sport Points</span>
                         </div>
                     </div>
 
-                    {/* ── Survey CTA ── */}
+                    <div className="mb-5 rounded-2xl border border-[#FC4C02]/20 bg-white/[0.04] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#FC4C02]">Physical</p>
+                                <p className="mt-1 text-2xl font-mono font-extrabold text-white">
+                                    {toSafeNumber(totalPhysicalPoints || dimensionPoints.physical).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-500">Daily steps + sport sessions + physical quest points</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-gray-500">Longest streak</p>
+                                <p className="text-lg font-mono font-bold text-white">{maxStreak > 0 ? maxStreak : '—'}</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {surveys.length > 0 && (
                         <div className="mb-5 space-y-3">
                             {surveys.map((survey: Survey) => (
@@ -227,10 +311,8 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* ── Daily Quests ── */}
                     {totalQuests > 0 && (
                         <div className="mb-5">
-                            {/* Header with progress */}
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-2">
                                     <Gift size={16} className="text-[#FC4C02]" />
@@ -243,7 +325,6 @@ export default function Dashboard() {
                                     View All <ChevronRight size={12} />
                                 </Link>
                             </div>
-                            {/* Progress bar */}
                             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
                                 <div
                                     className="h-full bg-gradient-to-r from-[#FC4C02] to-orange-400 rounded-full transition-all duration-700"
@@ -259,7 +340,6 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* ── Life Mode — Dimension Grid ── */}
                     {dimensions.length > 0 && (
                         <div className="mb-5">
                             <div className="flex items-center justify-between mb-3">
@@ -272,22 +352,19 @@ export default function Dashboard() {
                                 </Link>
                             </div>
                             <div className="grid grid-cols-3 gap-2">
-                                {dimensions.map(dim => {
-                                    const points = dimensionPoints[dim.id] || 0
+                                {dimensions.map((dimension) => {
+                                    const points = dimensionPoints[dimension.id] || 0
                                     const percent = maxDimPoints > 0 ? Math.min((points / maxDimPoints) * 100, 100) : 0
-                                    const IconComp = dimensionIconMap[dim.icon] || Activity
+                                    const IconComp = dimensionIconMap[dimension.icon] || Activity
                                     const hasPoints = points > 0
 
                                     return (
                                         <div
-                                            key={dim.id}
+                                            key={dimension.id}
                                             className={`relative overflow-hidden rounded-2xl p-3 border flex flex-col gap-1.5 transition-colors ${
-                                                hasPoints
-                                                    ? 'bg-[#FC4C02]/8 border-[#FC4C02]/25'
-                                                    : 'bg-white/[0.03] border-white/[0.07]'
+                                                hasPoints ? 'bg-[#FC4C02]/8 border-[#FC4C02]/25' : 'bg-white/[0.03] border-white/[0.07]'
                                             }`}
                                         >
-                                            {/* Background fill based on progress */}
                                             {hasPoints && (
                                                 <div
                                                     className="absolute inset-0 bg-gradient-to-t from-[#FC4C02]/10 to-transparent pointer-events-none"
@@ -299,12 +376,11 @@ export default function Dashboard() {
                                                 className={`relative z-10 ${hasPoints ? 'text-[#FC4C02]' : 'text-gray-600'}`}
                                             />
                                             <p className="relative z-10 text-[10px] text-gray-400 leading-tight truncate">
-                                                {dim.display_name}
+                                                {dimension.display_name}
                                             </p>
                                             <p className={`relative z-10 text-sm font-mono font-extrabold leading-none ${hasPoints ? 'text-white' : 'text-gray-600'}`}>
                                                 {points > 0 ? points.toLocaleString() : '0'}
                                             </p>
-                                            {/* Mini bar */}
                                             <div className="relative z-10 h-1 bg-white/5 rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-[#FC4C02] rounded-full transition-all duration-500"
@@ -318,56 +394,118 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* ── Recent Activities ── */}
-                    {activities.length > 0 && (
+                    {dashboardActivities.length > 0 && (
                         <div className="mb-5">
                             <div className="flex items-center gap-2 mb-3">
                                 <CalendarDays size={15} className="text-[#FC4C02]" />
                                 <h2 className="text-sm font-bold text-white">Recent Activities</h2>
                             </div>
                             <div className="space-y-2">
-                                {activities.map((activity: ActivityItem) => (
-                                    <div
-                                        key={activity.id}
-                                        className="flex items-center gap-3 bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3 hover:bg-white/[0.07] transition-colors"
-                                    >
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                            activity.type === 'Event' ? 'bg-yellow-500/20' : 'bg-[#FC4C02]/20'
-                                        }`}>
-                                            {activity.type === 'Event'
-                                                ? <Trophy size={14} className="text-yellow-500" />
-                                                : <Footprints size={14} className="text-[#FC4C02]" />
-                                            }
+                                {dashboardActivities.map((activity) => {
+                                    const mode = normalizeMode(activity)
+                                    const isEvent = mode === 'event'
+                                    const isSport = mode === 'sport'
+                                    const status = getReviewLabel(activity.review_status)
+                                    const sourceLabel = getSourceLabel(activity.source)
+                                    const distance = toSafeNumber(activity.distance)
+
+                                    return (
+                                        <div
+                                            key={activity.id}
+                                            className="flex items-start gap-3 bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3 hover:bg-white/[0.07] transition-colors"
+                                        >
+                                            <div
+                                                className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                                    isEvent ? 'bg-yellow-500/20' : isSport ? 'bg-orange-500/20' : 'bg-[#FC4C02]/20'
+                                                }`}
+                                            >
+                                                {isEvent ? (
+                                                    <Trophy size={14} className="text-yellow-500" />
+                                                ) : isSport ? (
+                                                    <Dumbbell size={14} className="text-orange-300" />
+                                                ) : (
+                                                    <Footprints size={14} className="text-[#FC4C02]" />
+                                                )}
+                                            </div>
+
+                                            <div className="flex-grow min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className={`text-sm font-bold truncate leading-tight ${isEvent ? 'text-yellow-400' : 'text-white'}`}>
+                                                        {activity.name}
+                                                    </p>
+                                                    <span className="bg-white/5 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide text-gray-400">
+                                                        {isEvent ? 'Event' : isSport ? 'Sport' : 'Daily'}
+                                                    </span>
+                                                    {isSport && (
+                                                        <span
+                                                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide ${
+                                                                activity.source === 'strava'
+                                                                    ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
+                                                                    : 'bg-white/10 text-gray-300'
+                                                            }`}
+                                                        >
+                                                            {sourceLabel}
+                                                        </span>
+                                                    )}
+                                                    {isSport && (
+                                                        <span
+                                                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide ${
+                                                                status === 'voided' || status === 'rejected'
+                                                                    ? 'bg-red-500/10 text-red-300'
+                                                                    : 'bg-green-500/10 text-green-300'
+                                                            }`}
+                                                        >
+                                                            {status}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                                    {new Date(activity.start_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    <span className="ml-2 bg-white/5 px-1.5 py-0.5 rounded text-[10px]">{activity.type}</span>
+                                                </p>
+                                                {isSport && (
+                                                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-400">
+                                                        <span>{toSafeNumber(activity.calories).toLocaleString()} cal</span>
+                                                        {distance > 0 && <span>{formatDistanceMeters(distance)}</span>}
+                                                        {activity.source === 'strava' && toSafeNumber(activity.activity_points ?? activity.calories) === 0 && (
+                                                            <span className="text-gray-500">synced without calories</span>
+                                                        )}
+                                                        {activity.proof_url && (
+                                                            <a
+                                                                href={activity.proof_url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1 text-orange-300 hover:text-orange-200"
+                                                            >
+                                                                <Camera size={11} />
+                                                                Proof
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="text-right flex-shrink-0">
+                                                <p className={`text-sm font-mono font-extrabold ${isEvent ? 'text-yellow-400' : isSport ? 'text-orange-300' : 'text-[#FC4C02]'}`}>
+                                                    {isEvent
+                                                        ? toSafeNumber(activity.steps).toLocaleString()
+                                                        : isSport
+                                                            ? toSafeNumber(activity.activity_points ?? activity.calories).toLocaleString()
+                                                            : toSafeNumber(activity.steps).toLocaleString()}
+                                                </p>
+                                                <p className="text-[9px] text-gray-600 uppercase tracking-wide">
+                                                    {isEvent ? 'pts' : isSport ? 'sport pts' : 'steps'}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="flex-grow min-w-0">
-                                            <p className={`text-sm font-bold truncate leading-tight ${
-                                                activity.type === 'Event' ? 'text-yellow-400' : 'text-white'
-                                            }`}>
-                                                {activity.name}
-                                            </p>
-                                            <p className="text-[11px] text-gray-500 mt-0.5">
-                                                {new Date(activity.start_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                <span className="ml-2 bg-white/5 px-1.5 py-0.5 rounded text-[10px]">{activity.type}</span>
-                                            </p>
-                                        </div>
-                                        <div className="text-right flex-shrink-0">
-                                            <p className={`text-sm font-mono font-extrabold ${
-                                                activity.type === 'Event' ? 'text-yellow-400' : 'text-[#FC4C02]'
-                                            }`}>
-                                                {activity.steps > 0 ? activity.steps.toLocaleString() : '—'}
-                                            </p>
-                                            <p className="text-[9px] text-gray-600 uppercase tracking-wide">
-                                                {activity.type === 'Event' ? 'pts' : 'steps'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     )}
-
                 </div>
             )}
+
             <AddActivityBtn />
         </div>
     )

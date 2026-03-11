@@ -42,7 +42,7 @@ import {
 import { RewardsTab } from './components/RewardsTab'
 import { UsersTab } from './components/UsersTab'
 import { useUserSelection } from './hooks/useUserSelection'
-import type { AdminReward, AdminUser } from './types'
+import type { AdminReward, AdminSportSession, AdminUser } from './types'
 
 export default function AdminPage() {
     const { success, error: toastError, info } = useToast()
@@ -98,6 +98,7 @@ export default function AdminPage() {
 
     // Activity State
     const [activities, setActivities] = useState<any[]>([])
+    const [sportSessions, setSportSessions] = useState<AdminSportSession[]>([])
     const [activityTypes, setActivityTypes] = useState<ActivityTypeNode[]>([])
     const [newActivityTypeName, setNewActivityTypeName] = useState('')
     const [newActivityTypeDescription, setNewActivityTypeDescription] = useState('')
@@ -105,6 +106,7 @@ export default function AdminPage() {
     const [newActivityTypeDimensionId, setNewActivityTypeDimensionId] = useState('')
     const [isActivityTypeModalOpen, setIsActivityTypeModalOpen] = useState(false)
     const [isActivityTypeHierarchyEnabled, setIsActivityTypeHierarchyEnabled] = useState(true)
+    const [voidingSportSessionId, setVoidingSportSessionId] = useState<string | null>(null)
     const [selectedTypeFilter, setSelectedTypeFilter] = useState('')
     const [activityForm, setActivityForm] = useState({
         title: '',
@@ -752,6 +754,9 @@ export default function AdminPage() {
             fetchActivities()
             fetchDimensions()
         }
+        else if (activeTab === 'sports') {
+            fetchSportSessions()
+        }
         else if (activeTab === 'doorprize') {
             fetchActivities()
             fetchDoorprizeSessions()
@@ -813,6 +818,52 @@ export default function AdminPage() {
             setActivities(Array.isArray(data) ? data : [])
         } catch (error) {
             console.error('Error fetching activities:', error)
+        }
+    }
+
+    const fetchSportSessions = async () => {
+        setLoading(true)
+        try {
+            const res = await fetch('/api/admin/sport-sessions')
+            if (res.status === 403) {
+                router.push('/dashboard')
+                return
+            }
+            const data = await res.json()
+            setSportSessions(Array.isArray(data.sessions) ? (data.sessions as AdminSportSession[]) : [])
+        } catch (error) {
+            console.error('Error fetching sport sessions:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleVoidSportSession = async (session: AdminSportSession) => {
+        const reason = window.prompt('Void reason', session.review_reason || 'Indikasi abuse / curang')
+        if (!reason) return
+
+        setVoidingSportSessionId(String(session.id))
+        try {
+            const res = await fetch('/api/admin/sport-sessions/void', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: session.id,
+                    reason,
+                }),
+            })
+            const data = await res.json()
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to void sport session')
+            }
+
+            success('Sport session voided successfully')
+            fetchSportSessions()
+        } catch (error: any) {
+            toastError(error.message || 'Failed to void sport session')
+        } finally {
+            setVoidingSportSessionId(null)
         }
     }
 
@@ -1774,6 +1825,136 @@ export default function AdminPage() {
                     onEditReward={handleEditReward}
                     onDeleteReward={promptDeleteReward}
                 />
+            )}
+
+            {activeTab === 'sports' && (
+                <div className="space-y-6">
+                    <div className="rounded-2xl border border-white/10 bg-[#111111] p-4 text-sm text-gray-400">
+                        Manual sport sessions auto-approve on submit, and Strava sport sync lands here as history. Void a session here if the proof, source data, or calories look abusive so downstream physical points ignore it.
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        {sportSessions.map((session) => {
+                            const isVoided = session.review_status === 'voided' || session.review_status === 'rejected'
+                            const distanceKm = typeof session.distance === 'number' && session.distance > 0
+                                ? `${(session.distance / 1000).toFixed(1)} km`
+                                : null
+                            const isStravaWithoutCalories =
+                                session.source === 'strava' &&
+                                Number(session.activity_points || 0) === 0 &&
+                                session.has_calories !== true
+
+                            return (
+                                <div
+                                    key={session.id}
+                                    className="overflow-hidden rounded-2xl border border-white/10 bg-[#121212]"
+                                >
+                                    <div className="grid gap-0 md:grid-cols-[220px,1fr]">
+                                        <div className="border-b border-white/10 bg-black/40 md:border-b-0 md:border-r">
+                                            {session.proof_url ? (
+                                                <img
+                                                    src={session.proof_url}
+                                                    alt={session.name || 'Sport proof'}
+                                                    className="h-56 w-full object-cover md:h-full"
+                                                />
+                                            ) : (
+                                                <div className="flex h-56 items-center justify-center text-sm text-gray-600">
+                                                    No proof uploaded
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-4 p-5">
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div>
+                                                    <h3 className="text-lg font-bold text-white">{session.name || session.type || 'Sport Session'}</h3>
+                                                    <p className="mt-1 text-sm text-gray-400">
+                                                        {(session.profile?.full_name || 'Unknown User')}
+                                                        {session.profile?.username ? ` • @${session.profile.username}` : ''}
+                                                    </p>
+                                                </div>
+                                                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                                                    isVoided
+                                                        ? 'bg-red-500/15 text-red-400'
+                                                        : 'bg-green-500/15 text-green-400'
+                                                }`}>
+                                                    {isVoided ? 'Voided' : 'Approved'}
+                                                </span>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+                                                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest text-gray-500">Type</div>
+                                                    <div className="mt-1 font-bold text-white">{session.type || 'Sport'}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest text-gray-500">Calories</div>
+                                                    <div className="mt-1 font-bold text-[#FC4C02]">{Number(session.calories || 0).toLocaleString()}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest text-gray-500">Points</div>
+                                                    <div className="mt-1 font-bold text-white">{Number(session.activity_points || 0).toLocaleString()}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest text-gray-500">Distance</div>
+                                                    <div className="mt-1 font-bold text-white">{distanceKm || 'Optional'}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                                <span>{session.start_date ? new Date(session.start_date).toLocaleString('id-ID') : 'No timestamp'}</span>
+                                                <span className={`rounded-full px-2 py-1 uppercase tracking-wider ${
+                                                    session.source === 'strava'
+                                                        ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
+                                                        : 'bg-white/5 text-gray-300'
+                                                }`}>
+                                                    {session.source || 'manual'}
+                                                </span>
+                                                {isStravaWithoutCalories && (
+                                                    <span className="rounded-full bg-white/5 px-2 py-1 uppercase tracking-wider text-gray-400">
+                                                        Synced Without Calories
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {session.review_reason && (
+                                                <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+                                                    <span className="font-bold text-red-300">Reason:</span> {session.review_reason}
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-wrap gap-3">
+                                                {session.proof_url && (
+                                                    <a
+                                                        href={session.proof_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                                                    >
+                                                        Open Proof
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={() => handleVoidSportSession(session)}
+                                                    disabled={isVoided || voidingSportSessionId === String(session.id)}
+                                                    className="rounded-xl bg-red-500/15 px-4 py-2 text-sm font-bold text-red-300 transition-colors hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {voidingSportSessionId === String(session.id) ? 'Voiding...' : 'Void Points'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })}
+
+                        {!loading && sportSessions.length === 0 && (
+                            <div className="col-span-full rounded-2xl border border-dashed border-white/10 bg-black/20 p-10 text-center text-sm text-gray-500">
+                                No sport sessions found yet.
+                            </div>
+                        )}
+                    </div>
+                </div>
             )}
 
             {activeTab === 'admins' && <ManageAdmins />}
