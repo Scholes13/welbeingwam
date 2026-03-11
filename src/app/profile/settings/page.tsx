@@ -1,16 +1,31 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Instagram, Lock, Loader2 } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, Save, Instagram, Lock, Loader2, Activity, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+
+import { getStravaConnectionState, getStravaFeedback } from './strava'
+
+type ProfileResponse = {
+    profile?: {
+        instagram_username?: string | null
+        strava_athlete_id?: number | null
+        last_strava_sync_at?: string | null
+    }
+}
 
 export default function SettingsPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState('')
     const [error, setError] = useState('')
+    const [stravaProfile, setStravaProfile] = useState<{
+        strava_athlete_id?: number | null
+        last_strava_sync_at?: string | null
+    }>({})
 
     const [formData, setFormData] = useState({
         instagram: '',
@@ -19,29 +34,34 @@ export default function SettingsPage() {
     })
 
     useEffect(() => {
-        fetchProfile()
-    }, [])
-
-    const fetchProfile = async () => {
-        try {
-            const res = await fetch('/api/strava/sync')
-            if (res.status === 401) {
-                router.push('/')
-                return
+        const fetchProfile = async () => {
+            try {
+                const res = await fetch('/api/strava/sync')
+                if (res.status === 401) {
+                    router.push('/')
+                    return
+                }
+                const data = await res.json() as ProfileResponse
+                if (data.profile) {
+                    const profile = data.profile
+                    setFormData(prev => ({
+                        ...prev,
+                        instagram: profile.instagram_username || ''
+                    }))
+                    setStravaProfile({
+                        strava_athlete_id: profile.strava_athlete_id,
+                        last_strava_sync_at: profile.last_strava_sync_at,
+                    })
+                }
+            } catch (err) {
+                console.error('Error fetching profile:', err)
+            } finally {
+                setLoading(false)
             }
-            const data = await res.json()
-            if (data.profile) {
-                setFormData(prev => ({
-                    ...prev,
-                    instagram: data.profile.instagram_username || ''
-                }))
-            }
-        } catch (err) {
-            console.error('Error fetching profile:', err)
-        } finally {
-            setLoading(false)
         }
-    }
+
+        void fetchProfile()
+    }, [router])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -75,12 +95,18 @@ export default function SettingsPage() {
             setMessage('Settings updated successfully!')
             setFormData(prev => ({ ...prev, password: '', confirmPassword: '' })) // Clear password fields
 
-        } catch (err: any) {
-            setError(err.message)
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to update settings')
         } finally {
             setSaving(false)
         }
     }
+
+    const stravaState = getStravaConnectionState(stravaProfile)
+    const stravaFeedback = getStravaFeedback({
+        strava: searchParams.get('strava'),
+        error: searchParams.get('error'),
+    })
 
     if (loading) {
         return (
@@ -107,6 +133,59 @@ export default function SettingsPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    {stravaFeedback && (
+                        <div
+                            className={`px-4 py-3 rounded-xl text-sm border ${
+                                stravaFeedback.tone === 'success'
+                                    ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                            }`}
+                        >
+                            {stravaFeedback.message}
+                        </div>
+                    )}
+
+                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-6">
+                        <div className="flex items-start justify-between gap-4 mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-[#FC4C02]/10 rounded-lg text-[#FC4C02]">
+                                    <Activity className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="font-semibold">Strava</h2>
+                                    <p className="text-xs text-gray-400">Hubungkan Strava untuk sync sport session otomatis</p>
+                                </div>
+                            </div>
+
+                            <span
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                                    stravaState.isConnected
+                                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                        : 'bg-white/5 text-gray-300 border border-white/10'
+                                }`}
+                            >
+                                {stravaState.statusLabel}
+                            </span>
+                        </div>
+
+                        <div className="space-y-2 mb-5">
+                            <p className="text-sm text-gray-200">{stravaState.helperText}</p>
+                            {stravaState.athleteLabel && (
+                                <p className="text-xs text-gray-400">{stravaState.athleteLabel}</p>
+                            )}
+                            {stravaState.lastSyncLabel && (
+                                <p className="text-xs text-gray-500">{stravaState.lastSyncLabel}</p>
+                            )}
+                        </div>
+
+                        <a
+                            href="/api/auth/login"
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#FC4C02]/30 bg-[#FC4C02] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#ff5d1f]"
+                        >
+                            {stravaState.buttonLabel}
+                            <ExternalLink className="w-4 h-4" />
+                        </a>
+                    </div>
 
                     {/* Instagram Section */}
                     <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-6">
