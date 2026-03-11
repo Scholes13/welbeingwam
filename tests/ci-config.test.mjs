@@ -68,3 +68,9 @@ test("cloudflare deployment keeps auth gate on edge middleware, not node proxy",
   assert.equal(exists("src/middleware.ts"), true);
   assert.equal(exists("src/proxy.ts"), false);
 });
+
+test("wrangler config matches the connected worker and enables minification", () => {
+  const wrangler = read("wrangler.jsonc");
+  assert.match(wrangler, /"name"\s*:\s*"cta"/);
+  assert.match(wrangler, /"minify"\s*:\s*true/);
+});
