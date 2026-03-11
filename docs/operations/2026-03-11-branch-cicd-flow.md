@@ -32,6 +32,7 @@ Checks:
 
 The CI job uses placeholder values for build-time envs so the app can be validated without exposing secrets.
 Repository-wide ESLint still has substantial legacy debt on the current `staging` baseline, so lint is documented as follow-up work rather than a merge gate for this bootstrap PR.
+Local Windows runs of OpenNext can be flaky even after a passing build; the authoritative verification target is Node 20 on Linux, which matches the GitHub Actions runner.
 
 ## CD Workflow
 
@@ -67,6 +68,13 @@ Deploy rules:
 3. Confirm CI passes.
 4. Merge into `staging` and verify the deploy workflow fires from the successful `CI` run for that merge commit.
 5. Promote from `staging` to `main` once staging checks are stable.
+
+## Verification Notes
+
+- Preferred local verification:
+  - `npx -y -p node@20 -p npm@10 cmd /c "npm run ci:verify"` on Windows
+  - or run `npm ci && npm run ci:verify` inside Linux/WSL
+- `npm run lint` is currently expected to fail on the shared baseline and should not block this bootstrap PR.
 
 ## Risks
 

@@ -39,6 +39,11 @@ The current `origin/staging` auth/session layer has diverged toward cookie-based
 - `npm run build`
 - `npx tsx scripts/check_architecture_integrity.ts`
 
+Key evidence from the remediation branch:
+- targeted regression suite was made green before commit
+- integrity audit still reported historical data drift, which is why rollout requires migrations plus data repair sequencing instead of blind merge
+- commit reference on the remediation branch: `43698f4146ab496dd9f1e61f12ca63361ac83337`
+
 ## Known Limitation
 
 Latest `origin/staging` has diverged enough in auth/session handling that this PR should be rebased or selectively ported before merge.
@@ -48,3 +53,7 @@ Latest `origin/staging` has diverged enough in auth/session handling that this P
 1. Port database migrations and integrity tooling first.
 2. Port reward claim invariant handling onto the latest reward routes.
 3. Revisit auth/session convergence in a dedicated follow-up PR with explicit login/session rollout planning.
+
+## Explicit Non-Goal
+
+This PR should not be merged directly into current `staging` without a selective port/rebase pass, because doing so would overwrite newer cookie/session flow assumptions with an older auth abstraction.

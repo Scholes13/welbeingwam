@@ -32,15 +32,22 @@ It also fixes the current worktree/multi-lockfile build issue by setting `turbop
 
 ## Verification
 
-- `npm run build`
-- `npm run pages:build`
-- `npm run ci:verify`
+- `node --test tests/ci-config.test.mjs`
+- `npx -y -p node@20 -p npm@10 cmd /c "npm run ci:verify"`
+- Linux-equivalent proof:
+  - `wsl bash -lc "export PATH=/tmp/node-v20.20.1-linux-x64/bin:/usr/bin:/bin && cd /tmp/welbeing-cicd-linux && npm run ci:verify"`
+
+Expected result:
+- `npm ci` resolves cleanly on Node 20
+- `npm run ci:verify` produces a successful OpenNext bundle
+- known non-blocking warnings remain around `metadata.viewport/themeColor`
 
 ## Deferred Debt
 
 - Repository-wide ESLint currently fails on the latest `staging` baseline with a large volume of pre-existing `no-explicit-any`, `react/no-unescaped-entities`, and hook-effect violations.
 - This PR does not attempt to fix that backlog because it is independent from bootstrapping the Cloudflare CI/CD path.
 - Lint should be added back as a required CI gate in a dedicated cleanup PR once the baseline is reduced to a tractable scope.
+- Local Windows OpenNext runs are not a reliable source of truth; the gating evidence for this PR is the Node 20/Linux-equivalent run above, which matches the GitHub Actions environment.
 
 ## Required GitHub Setup
 
