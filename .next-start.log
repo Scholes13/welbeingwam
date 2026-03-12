@@ -1,0 +1,174 @@
+▲ Next.js 16.1.6
+- Local:         http://localhost:3000
+- Network:       http://192.168.1.4:3000
+
+✓ Starting...
+✓ Ready in 984ms
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to load existing Strava activities: {
+  code: '42703',
+  details: null,
+  hint: null,
+  message: 'column activities.external_id does not exist'
+}
+Error saving Strava sport sessions: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'activity_points' column of 'activities' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to load existing Strava activities: {
+  code: '42703',
+  details: null,
+  hint: null,
+  message: 'column activities.external_id does not exist'
+}
+Error saving Strava sport sessions: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'activity_points' column of 'activities' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to load existing Strava activities: {
+  code: '42703',
+  details: null,
+  hint: null,
+  message: 'column activities.external_id does not exist'
+}
+Error saving Strava sport sessions: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'activity_points' column of 'activities' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to load existing Strava activities: {
+  code: '42703',
+  details: null,
+  hint: null,
+  message: 'column activities.external_id does not exist'
+}
+Error saving Strava sport sessions: {
+  code: 'PGRST204',
+  details: null,
+  hint: null,
+  message: "Could not find the 'activity_points' column of 'activities' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}
+Failed to read Strava sync cooldown: {
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.survey_options'",
+  message: "Could not find the table 'public.settings' in the schema cache"
+}

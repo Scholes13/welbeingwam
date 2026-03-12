@@ -198,97 +198,102 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                             <motion.div
                                 key={quest.id}
                                 layout
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={{ opacity: 0, y: 16 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                className={`relative border p-5 rounded-2xl flex items-center gap-4 transition-colors ${errorMessage ? 'bg-red-500/10 border-red-500/50' : 'bg-[#1a1a1a] border-white/10'
-                                    }`}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className={`relative overflow-hidden rounded-2xl transition-all duration-200 ${
+                                    errorMessage
+                                        ? 'bg-red-500/[0.06] border border-red-500/30'
+                                        : isCompleted || isSuccess
+                                            ? 'bg-emerald-500/[0.04] border border-emerald-500/15'
+                                            : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.05] hover:border-white/[0.1]'
+                                }`}
                             >
-                                <div className="z-10 flex-1 min-w-0 flex flex-col gap-1">
-                                    <h3 className="font-bold text-white leading-snug break-words pr-2">
-                                        {quest.title}
-                                    </h3>
-                                    <p className="text-gray-400 text-xs line-clamp-2">{quest.description}</p>
+                                <div className="flex items-center gap-3.5 p-4">
+                                    <div className="z-10 flex-1 min-w-0 flex flex-col gap-1.5">
+                                        <h3 className="text-sm font-bold text-white leading-snug break-words pr-2">
+                                            {quest.title}
+                                        </h3>
+                                        <p className="text-gray-500 text-xs line-clamp-1">{quest.description}</p>
 
-                                    {/* Footer Info: Badge + Timer */}
-                                    <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                                        {quest.dimension && (
-                                            <span className="flex items-center gap-1 text-xs text-orange-300/70 bg-orange-500/10 px-2 py-0.5 rounded-full">
-                                                {(() => {
-                                                    const IconComp = dimensionIcons[quest.dimension.icon]
-                                                    return IconComp ? <IconComp className="w-3 h-3" /> : null
-                                                })()}
-                                                {quest.dimension.display_name}
+                                        {/* Footer Info: Badge + Timer */}
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                            {quest.dimension && (
+                                                <span className="flex items-center gap-1 text-[10px] font-medium text-orange-300/80 bg-orange-500/10 px-2 py-0.5 rounded-md">
+                                                    {(() => {
+                                                        const IconComp = dimensionIcons[quest.dimension.icon]
+                                                        return IconComp ? <IconComp className="w-3 h-3" /> : null
+                                                    })()}
+                                                    {quest.dimension.display_name}
+                                                </span>
+                                            )}
+                                            <span className="bg-[#FC4C02]/15 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
+                                                +{quest.points} PTS
                                             </span>
-                                        )}
-                                        <span className="bg-[#FC4C02]/20 text-[#FC4C02] text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
-                                            +{quest.points} PTS
-                                        </span>
 
-                                        {quest.dimension_id && streakMap[quest.dimension_id] && streakMap[quest.dimension_id].current_streak > 0 && (
-                                            <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md shrink-0 font-bold">
-                                                🔥 {streakMap[quest.dimension_id].current_streak}d — {streakMap[quest.dimension_id].multiplier}x
-                                            </span>
-                                        )}
+                                            {quest.dimension_id && streakMap[quest.dimension_id] && streakMap[quest.dimension_id].current_streak > 0 && (
+                                                <span className="text-[10px] text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-md shrink-0 font-bold">
+                                                    🔥 {streakMap[quest.dimension_id].current_streak}d — {streakMap[quest.dimension_id].multiplier}x
+                                                </span>
+                                            )}
 
-                                        <div className="h-5 flex items-center">
                                             {errorMessage ? (
-                                                <div className="text-xs font-bold text-red-500 flex items-center gap-1">
-                                                    <XCircle size={12} /> {errorMessage}
-                                                </div>
+                                                <span className="text-[10px] font-bold text-red-400 flex items-center gap-1">
+                                                    <XCircle size={10} /> {errorMessage}
+                                                </span>
                                             ) : timeLeft ? (
-                                                <div className="text-xs font-mono font-bold text-yellow-500 flex items-center gap-1.5">
-                                                    <Timer className="w-3.5 h-3.5" />
+                                                <span className="text-[10px] font-mono font-bold text-yellow-500/80 flex items-center gap-1">
+                                                    <Timer className="w-3 h-3" />
                                                     {timeLeft}
-                                                </div>
+                                                </span>
                                             ) : null}
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="z-10 shrink-0 self-center">
-                                    <motion.button
-                                        onClick={() => !isCompleted && handleClaim(quest)}
-                                        disabled={isLoading || isSuccess || isCompleted}
-                                        whileTap={{ scale: 0.95 }}
-                                        className={`px-5 py-2.5 rounded-xl font-bold text-xs min-w-[90px] flex justify-center items-center overflow-hidden relative transition-all shadow-lg ${isSuccess || isCompleted
-                                            ? 'bg-green-500 text-white shadow-green-500/20'
-                                            : errorMessage
-                                                ? 'bg-red-500 text-white'
-                                                : 'bg-white text-black hover:bg-gray-200 shadow-white/10'
-                                            }`}
-                                    >
-                                        <AnimatePresence mode="wait">
-                                            {isLoading ? (
-                                                <motion.div
-                                                    key="loading"
-                                                    initial={{ opacity: 0 }}
-                                                    animate={{ opacity: 1 }}
-                                                    exit={{ opacity: 0 }}
-                                                >
-                                                    <Loader2 size={16} className="animate-spin" />
-                                                </motion.div>
-                                            ) : isSuccess || isCompleted ? (
-                                                <motion.div
-                                                    key="success"
-                                                    initial={{ scale: 0.5, opacity: 0 }}
-                                                    animate={{ scale: 1, opacity: 1 }}
-                                                    className="flex items-center gap-1"
-                                                >
-                                                    <Check size={16} />
-                                                </motion.div>
-                                            ) : (
-                                                <motion.span
-                                                    key="idle"
-                                                    initial={{ opacity: 0 }}
-                                                    animate={{ opacity: 1 }}
-                                                    exit={{ opacity: 0 }}
-                                                >
-                                                    {errorMessage ? 'Retry' : 'Done'}
-                                                </motion.span>
-                                            )}
-                                        </AnimatePresence>
-                                    </motion.button>
+                                    <div className="z-10 shrink-0 self-center">
+                                        <motion.button
+                                            onClick={() => !isCompleted && handleClaim(quest)}
+                                            disabled={isLoading || isSuccess || isCompleted}
+                                            whileTap={{ scale: 0.95 }}
+                                            className={`px-4 py-2 rounded-xl font-bold text-xs min-w-[80px] flex justify-center items-center overflow-hidden relative transition-all ${isSuccess || isCompleted
+                                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                                : errorMessage
+                                                    ? 'bg-red-500/15 text-red-400 border border-red-500/20'
+                                                    : 'bg-white/[0.08] text-white border border-white/[0.1] hover:bg-white/[0.15]'
+                                                }`}
+                                        >
+                                            <AnimatePresence mode="wait">
+                                                {isLoading ? (
+                                                    <motion.div
+                                                        key="loading"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                    >
+                                                        <Loader2 size={14} className="animate-spin" />
+                                                    </motion.div>
+                                                ) : isSuccess || isCompleted ? (
+                                                    <motion.div
+                                                        key="success"
+                                                        initial={{ scale: 0.5, opacity: 0 }}
+                                                        animate={{ scale: 1, opacity: 1 }}
+                                                        className="flex items-center gap-1"
+                                                    >
+                                                        <Check size={14} /> Done
+                                                    </motion.div>
+                                                ) : (
+                                                    <motion.span
+                                                        key="idle"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                    >
+                                                        {errorMessage ? 'Retry' : 'Done'}
+                                                    </motion.span>
+                                                )}
+                                            </AnimatePresence>
+                                        </motion.button>
+                                    </div>
                                 </div>
                             </motion.div>
                         )
@@ -297,10 +302,10 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
             </div>
 
             {showPhotoModal && selectedQuest && (
-                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-                    <div className="bg-[#1a1a1a] rounded-2xl p-6 max-w-md w-full">
-                        <h3 className="text-lg font-bold mb-2">Upload Bukti</h3>
-                        <p className="text-sm text-gray-400 mb-4">{selectedQuest.title}</p>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-[#111111] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full shadow-2xl">
+                        <h3 className="text-base font-bold mb-1.5 text-white">Upload Bukti</h3>
+                        <p className="text-xs text-gray-500 mb-5">{selectedQuest.title}</p>
                         <input
                             type="file"
                             accept="image/*"
@@ -309,26 +314,26 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                             className="w-full mb-4 text-sm text-gray-400"
                         />
                         {photoFile && (
-                            <p className="text-xs text-green-400 mb-2">{photoFile.name}</p>
+                            <p className="text-xs text-emerald-400 mb-3">{photoFile.name}</p>
                         )}
                         <textarea
                             placeholder="Catatan (opsional)..."
                             value={verificationNote}
                             onChange={(e) => setVerificationNote(e.target.value)}
-                            className="w-full bg-[#0a0a0a] border border-gray-800 rounded-lg px-3 py-2 text-sm mb-4 text-white"
+                            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-3 text-sm mb-5 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                             rows={2}
                         />
-                        <div className="flex gap-2">
+                        <div className="flex gap-2.5">
                             <button
                                 onClick={() => { setShowPhotoModal(false); setPhotoFile(null); setVerificationNote('') }}
-                                className="flex-1 py-2 rounded-lg bg-gray-800 text-sm text-white"
+                                className="flex-1 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.08] text-sm text-white hover:bg-white/[0.1] transition-colors"
                             >
                                 Batal
                             </button>
                             <button
                                 onClick={handlePhotoSubmit}
                                 disabled={!photoFile || uploading}
-                                className="flex-1 py-2 rounded-lg bg-[#FC4C02] text-sm font-bold text-white disabled:opacity-50"
+                                className="flex-1 py-2.5 rounded-xl bg-[#FC4C02] text-sm font-bold text-white disabled:opacity-40 hover:bg-orange-600 transition-colors"
                             >
                                 {uploading ? 'Uploading...' : 'Submit'}
                             </button>

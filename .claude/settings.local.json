@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /i/Project/Welbeing/*.config.* /i/Project/Welbeing/package.json)"
+    ]
+  }
+}

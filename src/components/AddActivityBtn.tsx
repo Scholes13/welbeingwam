@@ -103,50 +103,54 @@ export default function AddActivityBtn() {
         <>
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-24 right-6 bg-[#FC4C02] text-white p-4 rounded-full shadow-2xl z-40 hover:scale-110 transition-transform"
+                className="fixed bottom-20 right-5 bg-[#FC4C02] text-white p-3.5 rounded-2xl shadow-lg shadow-[#FC4C02]/20 z-40 hover:scale-105 active:scale-95 transition-transform"
                 aria-label="Add activity"
             >
-                <Plus size={24} />
+                <Plus size={22} />
             </button>
 
             <AnimatePresence>
                 {isOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="fixed inset-0 z-50 flex items-end justify-center">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsOpen(false)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
                         />
 
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="relative w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-2xl"
+                            initial={{ y: '100%' }}
+                            animate={{ y: 0 }}
+                            exit={{ y: '100%' }}
+                            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                            className="relative w-full max-w-lg bg-[#111111] border-t border-white/[0.08] rounded-t-3xl p-6 pb-10 shadow-2xl"
                         >
+                            {/* Drag handle */}
+                            <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5" />
+
                             <button
                                 onClick={() => setIsOpen(false)}
-                                className="absolute top-4 right-4 text-gray-500 hover:text-white"
+                                className="absolute top-5 right-5 text-gray-500 hover:text-white transition-colors"
                             >
                                 <X size={20} />
                             </button>
 
-                            <h3 className="text-xl font-bold mb-6">Tambah Aktivitas</h3>
+                            <h3 className="text-lg font-bold mb-6 text-white">Add Activity</h3>
 
-                            <div className="grid grid-cols-2 gap-2 mb-5 rounded-xl bg-black/40 p-1">
+                            <div className="grid grid-cols-2 gap-1.5 mb-6 rounded-xl bg-white/[0.04] p-1">
                                 <button
                                     type="button"
                                     onClick={() => setMode('daily')}
-                                    className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === 'daily' ? 'bg-[#FC4C02] text-white' : 'text-gray-400 hover:text-white'}`}
+                                    className={`rounded-lg px-3 py-2.5 text-sm font-bold transition-all ${mode === 'daily' ? 'bg-[#FC4C02] text-white shadow-lg shadow-[#FC4C02]/20' : 'text-gray-500 hover:text-white'}`}
                                 >
                                     Daily Activity
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setMode('sport')}
-                                    className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${mode === 'sport' ? 'bg-[#FC4C02] text-white' : 'text-gray-400 hover:text-white'}`}
+                                    className={`rounded-lg px-3 py-2.5 text-sm font-bold transition-all ${mode === 'sport' ? 'bg-[#FC4C02] text-white shadow-lg shadow-[#FC4C02]/20' : 'text-gray-500 hover:text-white'}`}
                                 >
                                     Sport Session
                                 </button>
@@ -154,14 +158,14 @@ export default function AddActivityBtn() {
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Date</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Date</label>
                                     <div className="relative">
-                                        <Calendar className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                        <Calendar className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                         <input
                                             type="date"
                                             value={date}
                                             onChange={(e) => setDate(e.target.value)}
-                                            className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                            className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                         />
                                     </div>
                                 </div>
@@ -169,44 +173,44 @@ export default function AddActivityBtn() {
                                 {mode === 'daily' ? (
                                     <>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Steps</label>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Steps</label>
                                             <div className="relative">
-                                                <Footprints className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                                <Footprints className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                                 <input
                                                     type="number"
                                                     value={steps}
                                                     onChange={(e) => setSteps(e.target.value)}
                                                     placeholder="e.g. 5000"
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                                 />
                                             </div>
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Distance (optional)</label>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Distance (optional)</label>
                                             <div className="relative">
-                                                <MapPin className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                                <MapPin className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                                 <input
                                                     type="number"
                                                     value={distance}
                                                     onChange={(e) => setDistance(e.target.value)}
                                                     placeholder="meters"
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                                 />
                                             </div>
                                         </div>
-                                        <p className="mt-2 text-[11px] text-gray-500">Step points use the existing 1 point per 10 steps rule.</p>
+                                        <p className="text-[11px] text-gray-600">Step points use the existing 1 point per 10 steps rule.</p>
                                     </>
                                 ) : (
                                     <>
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Activity Type</label>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Activity Type</label>
                                             <div className="relative">
-                                                <Activity className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                                <Activity className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                                 <select
                                                     value={activityType}
                                                     onChange={(e) => setActivityType(e.target.value)}
-                                                    className="w-full appearance-none bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                    className="w-full appearance-none bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                                 >
                                                     {SPORT_OPTIONS.map((option) => (
                                                         <option key={option} value={option}>{option}</option>
@@ -216,37 +220,37 @@ export default function AddActivityBtn() {
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Calories</label>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Calories</label>
                                             <div className="relative">
-                                                <Flame className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                                <Flame className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                                 <input
                                                     type="number"
                                                     value={calories}
                                                     onChange={(e) => setCalories(e.target.value)}
                                                     placeholder="e.g. 320"
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                                 />
                                             </div>
-                                            <p className="mt-2 text-[11px] text-gray-500">Sport points are 1:1 with calories and go to Physical.</p>
+                                            <p className="mt-1.5 text-[11px] text-gray-600">Sport points are 1:1 with calories and go to Physical.</p>
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Distance (optional)</label>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Distance (optional)</label>
                                             <div className="relative">
-                                                <MapPin className="absolute left-3 top-2.5 text-gray-500 w-4 h-4" />
+                                                <MapPin className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
                                                 <input
                                                     type="number"
                                                     value={distance}
                                                     onChange={(e) => setDistance(e.target.value)}
                                                     placeholder="meters"
-                                                    className="w-full bg-black border border-white/10 rounded-lg py-2 pl-10 pr-4 text-white focus:outline-none focus:border-[#FC4C02]"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                                 />
                                             </div>
                                         </div>
 
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Photo Proof</label>
-                                            <label className="flex items-center gap-3 rounded-lg border border-dashed border-white/15 bg-black px-3 py-3 text-sm text-gray-300 cursor-pointer hover:border-[#FC4C02]/50">
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Photo Proof</label>
+                                            <label className="flex items-center gap-3 rounded-xl border border-dashed border-white/[0.1] bg-white/[0.02] px-4 py-3.5 text-sm text-gray-400 cursor-pointer hover:border-[#FC4C02]/30 hover:bg-white/[0.04] transition-all">
                                                 <Camera className="w-4 h-4 text-gray-500" />
                                                 <span className="truncate">{proofFile ? proofFile.name : 'Upload sport proof photo'}</span>
                                                 <input
@@ -263,7 +267,7 @@ export default function AddActivityBtn() {
                                 <button
                                     onClick={handleSubmit}
                                     disabled={loading || (mode === 'daily' ? !steps : !calories || !proofFile)}
-                                    className="w-full bg-[#FC4C02] text-white font-bold py-3 rounded-xl hover:bg-orange-600 transition-colors mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="w-full bg-[#FC4C02] text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-all mt-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#FC4C02]/20 disabled:shadow-none"
                                 >
                                     {loading ? 'Saving...' : mode === 'sport' ? 'Save Sport Session' : 'Save Daily Activity'}
                                 </button>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -8,7 +8,6 @@ import {
     Bell,
     Brain,
     Briefcase,
-    CalendarDays,
     Camera,
     ChevronRight,
     Dumbbell,
@@ -19,10 +18,12 @@ import {
     Medal,
     Shield,
     Sparkles,
+    TrendingUp,
     Trophy,
     Users,
     Zap,
 } from 'lucide-react'
+import { motion } from 'framer-motion'
 
 import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
@@ -68,6 +69,15 @@ const dimensionIconMap: Record<string, React.ComponentType<{ className?: string;
     briefcase: Briefcase,
 }
 
+const dimensionColorMap: Record<string, { text: string; bg: string; border: string; glow: string }> = {
+    activity: { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', glow: 'from-orange-500/15' },
+    heart: { text: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20', glow: 'from-rose-500/15' },
+    brain: { text: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', glow: 'from-violet-500/15' },
+    users: { text: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/20', glow: 'from-sky-500/15' },
+    sparkles: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', glow: 'from-amber-500/15' },
+    briefcase: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', glow: 'from-emerald-500/15' },
+}
+
 function toSafeNumber(value: unknown): number {
     const numeric = typeof value === 'number' ? value : Number(value)
     return Number.isFinite(numeric) ? numeric : 0
@@ -99,6 +109,62 @@ function getSourceLabel(source: string | null | undefined): string {
     return source ? source : 'Unknown'
 }
 
+function getGreeting(): string {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good Morning'
+    if (hour < 17) return 'Good Afternoon'
+    return 'Good Evening'
+}
+
+/* Animated counter hook */
+function useCountUp(target: number, duration = 1200) {
+    const [value, setValue] = useState(0)
+    const ref = useRef(0)
+    useEffect(() => {
+        if (target === ref.current) return
+        const start = ref.current
+        const diff = target - start
+        const startTime = performance.now()
+        const step = (now: number) => {
+            const elapsed = now - startTime
+            const progress = Math.min(elapsed / duration, 1)
+            // ease-out cubic
+            const eased = 1 - Math.pow(1 - progress, 3)
+            const current = Math.round(start + diff * eased)
+            setValue(current)
+            if (progress < 1) requestAnimationFrame(step)
+            else ref.current = target
+        }
+        requestAnimationFrame(step)
+    }, [target, duration])
+    return value
+}
+
+/* Stagger animation variants */
+const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.1 } },
+}
+const itemVariants = {
+    hidden: { opacity: 0, y: 16 },
+    show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
+}
+
+/* ── Section header component ── */
+function SectionHeader({ icon: Icon, title, trailing }: { icon: React.ComponentType<{ size?: number; className?: string }>; title: string; trailing?: React.ReactNode }) {
+    return (
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#FC4C02]/15 flex items-center justify-center">
+                    <Icon size={14} className="text-[#FC4C02]" />
+                </div>
+                <h2 className="text-[15px] font-bold text-white tracking-tight">{title}</h2>
+            </div>
+            {trailing}
+        </div>
+    )
+}
+
 export default function Dashboard() {
     const {
         profile,
@@ -117,18 +183,45 @@ export default function Dashboard() {
     const router = useRouter()
 
     const [dimensions, setDimensions] = useState<Dimension[]>([])
+    const [dimensionsLoading, setDimensionsLoading] = useState(true)
     const [dimensionPoints, setDimensionPoints] = useState<Record<string, number>>({})
     const [myRank, setMyRank] = useState<number | null>(null)
     const [maxStreak, setMaxStreak] = useState<number>(0)
     const [currentTime] = useState(() => Date.now())
 
+    /* animated counters */
+    const animPoints = useCountUp(totalPoints || 0)
+    const animStep = useCountUp(toSafeNumber(stepPoints))
+    const animSport = useCountUp(toSafeNumber(sportPoints))
+    const animPhysical = useCountUp(toSafeNumber(totalPhysicalPoints || dimensionPoints.physical))
+
     const handleRefresh = () => mutateProfile()
 
     useEffect(() => {
-        fetch('/api/dimensions')
-            .then((response) => response.json())
-            .then((data) => setDimensions(data.dimensions || []))
-            .catch(() => {})
+        let retries = 0
+        const fetchDimensions = () => {
+            fetch('/api/dimensions')
+                .then((response) => response.json())
+                .then((data) => {
+                    const dims = data.dimensions || []
+                    setDimensions(dims)
+                    setDimensionsLoading(false)
+                    // Retry if empty (API might not be ready yet)
+                    if (dims.length === 0 && retries < 3) {
+                        retries++
+                        setTimeout(fetchDimensions, 1500 * retries)
+                    }
+                })
+                .catch(() => {
+                    if (retries < 3) {
+                        retries++
+                        setTimeout(fetchDimensions, 1500 * retries)
+                    } else {
+                        setDimensionsLoading(false)
+                    }
+                })
+        }
+        fetchDimensions()
     }, [])
 
     useEffect(() => {
@@ -190,320 +283,412 @@ export default function Dashboard() {
     }
 
     return (
-        <div className="h-[100dvh] overflow-y-auto bg-black text-white pb-32 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="h-[100dvh] overflow-y-auto bg-[#0A0A0A] text-white pb-36 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {/* ── Ambient background glows ── */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-                <div className="absolute -top-24 -right-24 w-80 h-80 bg-[#FC4C02] rounded-full mix-blend-screen blur-[120px] opacity-10" />
-                <div className="absolute bottom-1/3 -left-24 w-64 h-64 bg-[#FC4C02] rounded-full mix-blend-screen blur-[120px] opacity-[0.06]" />
+                <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#FC4C02] rounded-full blur-[160px] opacity-[0.07]" />
+                <div className="absolute top-1/2 -left-32 w-72 h-72 bg-[#FC4C02] rounded-full blur-[140px] opacity-[0.04]" />
             </div>
 
             {profile && (
-                <div className="relative z-10 max-w-lg mx-auto px-4">
-                    <div className="sticky top-0 z-50 flex items-center justify-between bg-black/85 backdrop-blur-xl py-3 -mx-4 px-4 border-b border-white/5">
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
-                                <img
-                                    src={profile.profile}
-                                    alt={profile.username}
-                                    className="w-10 h-10 rounded-full border-2 border-[#FC4C02] object-cover"
-                                />
-                                {maxStreak > 0 && (
-                                    <span className="absolute -bottom-1 -right-1 bg-[#FC4C02] rounded-full w-4 h-4 flex items-center justify-center">
-                                        <Flame size={9} className="text-white" />
-                                    </span>
-                                )}
+                <motion.div
+                    className="relative z-10 max-w-lg mx-auto"
+                    variants={containerVariants}
+                    initial="hidden"
+                    animate="show"
+                >
+                    {/* ── Sticky Header ── */}
+                    <div className="sticky top-0 z-50 bg-[#0A0A0A]/80 backdrop-blur-2xl border-b border-white/[0.06]">
+                        <div className="flex items-center justify-between px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <img
+                                        src={profile.profile}
+                                        alt={profile.username}
+                                        className="w-11 h-11 rounded-full ring-2 ring-[#FC4C02]/40 ring-offset-2 ring-offset-[#0A0A0A] object-cover"
+                                    />
+                                    {maxStreak > 0 && (
+                                        <span className="absolute -bottom-0.5 -right-0.5 bg-gradient-to-br from-orange-500 to-red-500 rounded-full w-5 h-5 flex items-center justify-center shadow-lg shadow-orange-500/30">
+                                            <Flame size={10} className="text-white" />
+                                        </span>
+                                    )}
+                                </div>
+                                <div>
+                                    <p className="text-[15px] font-bold text-white leading-tight tracking-tight">
+                                        {getGreeting()}, {profile.firstname}!
+                                    </p>
+                                    <p className="text-xs text-gray-500 mt-0.5">@{profile.username}</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-sm font-bold text-white leading-tight">
-                                    {profile.firstname} {profile.lastname}
-                                </p>
-                                <p className="text-[11px] text-gray-500">@{profile.username}</p>
-                            </div>
-                            {profile.username === 'admin_wam' && (
-                                <button
-                                    onClick={() => router.push('/dashboard/admin')}
-                                    className="ml-1 px-2 py-0.5 bg-white/10 hover:bg-white/20 rounded-full text-[10px] font-bold text-white transition-colors flex items-center gap-1"
-                                >
-                                    <Shield size={10} /> Admin
-                                </button>
-                            )}
-                        </div>
-                        <button
-                            onClick={() => router.push('/notifications')}
-                            className="relative p-2 text-gray-400 hover:text-white transition-colors"
-                        >
-                            <Bell size={20} />
-                            {unreadCount > 0 && (
-                                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-2 ring-black">
-                                    {unreadCount > 9 ? '9+' : unreadCount}
-                                </span>
-                            )}
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mt-5 mb-5">
-                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
-                            <Trophy size={16} className="text-[#FC4C02] mb-0.5" />
-                            <span className="text-base font-mono font-extrabold text-white leading-none">
-                                {(totalPoints || 0).toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Points</span>
-                        </div>
-                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
-                            <Medal size={16} className="text-[#FC4C02] mb-0.5" />
-                            <span className="text-base font-mono font-extrabold text-white leading-none">
-                                {myRank ? `#${myRank}` : '—'}
-                            </span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Rank</span>
-                        </div>
-                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
-                            <Footprints size={16} className="text-[#FC4C02] mb-0.5" />
-                            <span className="text-base font-mono font-extrabold text-white leading-none">
-                                {toSafeNumber(stepPoints).toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Step Points</span>
-                        </div>
-                        <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-3 flex flex-col items-center gap-0.5">
-                            <Flame size={16} className="text-[#FC4C02] mb-0.5" />
-                            <span className="text-base font-mono font-extrabold text-white leading-none">
-                                {toSafeNumber(sportPoints).toLocaleString()}
-                            </span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Sport Points</span>
-                        </div>
-                    </div>
-
-                    <div className="mb-5 rounded-2xl border border-[#FC4C02]/20 bg-white/[0.04] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#FC4C02]">Physical</p>
-                                <p className="mt-1 text-2xl font-mono font-extrabold text-white">
-                                    {toSafeNumber(totalPhysicalPoints || dimensionPoints.physical).toLocaleString()}
-                                </p>
-                                <p className="text-xs text-gray-500">Daily steps + sport sessions + physical quest points</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-gray-500">Longest streak</p>
-                                <p className="text-lg font-mono font-bold text-white">{maxStreak > 0 ? maxStreak : '—'}</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {surveys.length > 0 && (
-                        <div className="mb-5 space-y-3">
-                            {surveys.map((survey: Survey) => (
-                                <div
-                                    key={survey.id}
-                                    className="relative overflow-hidden rounded-2xl border border-[#FC4C02]/30 bg-gradient-to-r from-[#FC4C02]/10 to-transparent p-4 flex items-center justify-between"
-                                >
-                                    <div className="absolute right-0 top-0 w-32 h-32 bg-[#FC4C02] rounded-full blur-[60px] opacity-10 pointer-events-none" />
-                                    <div className="min-w-0 pr-3">
-                                        <p className="text-xs font-bold text-[#FC4C02] uppercase tracking-wide mb-0.5">Assessment</p>
-                                        <p className="text-sm font-bold text-white truncate">{survey.title}</p>
-                                        <p className="text-xs text-gray-500 truncate">{survey.description || 'Get your personalized insights'}</p>
-                                    </div>
+                            <div className="flex items-center gap-1">
+                                {profile.username === 'admin_wam' && (
                                     <button
-                                        onClick={() => router.push(`/survey/${survey.id}`)}
-                                        className="flex-shrink-0 px-4 py-2 rounded-xl bg-[#FC4C02] text-white text-xs font-bold hover:bg-orange-600 transition-colors"
+                                        onClick={() => router.push('/dashboard/admin')}
+                                        className="p-2 text-gray-400 hover:text-white transition-colors"
                                     >
-                                        Start
+                                        <Shield size={18} />
                                     </button>
-                                </div>
-                            ))}
+                                )}
+                                <button
+                                    onClick={() => router.push('/notifications')}
+                                    className="relative p-2 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    <Bell size={20} />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white px-1">
+                                            {unreadCount > 9 ? '9+' : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
                         </div>
-                    )}
+                    </div>
 
-                    {totalQuests > 0 && (
-                        <div className="mb-5">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Gift size={16} className="text-[#FC4C02]" />
-                                    <span className="text-sm font-bold text-white">Quests</span>
-                                    <span className="text-xs text-gray-500 font-mono">
-                                        {completedQuests}/{totalQuests}
-                                    </span>
-                                </div>
-                                <Link href="/quests" className="text-[11px] text-gray-500 hover:text-white flex items-center gap-0.5 transition-colors">
-                                    View All <ChevronRight size={12} />
-                                </Link>
-                            </div>
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
-                                <div
-                                    className="h-full bg-gradient-to-r from-[#FC4C02] to-orange-400 rounded-full transition-all duration-700"
-                                    style={{ width: `${questPercent}%` }}
-                                />
-                            </div>
-                            <DailyQuests
-                                quests={actionableQuests}
-                                userQuests={userQuests}
-                                onClaim={handleRefresh}
-                                hideHeader
-                            />
-                        </div>
-                    )}
+                    <div className="px-5">
+                        {/* ── Hero Stats Card ── */}
+                        <motion.div variants={itemVariants} className="mt-5 mb-6">
+                            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#FC4C02]/20 via-[#1A1008] to-[#0F0F0F] border border-[#FC4C02]/15 p-5">
+                                {/* decorative arc */}
+                                <div className="absolute -top-20 -right-20 w-48 h-48 bg-[#FC4C02] rounded-full blur-[80px] opacity-[0.12] pointer-events-none" />
+                                <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#FC4C02]/20 to-transparent" />
 
-                    {dimensions.length > 0 && (
-                        <div className="mb-5">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Zap size={15} className="text-[#FC4C02]" />
-                                    <span className="text-sm font-bold text-white">Life Mode</span>
-                                </div>
-                                <Link href="/leaderboard" className="text-[11px] text-gray-500 hover:text-white flex items-center gap-0.5 transition-colors">
-                                    Leaderboard <ChevronRight size={12} />
-                                </Link>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                                {dimensions.map((dimension) => {
-                                    const points = dimensionPoints[dimension.id] || 0
-                                    const percent = maxDimPoints > 0 ? Math.min((points / maxDimPoints) * 100, 100) : 0
-                                    const IconComp = dimensionIconMap[dimension.icon] || Activity
-                                    const hasPoints = points > 0
-
-                                    return (
-                                        <div
-                                            key={dimension.id}
-                                            className={`relative overflow-hidden rounded-2xl p-3 border flex flex-col gap-1.5 transition-colors ${
-                                                hasPoints ? 'bg-[#FC4C02]/8 border-[#FC4C02]/25' : 'bg-white/[0.03] border-white/[0.07]'
-                                            }`}
-                                        >
-                                            {hasPoints && (
-                                                <div
-                                                    className="absolute inset-0 bg-gradient-to-t from-[#FC4C02]/10 to-transparent pointer-events-none"
-                                                    style={{ opacity: 0.3 + (percent / 100) * 0.7 }}
-                                                />
-                                            )}
-                                            <IconComp
-                                                size={16}
-                                                className={`relative z-10 ${hasPoints ? 'text-[#FC4C02]' : 'text-gray-600'}`}
-                                            />
-                                            <p className="relative z-10 text-[10px] text-gray-400 leading-tight truncate">
-                                                {dimension.display_name}
-                                            </p>
-                                            <p className={`relative z-10 text-sm font-mono font-extrabold leading-none ${hasPoints ? 'text-white' : 'text-gray-600'}`}>
-                                                {points > 0 ? points.toLocaleString() : '0'}
-                                            </p>
-                                            <div className="relative z-10 h-1 bg-white/5 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-[#FC4C02] rounded-full transition-all duration-500"
-                                                    style={{ width: `${percent}%` }}
-                                                />
-                                            </div>
+                                {/* Top row: total points hero */}
+                                <div className="flex items-start justify-between mb-5">
+                                    <div>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.15em] text-[#FC4C02]/80 mb-1">Total Points</p>
+                                        <p className="text-4xl font-mono font-black text-white leading-none tracking-tighter">
+                                            {animPoints.toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col items-end gap-1">
+                                        <div className="flex items-center gap-1.5 bg-white/[0.06] rounded-full px-3 py-1.5">
+                                            <Medal size={13} className="text-[#FC4C02]" />
+                                            <span className="text-sm font-bold font-mono text-white">
+                                                {myRank ? `#${myRank}` : '—'}
+                                            </span>
                                         </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    )}
+                                        {maxStreak > 0 && (
+                                            <div className="flex items-center gap-1 text-xs text-orange-300/70">
+                                                <Flame size={11} />
+                                                <span className="font-mono font-bold">{maxStreak}d streak</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                    {dashboardActivities.length > 0 && (
-                        <div className="mb-5">
-                            <div className="flex items-center gap-2 mb-3">
-                                <CalendarDays size={15} className="text-[#FC4C02]" />
-                                <h2 className="text-sm font-bold text-white">Recent Activities</h2>
+                                {/* Sub-stats row */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-white/[0.04] rounded-2xl p-3 text-center">
+                                        <Footprints size={14} className="text-[#FC4C02]/70 mx-auto mb-1.5" />
+                                        <p className="text-lg font-mono font-bold text-white leading-none">
+                                            {animStep.toLocaleString()}
+                                        </p>
+                                        <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Steps</p>
+                                    </div>
+                                    <div className="bg-white/[0.04] rounded-2xl p-3 text-center">
+                                        <Dumbbell size={14} className="text-[#FC4C02]/70 mx-auto mb-1.5" />
+                                        <p className="text-lg font-mono font-bold text-white leading-none">
+                                            {animSport.toLocaleString()}
+                                        </p>
+                                        <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Sport</p>
+                                    </div>
+                                    <div className="bg-white/[0.04] rounded-2xl p-3 text-center">
+                                        <TrendingUp size={14} className="text-[#FC4C02]/70 mx-auto mb-1.5" />
+                                        <p className="text-lg font-mono font-bold text-white leading-none">
+                                            {animPhysical.toLocaleString()}
+                                        </p>
+                                        <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Physical</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="space-y-2">
-                                {dashboardActivities.map((activity) => {
-                                    const mode = normalizeMode(activity)
-                                    const isEvent = mode === 'event'
-                                    const isSport = mode === 'sport'
-                                    const status = getReviewLabel(activity.review_status)
-                                    const sourceLabel = getSourceLabel(activity.source)
-                                    const distance = toSafeNumber(activity.distance)
+                        </motion.div>
 
-                                    return (
-                                        <div
-                                            key={activity.id}
-                                            className="flex items-start gap-3 bg-white/[0.04] border border-white/[0.07] rounded-2xl px-4 py-3 hover:bg-white/[0.07] transition-colors"
-                                        >
-                                            <div
-                                                className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                                    isEvent ? 'bg-yellow-500/20' : isSport ? 'bg-orange-500/20' : 'bg-[#FC4C02]/20'
+                        {/* ── Surveys / Assessment Banner ── */}
+                        {surveys.length > 0 && (
+                            <motion.div variants={itemVariants} className="mb-6 space-y-3">
+                                {surveys.map((survey: Survey) => (
+                                    <div
+                                        key={survey.id}
+                                        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#FC4C02]/15 via-[#FC4C02]/5 to-transparent border border-[#FC4C02]/20 p-4 flex items-center justify-between group cursor-pointer hover:border-[#FC4C02]/40 transition-colors"
+                                        onClick={() => router.push(`/survey/${survey.id}`)}
+                                    >
+                                        <div className="absolute -right-8 -top-8 w-28 h-28 bg-[#FC4C02] rounded-full blur-[50px] opacity-[0.08] group-hover:opacity-[0.15] transition-opacity pointer-events-none" />
+                                        <div className="min-w-0 pr-4">
+                                            <p className="text-[10px] font-bold text-[#FC4C02] uppercase tracking-[0.15em] mb-1">Assessment Available</p>
+                                            <p className="text-sm font-bold text-white truncate">{survey.title}</p>
+                                            <p className="text-xs text-gray-500 truncate mt-0.5">{survey.description || 'Get your personalized insights'}</p>
+                                        </div>
+                                        <ChevronRight size={18} className="text-[#FC4C02]/60 flex-shrink-0 group-hover:text-[#FC4C02] group-hover:translate-x-0.5 transition-all" />
+                                    </div>
+                                ))}
+                            </motion.div>
+                        )}
+
+                        {/* ── Quests Section ── */}
+                        {totalQuests > 0 && (
+                            <motion.div variants={itemVariants} className="mb-8">
+                                <SectionHeader
+                                    icon={Gift}
+                                    title="Quests"
+                                    trailing={
+                                        <Link href="/quests" className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#FC4C02] transition-colors">
+                                            <span className="font-mono font-bold text-white/60">{completedQuests}/{totalQuests}</span>
+                                            <ChevronRight size={14} />
+                                        </Link>
+                                    }
+                                />
+                                {/* Progress bar */}
+                                <div className="relative h-2 bg-white/[0.06] rounded-full overflow-hidden mb-5">
+                                    <motion.div
+                                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#FC4C02] to-orange-400 rounded-full"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${questPercent}%` }}
+                                        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+                                    />
+                                    {/* Glow on tip */}
+                                    <motion.div
+                                        className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-[#FC4C02] rounded-full blur-sm"
+                                        initial={{ left: 0 }}
+                                        animate={{ left: `${questPercent}%` }}
+                                        transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 }}
+                                    />
+                                </div>
+                                <DailyQuests
+                                    quests={actionableQuests}
+                                    userQuests={userQuests}
+                                    onClaim={handleRefresh}
+                                    hideHeader
+                                />
+                            </motion.div>
+                        )}
+
+                        {/* ── Life Mode Dimensions ── */}
+                        <motion.div variants={itemVariants} className="mb-8">
+                            <SectionHeader
+                                icon={Zap}
+                                title="Life Mode"
+                                trailing={
+                                    <Link href="/leaderboard" className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#FC4C02] transition-colors">
+                                        Leaderboard <ChevronRight size={14} />
+                                    </Link>
+                                }
+                            />
+
+                            {dimensionsLoading ? (
+                                /* Skeleton loader while fetching */
+                                <div className="grid grid-cols-2 gap-3">
+                                    {[1, 2, 3, 4].map((i) => (
+                                        <div key={i} className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-4 animate-pulse">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-white/[0.06]" />
+                                                <div className="flex-1 space-y-2">
+                                                    <div className="h-3 w-20 bg-white/[0.06] rounded" />
+                                                    <div className="h-4 w-12 bg-white/[0.06] rounded" />
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 h-1.5 bg-white/[0.06] rounded-full" />
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : dimensions.length === 0 ? (
+                                /* Empty state — never fully hide */
+                                <div className="rounded-2xl bg-white/[0.03] border border-white/[0.06] p-6 text-center">
+                                    <Zap size={24} className="mx-auto text-gray-600 mb-2" />
+                                    <p className="text-sm text-gray-500">Life Mode dimensions loading...</p>
+                                    <p className="text-xs text-gray-600 mt-1">Pull to refresh if this persists</p>
+                                </div>
+                            ) : (
+                                /* ── Sporty 2-col cards ── */
+                                <div className="grid grid-cols-2 gap-3">
+                                    {dimensions.map((dimension, idx) => {
+                                        const points = dimensionPoints[dimension.id] || 0
+                                        const percent = maxDimPoints > 0 ? Math.min((points / maxDimPoints) * 100, 100) : 0
+                                        const IconComp = dimensionIconMap[dimension.icon] || Activity
+                                        const colors = dimensionColorMap[dimension.icon] || dimensionColorMap.activity
+                                        const hasPoints = points > 0
+
+                                        return (
+                                            <motion.div
+                                                key={dimension.id}
+                                                initial={{ opacity: 0, y: 16 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ duration: 0.4, delay: idx * 0.08, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                                whileTap={{ scale: 0.97 }}
+                                                className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 ${
+                                                    hasPoints
+                                                        ? `${colors.bg} ${colors.border}`
+                                                        : 'bg-white/[0.03] border-white/[0.06]'
                                                 }`}
                                             >
-                                                {isEvent ? (
-                                                    <Trophy size={14} className="text-yellow-500" />
-                                                ) : isSport ? (
-                                                    <Dumbbell size={14} className="text-orange-300" />
-                                                ) : (
-                                                    <Footprints size={14} className="text-[#FC4C02]" />
+                                                {/* Ambient glow for active cards */}
+                                                {hasPoints && (
+                                                    <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-30 bg-gradient-to-br ${colors.glow} to-transparent pointer-events-none`} />
                                                 )}
-                                            </div>
 
-                                            <div className="flex-grow min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
+                                                <div className="relative z-10 p-4">
+                                                    {/* Top row: Icon badge + Points */}
+                                                    <div className="flex items-start justify-between mb-3">
+                                                        <div className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors duration-300 ${
+                                                            hasPoints
+                                                                ? `${colors.bg} ring-1 ring-inset ${colors.border}`
+                                                                : 'bg-white/[0.04] ring-1 ring-inset ring-white/[0.06]'
+                                                        }`}>
+                                                            <IconComp
+                                                                size={20}
+                                                                className={`transition-colors duration-300 ${hasPoints ? colors.text : 'text-gray-600'}`}
+                                                            />
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className={`text-lg font-mono font-black leading-none tracking-tight ${
+                                                                hasPoints ? 'text-white' : 'text-gray-600'
+                                                            }`}>
+                                                                {points > 0 ? points.toLocaleString() : '—'}
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-600 font-medium mt-0.5 uppercase tracking-wider">
+                                                                pts
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Dimension name */}
+                                                    <p className={`text-[13px] font-semibold leading-tight mb-3 ${
+                                                        hasPoints ? 'text-gray-200' : 'text-gray-500'
+                                                    }`}>
+                                                        {dimension.display_name}
+                                                    </p>
+
+                                                    {/* Progress bar — thicker, with animated fill */}
+                                                    <div className="relative h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            className={`absolute inset-y-0 left-0 rounded-full ${
+                                                                hasPoints
+                                                                    ? `bg-gradient-to-r ${colors.glow.replace('from-', 'from-').replace('/15', '/80')} to-white/20`
+                                                                    : ''
+                                                            }`}
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${percent}%` }}
+                                                            transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 + idx * 0.08 }}
+                                                        />
+                                                        {/* Glow dot at tip */}
+                                                        {hasPoints && percent > 5 && (
+                                                            <motion.div
+                                                                className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full blur-sm ${colors.text.replace('text-', 'bg-')}`}
+                                                                initial={{ left: 0 }}
+                                                                animate={{ left: `${percent}%` }}
+                                                                transition={{ duration: 0.8, ease: 'easeOut', delay: 0.3 + idx * 0.08 }}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </motion.div>
+
+                        {/* ── Recent Activities ── */}
+                        {dashboardActivities.length > 0 && (
+                            <motion.div variants={itemVariants} className="mb-8">
+                                <SectionHeader icon={Trophy} title="Recent Activities" />
+                                <div className="space-y-2.5">
+                                    {dashboardActivities.map((activity, index) => {
+                                        const mode = normalizeMode(activity)
+                                        const isEvent = mode === 'event'
+                                        const isSport = mode === 'sport'
+                                        const status = getReviewLabel(activity.review_status)
+                                        const sourceLabel = getSourceLabel(activity.source)
+                                        const distance = toSafeNumber(activity.distance)
+
+                                        return (
+                                            <motion.div
+                                                key={activity.id}
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: index * 0.05 }}
+                                                className="flex items-start gap-3.5 bg-white/[0.03] border border-white/[0.06] rounded-2xl px-4 py-3.5 hover:bg-white/[0.06] hover:border-white/[0.1] transition-all duration-200"
+                                            >
+                                                <div
+                                                    className={`mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                                        isEvent ? 'bg-yellow-500/15' : isSport ? 'bg-orange-500/15' : 'bg-[#FC4C02]/10'
+                                                    }`}
+                                                >
+                                                    {isEvent ? (
+                                                        <Trophy size={15} className="text-yellow-400" />
+                                                    ) : isSport ? (
+                                                        <Dumbbell size={15} className="text-orange-300" />
+                                                    ) : (
+                                                        <Footprints size={15} className="text-[#FC4C02]" />
+                                                    )}
+                                                </div>
+
+                                                <div className="flex-grow min-w-0">
                                                     <p className={`text-sm font-bold truncate leading-tight ${isEvent ? 'text-yellow-400' : 'text-white'}`}>
                                                         {activity.name}
                                                     </p>
-                                                    <span className="bg-white/5 px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide text-gray-400">
-                                                        {isEvent ? 'Event' : isSport ? 'Sport' : 'Daily'}
-                                                    </span>
-                                                    {isSport && (
-                                                        <span
-                                                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide ${
-                                                                activity.source === 'strava'
-                                                                    ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
-                                                                    : 'bg-white/10 text-gray-300'
-                                                            }`}
-                                                        >
-                                                            {sourceLabel}
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        {new Date(activity.start_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
+                                                            isEvent ? 'bg-yellow-500/10 text-yellow-400' : isSport ? 'bg-orange-500/10 text-orange-300' : 'bg-white/[0.06] text-gray-400'
+                                                        }`}>
+                                                            {isEvent ? 'Event' : isSport ? 'Sport' : 'Daily'}
                                                         </span>
-                                                    )}
-                                                    {isSport && (
-                                                        <span
-                                                            className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide ${
-                                                                status === 'voided' || status === 'rejected'
-                                                                    ? 'bg-red-500/10 text-red-300'
-                                                                    : 'bg-green-500/10 text-green-300'
-                                                            }`}
-                                                        >
-                                                            {status}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-[11px] text-gray-500 mt-0.5">
-                                                    {new Date(activity.start_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                    <span className="ml-2 bg-white/5 px-1.5 py-0.5 rounded text-[10px]">{activity.type}</span>
-                                                </p>
-                                                {isSport && (
-                                                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-400">
-                                                        <span>{toSafeNumber(activity.calories).toLocaleString()} cal</span>
-                                                        {distance > 0 && <span>{formatDistanceMeters(distance)}</span>}
-                                                        {activity.source === 'strava' && toSafeNumber(activity.activity_points ?? activity.calories) === 0 && (
-                                                            <span className="text-gray-500">synced without calories</span>
+                                                        {isSport && (
+                                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
+                                                                activity.source === 'strava' ? 'bg-[#FC4C02]/10 text-[#FC4C02]' : 'bg-white/[0.06] text-gray-400'
+                                                            }`}>
+                                                                {sourceLabel}
+                                                            </span>
                                                         )}
-                                                        {activity.proof_url && (
-                                                            <a
-                                                                href={activity.proof_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="inline-flex items-center gap-1 text-orange-300 hover:text-orange-200"
-                                                            >
-                                                                <Camera size={11} />
-                                                                Proof
-                                                            </a>
+                                                        {isSport && (
+                                                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${
+                                                                status === 'voided' || status === 'rejected' ? 'bg-red-500/10 text-red-400' : 'bg-emerald-500/10 text-emerald-400'
+                                                            }`}>
+                                                                {status}
+                                                            </span>
                                                         )}
                                                     </div>
-                                                )}
-                                            </div>
+                                                    {isSport && (
+                                                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+                                                            <span>{toSafeNumber(activity.calories).toLocaleString()} cal</span>
+                                                            {distance > 0 && <span>{formatDistanceMeters(distance)}</span>}
+                                                            {activity.proof_url && (
+                                                                <a
+                                                                    href={activity.proof_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors"
+                                                                >
+                                                                    <Camera size={11} />
+                                                                    Proof
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
 
-                                            <div className="text-right flex-shrink-0">
-                                                <p className={`text-sm font-mono font-extrabold ${isEvent ? 'text-yellow-400' : isSport ? 'text-orange-300' : 'text-[#FC4C02]'}`}>
-                                                    {isEvent
-                                                        ? toSafeNumber(activity.steps).toLocaleString()
-                                                        : isSport
-                                                            ? toSafeNumber(activity.activity_points ?? activity.calories).toLocaleString()
-                                                            : toSafeNumber(activity.steps).toLocaleString()}
-                                                </p>
-                                                <p className="text-[9px] text-gray-600 uppercase tracking-wide">
-                                                    {isEvent ? 'pts' : isSport ? 'sport pts' : 'steps'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                                                <div className="text-right flex-shrink-0 pt-0.5">
+                                                    <p className={`text-base font-mono font-black ${isEvent ? 'text-yellow-400' : isSport ? 'text-orange-300' : 'text-[#FC4C02]'}`}>
+                                                        {isEvent
+                                                            ? toSafeNumber(activity.steps).toLocaleString()
+                                                            : isSport
+                                                                ? toSafeNumber(activity.activity_points ?? activity.calories).toLocaleString()
+                                                                : toSafeNumber(activity.steps).toLocaleString()}
+                                                    </p>
+                                                    <p className="text-[10px] text-gray-600 uppercase tracking-wide font-medium">
+                                                        {isEvent ? 'pts' : isSport ? 'sport pts' : 'steps'}
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        )
+                                    })}
+                                </div>
+                            </motion.div>
+                        )}
+                    </div>
+                </motion.div>
             )}
 
             <AddActivityBtn />
