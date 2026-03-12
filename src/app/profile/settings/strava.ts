@@ -1,6 +1,14 @@
 type StravaProfileMeta = {
   strava_athlete_id?: number | null
+  is_strava_connected?: boolean | null
   last_strava_sync_at?: string | null
+}
+
+type StravaAvatarMeta = {
+  is_strava_connected?: boolean | null
+  avatar_preferences_supported?: boolean | null
+  strava_avatar_url?: string | null
+  strava_avatar_preview_url?: string | null
 }
 
 type StravaConnectionState = {
@@ -16,6 +24,12 @@ type StravaFeedback = {
   tone: 'success' | 'error'
   message: string
 } | null
+
+type StravaAvatarState = {
+  imageUrl: string | null
+  canUseStravaAvatar: boolean
+  helperText?: string
+}
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Jakarta',
@@ -44,7 +58,9 @@ function formatLastSync(lastSyncAt: string): string {
 export function getStravaConnectionState(
   profile: StravaProfileMeta,
 ): StravaConnectionState {
-  if (!profile.strava_athlete_id) {
+  const isConnected = Boolean(profile.is_strava_connected) || Boolean(profile.strava_athlete_id)
+
+  if (!isConnected) {
     return {
       isConnected: false,
       statusLabel: 'Belum terhubung',
@@ -59,10 +75,35 @@ export function getStravaConnectionState(
     statusLabel: 'Terhubung',
     buttonLabel: 'Reconnect Strava',
     helperText: 'Sync sport session otomatis setiap cooldown aktif.',
-    athleteLabel: `Athlete ID ${profile.strava_athlete_id}`,
+    athleteLabel: profile.strava_athlete_id ? `Athlete ID ${profile.strava_athlete_id}` : undefined,
     lastSyncLabel: profile.last_strava_sync_at
       ? formatLastSync(profile.last_strava_sync_at)
       : 'Belum pernah sync',
+  }
+}
+
+export function getStravaAvatarState(profile: StravaAvatarMeta): StravaAvatarState {
+  const imageUrl = profile.strava_avatar_url ?? profile.strava_avatar_preview_url ?? null
+
+  if (!imageUrl) {
+    return {
+      imageUrl: null,
+      canUseStravaAvatar: false,
+    }
+  }
+
+  if (!profile.avatar_preferences_supported) {
+    return {
+      imageUrl,
+      canUseStravaAvatar: false,
+      helperText:
+        'Foto Strava sudah terdeteksi, tetapi pilih avatar Strava butuh migration database terbaru.',
+    }
+  }
+
+  return {
+    imageUrl,
+    canUseStravaAvatar: true,
   }
 }
 
@@ -74,6 +115,13 @@ export function getStravaFeedback(input: {
     return {
       tone: 'success',
       message: 'Akun Strava berhasil terhubung.',
+    }
+  }
+
+  if (input.strava === 'disconnected') {
+    return {
+      tone: 'success',
+      message: 'Akun Strava berhasil dilepas.',
     }
   }
 
@@ -92,6 +140,16 @@ export function getStravaFeedback(input: {
       return {
         tone: 'error',
         message: 'Gagal menghubungkan Strava. Coba lagi beberapa saat lagi.',
+      }
+    case 'token_exchange_failed':
+      return {
+        tone: 'error',
+        message: 'Strava menolak proses connect. Periksa callback URL app Strava lalu coba lagi.',
+      }
+    case 'profile_update_failed':
+      return {
+        tone: 'error',
+        message: 'Strava sudah authorize, tetapi data profil gagal disimpan. Cek log server.',
       }
     default:
       return null

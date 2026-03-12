@@ -1,4 +1,9 @@
 import { getAuthProfileContext } from '@/utils/auth'
+import {
+  buildStravaAvatarSyncUpdate,
+  isMissingAvatarPreferenceColumnsError,
+  omitAvatarPreferenceFields,
+} from '@/lib/profile-avatar'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { calculateAvailableCoins, calculateTotalEarnedPoints, convertStepsToPoints, sumNumericField, toSafeNumber } from '@/lib/points'
 import {
@@ -9,7 +14,12 @@ import {
   type UserQuest,
 } from '@/lib/gamification'
 import {
+  buildStravaProfileUpdate,
   getStravaActivitiesNeedingDetail,
+  getStoredStravaAccessToken,
+  getStoredStravaExpiresAt,
+  getStoredStravaRefreshToken,
+  hasStoredStravaConnection,
   mergeStravaActivity,
   resolveStravaSyncCooldown,
   shouldRefreshStravaToken,
@@ -24,12 +34,26 @@ type ProfileRow = {
   id: string | number
   full_name: string | null
   avatar_url: string | null
-  strava_access_token: string | null
-  strava_refresh_token: string | null
-  strava_expires_at: number | null
-  strava_athlete_id: number | null
+  manual_avatar_url?: string | null
+  strava_avatar_url?: string | null
+  avatar_source?: 'manual' | 'strava' | null
+  strava_access_token?: string | null
+  strava_refresh_token?: string | null
+  strava_expires_at?: number | null
+  strava_athlete_id?: number | null
+  access_token?: string | null
+  refresh_token?: string | null
+  expires_at?: number | null
   last_strava_sync_at?: string | null
   [key: string]: unknown
+}
+
+function supportsAvatarPreferences(profile: ProfileRow): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(profile, 'manual_avatar_url') &&
+    Object.prototype.hasOwnProperty.call(profile, 'strava_avatar_url') &&
+    Object.prototype.hasOwnProperty.call(profile, 'avatar_source')
+  )
 }
 
 type StravaTokenResponse = {
@@ -151,14 +175,14 @@ async function refreshStravaAccessToken(input: {
   profile: ProfileRow
   userId: string | number
 }): Promise<string | null> {
-  const currentAccessToken = input.profile.strava_access_token
+  const currentAccessToken = getStoredStravaAccessToken(input.profile)
   if (!currentAccessToken) return null
 
   if (
     !shouldRefreshStravaToken({
-      expiresAt: input.profile.strava_expires_at,
+      expiresAt: getStoredStravaExpiresAt(input.profile),
     }) ||
-    !input.profile.strava_refresh_token
+    !getStoredStravaRefreshToken(input.profile)
   ) {
     return currentAccessToken
   }
@@ -170,7 +194,7 @@ async function refreshStravaAccessToken(input: {
       client_id: process.env.STRAVA_CLIENT_ID,
       client_secret: process.env.STRAVA_CLIENT_SECRET,
       grant_type: 'refresh_token',
-      refresh_token: input.profile.strava_refresh_token,
+      refresh_token: getStoredStravaRefreshToken(input.profile),
     }),
   })
 
@@ -184,11 +208,13 @@ async function refreshStravaAccessToken(input: {
 
   const { error } = await input.supabase
     .from('profiles')
-    .update({
-      strava_access_token: newTokens.access_token,
-      strava_refresh_token: newTokens.refresh_token,
-      strava_expires_at: newTokens.expires_at,
-    })
+    .update(
+      buildStravaProfileUpdate({
+        accessToken: newTokens.access_token,
+        refreshToken: newTokens.refresh_token,
+        expiresAt: newTokens.expires_at,
+      }),
+    )
     .eq('id', input.userId)
 
   if (error) {
@@ -217,7 +243,7 @@ async function syncStravaActivities(input: {
   userId: string | number
   physicalDimensionId: string | null
 }): Promise<Partial<ProfileRow> | null> {
-  const hasStrava = Boolean(input.profile.strava_access_token) && Boolean(input.profile.strava_athlete_id)
+  const hasStrava = hasStoredStravaConnection(input.profile)
   if (!hasStrava) return null
 
   const nowIso = new Date().toISOString()
@@ -309,35 +335,60 @@ async function syncStravaActivities(input: {
     })
   })
 
+  let activitySyncSucceeded = true
   if (payloads.length > 0) {
     const { error } = await input.supabase.from('activities').upsert(payloads, { onConflict: 'id' })
     if (error) {
       console.error('Error saving Strava sport sessions:', error)
-      return null
+      activitySyncSucceeded = false
     }
   }
 
-  const profileUpdates: Record<string, unknown> = {
-    last_strava_sync_at: nowIso,
-    updated_at: nowIso,
+  const avatarPreferencesSupported = supportsAvatarPreferences(input.profile)
+  const profileUpdates: Record<string, unknown> = activitySyncSucceeded
+    ? {
+        last_strava_sync_at: nowIso,
+        updated_at: nowIso,
+      }
+    : {}
+
+  if (stravaProfile?.profile && avatarPreferencesSupported && activitySyncSucceeded) {
+    Object.assign(
+      profileUpdates,
+      buildStravaAvatarSyncUpdate({
+        currentAvatarUrl: input.profile.avatar_url,
+        stravaAvatarUrl: stravaProfile.profile,
+        avatarSource: input.profile.avatar_source ?? 'manual',
+      }),
+    )
   }
 
-  if (stravaProfile?.profile) {
-    profileUpdates.avatar_url = stravaProfile.profile
-  }
+  if (Object.keys(profileUpdates).length > 0) {
+    let { error: profileError } = await input.supabase
+      .from('profiles')
+      .update(profileUpdates)
+      .eq('id', input.userId)
 
-  const { error: profileError } = await input.supabase
-    .from('profiles')
-    .update(profileUpdates)
-    .eq('id', input.userId)
+    if (profileError && isMissingAvatarPreferenceColumnsError(profileError)) {
+      const fallback = await input.supabase
+        .from('profiles')
+        .update(omitAvatarPreferenceFields(profileUpdates))
+        .eq('id', input.userId)
 
-  if (profileError) {
-    console.error('Failed to update Strava sync metadata on profile:', profileError)
+      profileError = fallback.error
+    }
+
+    if (profileError) {
+      console.error('Failed to update Strava sync metadata on profile:', profileError)
+    }
   }
 
   return {
     avatar_url: (profileUpdates.avatar_url as string | null | undefined) ?? input.profile.avatar_url,
-    last_strava_sync_at: nowIso,
+    strava_avatar_url:
+      (profileUpdates.strava_avatar_url as string | null | undefined) ?? input.profile.strava_avatar_url ?? null,
+    strava_avatar_preview_url: stravaProfile?.profile ?? input.profile.strava_avatar_url ?? null,
+    last_strava_sync_at: activitySyncSucceeded ? nowIso : input.profile.last_strava_sync_at ?? null,
   }
 }
 
@@ -361,6 +412,7 @@ export async function GET() {
     if (!profile) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
+    const avatarPreferencesSupported = supportsAvatarPreferences(profile)
 
     const profileUpdates = await syncStravaActivities({
       supabase,
@@ -369,8 +421,20 @@ export async function GET() {
       physicalDimensionId,
     })
 
-    const responseProfile = {
+  const responseProfile = {
       ...profile,
+      manual_avatar_url: profile.manual_avatar_url ?? profile.avatar_url,
+      strava_avatar_url: profile.strava_avatar_url ?? null,
+      strava_avatar_preview_url:
+        (profileUpdates?.strava_avatar_preview_url as string | null | undefined) ??
+        profile.strava_avatar_url ??
+        null,
+      avatar_source: profile.avatar_source ?? 'manual',
+      avatar_preferences_supported: avatarPreferencesSupported,
+      strava_access_token: getStoredStravaAccessToken(profile),
+      strava_refresh_token: getStoredStravaRefreshToken(profile),
+      strava_expires_at: getStoredStravaExpiresAt(profile),
+      is_strava_connected: hasStoredStravaConnection(profile),
       ...profileUpdates,
     }
 

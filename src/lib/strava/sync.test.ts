@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildStravaProfileUpdate,
+  buildStravaDisconnectUpdate,
   getStravaActivitiesNeedingDetail,
+  getStoredStravaAccessToken,
+  getStoredStravaExpiresAt,
+  getStoredStravaRefreshToken,
+  hasStoredStravaConnection,
   mergeStravaActivity,
   resolveStravaSyncCooldown,
   shouldRefreshStravaToken,
@@ -71,6 +77,44 @@ describe('shouldRefreshStravaToken', () => {
     })
 
     expect(shouldRefresh).toBe(false)
+  })
+})
+
+describe('legacy strava profile compatibility', () => {
+  it('reads legacy access token columns when strava-prefixed fields are absent', () => {
+    const profile = {
+      access_token: 'legacy-access-token',
+      refresh_token: 'legacy-refresh-token',
+      expires_at: 1_710_154_200,
+    }
+
+    expect(getStoredStravaAccessToken(profile)).toBe('legacy-access-token')
+    expect(getStoredStravaRefreshToken(profile)).toBe('legacy-refresh-token')
+    expect(getStoredStravaExpiresAt(profile)).toBe(1_710_154_200)
+    expect(hasStoredStravaConnection(profile)).toBe(true)
+  })
+
+  it('builds profile updates against the legacy token columns', () => {
+    expect(
+      buildStravaProfileUpdate({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+        expiresAt: 1_710_154_200,
+      }),
+    ).toEqual({
+      access_token: 'new-access-token',
+      refresh_token: 'new-refresh-token',
+      expires_at: 1_710_154_200,
+    })
+  })
+
+  it('clears stored strava tokens and sync metadata when disconnecting', () => {
+    expect(buildStravaDisconnectUpdate()).toEqual({
+      access_token: null,
+      refresh_token: null,
+      expires_at: null,
+      last_strava_sync_at: null,
+    })
   })
 })
 

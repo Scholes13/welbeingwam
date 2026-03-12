@@ -1,12 +1,13 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import {
   computeLeaderboardEntries,
-  type LeaderboardActivity,
   type LeaderboardAdjustment,
   type LeaderboardProfile,
   type LeaderboardQuestRow,
 } from '@/lib/gamification'
 import { NextRequest, NextResponse } from 'next/server'
+
+import { fetchLeaderboardActivities } from './activities'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,11 +26,7 @@ export async function GET(request: NextRequest) {
         if (profileError) throw profileError
 
         // 2. Fetch Activities (Steps)
-        const { data: activities, error: activityError } = await supabase
-            .from('activities')
-            .select('user_id, steps, activity_points, review_status, dimension_id')
-
-        if (activityError) throw activityError
+        const activities = await fetchLeaderboardActivities(supabase)
 
         // 3. Fetch Completed Quests (Points) — include dimension_id
         const { data: userQuests, error: questError } = await supabase
@@ -48,7 +45,7 @@ export async function GET(request: NextRequest) {
 
         let leaderboard = computeLeaderboardEntries({
             profiles: (profiles ?? []) as LeaderboardProfile[],
-            activities: (activities ?? []) as LeaderboardActivity[],
+            activities,
             userQuests: (userQuests ?? []) as LeaderboardQuestRow[],
             adjustments: (adjustments ?? []) as LeaderboardAdjustment[],
         })

@@ -1,4 +1,5 @@
 import { getAuthProfileContext } from '@/utils/auth'
+import { buildLegacyManualAvatarUpdate, buildManualAvatarUpdate, isMissingAvatarPreferenceColumnsError } from '@/lib/profile-avatar'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
@@ -16,10 +17,19 @@ export async function POST(request: Request) {
   const supabase = createSupabaseAdminClient()
 
   try {
-    const { error } = await supabase
+    let { error } = await supabase
         .from('profiles')
-        .update({ avatar_url: avatarUrl })
+        .update(buildManualAvatarUpdate(avatarUrl))
         .eq('id', userId)
+
+    if (error && isMissingAvatarPreferenceColumnsError(error)) {
+      const fallback = await supabase
+        .from('profiles')
+        .update(buildLegacyManualAvatarUpdate(avatarUrl))
+        .eq('id', userId)
+
+      error = fallback.error
+    }
 
     if (error) throw error
 

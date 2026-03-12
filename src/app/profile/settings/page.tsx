@@ -2,15 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Save, Instagram, Lock, Loader2, Activity, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Save, Instagram, Lock, Loader2, Activity, ExternalLink, Unplug } from 'lucide-react'
 import Link from 'next/link'
 
-import { getStravaConnectionState, getStravaFeedback } from './strava'
+import { getStravaAvatarState, getStravaConnectionState, getStravaFeedback } from './strava'
 
 type ProfileResponse = {
     profile?: {
+        avatar_url?: string | null
+        manual_avatar_url?: string | null
+        strava_avatar_url?: string | null
+        strava_avatar_preview_url?: string | null
+        avatar_source?: 'manual' | 'strava' | null
+        avatar_preferences_supported?: boolean | null
         instagram_username?: string | null
         strava_athlete_id?: number | null
+        is_strava_connected?: boolean | null
         last_strava_sync_at?: string | null
     }
 }
@@ -20,10 +27,18 @@ export default function SettingsPage() {
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [disconnecting, setDisconnecting] = useState(false)
     const [message, setMessage] = useState('')
     const [error, setError] = useState('')
     const [stravaProfile, setStravaProfile] = useState<{
+        avatar_url?: string | null
+        manual_avatar_url?: string | null
+        strava_avatar_url?: string | null
+        strava_avatar_preview_url?: string | null
+        avatar_source?: 'manual' | 'strava' | null
+        avatar_preferences_supported?: boolean | null
         strava_athlete_id?: number | null
+        is_strava_connected?: boolean | null
         last_strava_sync_at?: string | null
     }>({})
 
@@ -49,7 +64,14 @@ export default function SettingsPage() {
                         instagram: profile.instagram_username || ''
                     }))
                     setStravaProfile({
+                        avatar_url: profile.avatar_url,
+                        manual_avatar_url: profile.manual_avatar_url,
+                        strava_avatar_url: profile.strava_avatar_url,
+                        strava_avatar_preview_url: profile.strava_avatar_preview_url,
+                        avatar_source: profile.avatar_source,
+                        avatar_preferences_supported: profile.avatar_preferences_supported,
                         strava_athlete_id: profile.strava_athlete_id,
+                        is_strava_connected: profile.is_strava_connected,
                         last_strava_sync_at: profile.last_strava_sync_at,
                     })
                 }
@@ -102,7 +124,74 @@ export default function SettingsPage() {
         }
     }
 
+    const handleDisconnectStrava = async () => {
+        setError('')
+        setMessage('')
+        setDisconnecting(true)
+
+        try {
+            const res = await fetch('/api/strava/disconnect', {
+                method: 'POST',
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to disconnect Strava')
+            }
+
+            setStravaProfile({
+                ...stravaProfile,
+                avatar_url: stravaProfile.avatar_source === 'strava'
+                    ? (stravaProfile.manual_avatar_url ?? stravaProfile.avatar_url ?? null)
+                    : stravaProfile.avatar_url,
+                strava_avatar_url: null,
+                strava_avatar_preview_url: null,
+                avatar_source: 'manual',
+                strava_athlete_id: null,
+                is_strava_connected: false,
+                last_strava_sync_at: null,
+            })
+            setMessage('Akun Strava berhasil dilepas.')
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to disconnect Strava')
+        } finally {
+            setDisconnecting(false)
+        }
+    }
+
+    const handleUseAvatarSource = async (source: 'manual' | 'strava') => {
+        setError('')
+        setMessage('')
+
+        try {
+            const res = await fetch('/api/user/avatar-source', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source })
+            })
+
+            const data = await res.json()
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to update avatar source')
+            }
+
+            setStravaProfile(prev => ({
+                ...prev,
+                avatar_source: source,
+                avatar_url:
+                    source === 'strava'
+                        ? (prev.strava_avatar_url ?? prev.avatar_url ?? null)
+                        : (prev.manual_avatar_url ?? prev.avatar_url ?? null),
+            }))
+            setMessage(source === 'strava' ? 'Avatar Strava dipakai sebagai avatar utama.' : 'Avatar app lama dipakai lagi sebagai avatar utama.')
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to update avatar source')
+        }
+    }
+
     const stravaState = getStravaConnectionState(stravaProfile)
+    const stravaAvatarState = getStravaAvatarState(stravaProfile)
     const stravaFeedback = getStravaFeedback({
         strava: searchParams.get('strava'),
         error: searchParams.get('error'),
@@ -168,6 +257,46 @@ export default function SettingsPage() {
                             </span>
                         </div>
 
+                        <div className="grid grid-cols-2 gap-3 mb-5">
+                            <div className={`rounded-2xl border p-4 ${stravaProfile.avatar_source === 'manual' ? 'border-[#FC4C02]/40 bg-[#FC4C02]/10' : 'border-white/10 bg-black/40'}`}>
+                                <p className="text-xs font-semibold uppercase text-gray-400 mb-3">App Avatar</p>
+                                <img
+                                    src={stravaProfile.manual_avatar_url || stravaProfile.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                                    alt="App avatar"
+                                    className="w-20 h-20 rounded-full object-cover border border-white/10 mb-3"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleUseAvatarSource('manual')}
+                                    className="w-full rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white hover:bg-white/5 transition-colors"
+                                >
+                                    Use App Avatar
+                                </button>
+                            </div>
+
+                            <div className={`rounded-2xl border p-4 ${stravaProfile.avatar_source === 'strava' ? 'border-[#FC4C02]/40 bg-[#FC4C02]/10' : 'border-white/10 bg-black/40'}`}>
+                                <p className="text-xs font-semibold uppercase text-gray-400 mb-3">Strava Avatar</p>
+                                <img
+                                    src={stravaAvatarState.imageUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=strava'}
+                                    alt="Strava avatar"
+                                    className="w-20 h-20 rounded-full object-cover border border-white/10 mb-3"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleUseAvatarSource('strava')}
+                                    disabled={!stravaAvatarState.canUseStravaAvatar}
+                                    className="w-full rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white hover:bg-white/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    Use Strava Avatar
+                                </button>
+                                {stravaAvatarState.helperText && (
+                                    <p className="mt-2 text-[11px] leading-4 text-gray-500">
+                                        {stravaAvatarState.helperText}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="space-y-2 mb-5">
                             <p className="text-sm text-gray-200">{stravaState.helperText}</p>
                             {stravaState.athleteLabel && (
@@ -178,13 +307,36 @@ export default function SettingsPage() {
                             )}
                         </div>
 
-                        <a
-                            href="/api/auth/login"
-                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#FC4C02]/30 bg-[#FC4C02] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#ff5d1f]"
-                        >
-                            {stravaState.buttonLabel}
-                            <ExternalLink className="w-4 h-4" />
-                        </a>
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                            <a
+                                href="/api/auth/login"
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#FC4C02]/30 bg-[#FC4C02] px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-[#ff5d1f]"
+                            >
+                                {stravaState.buttonLabel}
+                                <ExternalLink className="w-4 h-4" />
+                            </a>
+
+                            {stravaState.isConnected && (
+                                <button
+                                    type="button"
+                                    onClick={handleDisconnectStrava}
+                                    disabled={disconnecting}
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {disconnecting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Disconnecting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            Disconnect Strava
+                                            <Unplug className="w-4 h-4" />
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {/* Instagram Section */}

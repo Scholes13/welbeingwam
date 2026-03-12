@@ -2,6 +2,15 @@ type NullableDateInput = string | Date | null | undefined
 
 export const DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES = 15
 
+type StravaProfileTokens = {
+  strava_access_token?: string | null
+  strava_refresh_token?: string | null
+  strava_expires_at?: number | null
+  access_token?: string | null
+  refresh_token?: string | null
+  expires_at?: number | null
+}
+
 export type StravaActivitySummary = {
   id: number
   name: string
@@ -62,6 +71,43 @@ function toCalories(...values: Array<number | null | undefined>): number {
   }
 
   return 0
+}
+
+export function getStoredStravaAccessToken(profile: StravaProfileTokens): string | null {
+  return profile.strava_access_token ?? profile.access_token ?? null
+}
+
+export function getStoredStravaRefreshToken(profile: StravaProfileTokens): string | null {
+  return profile.strava_refresh_token ?? profile.refresh_token ?? null
+}
+
+export function getStoredStravaExpiresAt(profile: StravaProfileTokens): number | null {
+  return profile.strava_expires_at ?? profile.expires_at ?? null
+}
+
+export function hasStoredStravaConnection(profile: StravaProfileTokens): boolean {
+  return Boolean(getStoredStravaAccessToken(profile))
+}
+
+export function buildStravaProfileUpdate(input: {
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: number
+}) {
+  return {
+    access_token: input.accessToken,
+    refresh_token: input.refreshToken ?? null,
+    expires_at: input.expiresAt ?? null,
+  }
+}
+
+export function buildStravaDisconnectUpdate() {
+  return {
+    access_token: null,
+    refresh_token: null,
+    expires_at: null,
+    last_strava_sync_at: null,
+  }
 }
 
 export function resolveStravaSyncCooldown(value: unknown): number {
