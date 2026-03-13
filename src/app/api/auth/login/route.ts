@@ -13,6 +13,8 @@ export async function GET(request: Request) {
     buildStravaAuthorizeUrl({
       clientId,
       requestUrl: request.url,
+      forwardedHost: request.headers.get('x-forwarded-host') || request.headers.get('host'),
+      forwardedProto: request.headers.get('x-forwarded-proto'),
     }),
   )
 }

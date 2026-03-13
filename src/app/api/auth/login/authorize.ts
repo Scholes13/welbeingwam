@@ -1,10 +1,15 @@
 type BuildStravaAuthorizeUrlInput = {
   clientId: string
   requestUrl: string
+  forwardedHost?: string | null
+  forwardedProto?: string | null
 }
 
 export function buildStravaAuthorizeUrl(input: BuildStravaAuthorizeUrlInput): string {
-  const origin = new URL(input.requestUrl).origin
+  const url = new URL(input.requestUrl)
+  const host = input.forwardedHost || url.host
+  const proto = input.forwardedProto || url.protocol.replace(':', '')
+  const origin = `${proto}://${host}`
   const redirectUri = `${origin}/api/auth/callback`
 
   const query = new URLSearchParams({
