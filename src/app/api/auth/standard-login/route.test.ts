@@ -37,6 +37,32 @@ describe('POST /api/auth/standard-login', () => {
     })
   })
 
+  it('normalizes username casing before deriving the canonical werkudara email', async () => {
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      data: { session: { access_token: 'token' }, user: { id: 'auth-id' } },
+      error: null,
+    })
+
+    createSupabaseServerClientMock.mockResolvedValue({
+      auth: {
+        signInWithPassword,
+      },
+    } as never)
+
+    const response = await POST(
+      new Request('http://localhost:3000/api/auth/standard-login', {
+        method: 'POST',
+        body: JSON.stringify({ username: 'Abilio', password: 'werkudara88' }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: 'abilio@werkudara.com',
+      password: 'werkudara88',
+    })
+  })
+
   it('returns 503 when Supabase auth is unreachable', async () => {
     createSupabaseServerClientMock.mockResolvedValue({
       auth: {

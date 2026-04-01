@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { getCanonicalAuthEmail } from '../../../../lib/utils'
 import { NextResponse } from 'next/server'
 
 function isSupabaseDependencyFailure(error: unknown) {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
     // Sign in with Supabase Auth using the username-derived email.
     const { error } = await supabase.auth.signInWithPassword({
-      email: `${username}@werkudara.com`,
+      email: getCanonicalAuthEmail(username),
       password: password,
     })
 

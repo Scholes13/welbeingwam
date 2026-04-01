@@ -15,14 +15,20 @@ export async function POST(req: Request) {
     if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 })
 
     // Prevent deleting the super admin itself
-    const { data: targetUser } = await supabase.from('profiles').select('username').eq('id', id).single()
+    const { data: targetUser } = await supabase
+      .from('profiles')
+      .select('username, auth_user_id')
+      .eq('id', id)
+      .single()
     if (targetUser?.username === 'admin_wam') {
         return NextResponse.json({ error: 'Cannot delete Super Admin' }, { status: 403 })
     }
 
     // Also delete user from Supabase Auth
-    const { error: authError } = await supabase.auth.admin.deleteUser(id)
-    if (authError) console.error('Auth delete error:', authError)
+    if (targetUser?.auth_user_id) {
+      const { error: authError } = await supabase.auth.admin.deleteUser(targetUser.auth_user_id)
+      if (authError) console.error('Auth delete error:', authError)
+    }
 
     // Manual Cascade: Delete related data
     await supabase.from('activities').delete().eq('user_id', id)

@@ -1,6 +1,11 @@
 import { verifyAdminPermission } from '@/utils/auth'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { getCanonicalAuthEmail, normalizeUsername } from '../../../../../lib/utils'
 import { NextResponse } from 'next/server'
+
+function generateProfileId() {
+    return -(Date.now() + Math.floor(Math.random() * 1000))
+}
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +18,7 @@ export async function POST(request: Request) {
     if (!username || !password) {
         return NextResponse.json({ error: 'Missing data' }, { status: 400 })
     }
+    const normalizedUsername = normalizeUsername(username)
 
     const supabase = createSupabaseAdminClient()
 
@@ -20,20 +26,20 @@ export async function POST(request: Request) {
     const { data: existing } = await supabase
         .from('profiles')
         .select('id')
-        .eq('username', username)
-        .single()
+        .ilike('username', normalizedUsername)
+        .maybeSingle()
     
     if (existing) {
         return NextResponse.json({ error: 'Username already taken' }, { status: 400 })
     }
 
     // Create user in Supabase Auth first
-    const email = `${username}@werkudara.com`
+    const email = getCanonicalAuthEmail(normalizedUsername)
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
-        user_metadata: { username, full_name: fullName || username }
+        user_metadata: { username: normalizedUsername, full_name: fullName || username }
     })
 
     if (authError || !authUser.user) {
@@ -64,13 +70,14 @@ export async function POST(request: Request) {
     }
 
     // Create profile linked to auth user
+    const profileId = generateProfileId()
     const { error } = await supabase
         .from('profiles')
         .insert({
-            id: authUser.user.id,
+            id: profileId,
+            auth_user_id: authUser.user.id,
             username: username,
             full_name: fullName || username,
-            password: password,
             avatar_url: avatarUrl,
             gender: gender || null,
             is_manual: true,

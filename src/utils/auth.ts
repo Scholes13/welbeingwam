@@ -1,4 +1,5 @@
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase/server'
+import { normalizeUsername } from '../lib/utils'
 
 export type Permission = 
   | '*' 
@@ -22,7 +23,7 @@ type AuthIdentity = {
 function extractUsernameFromEmail(email: string | null | undefined): string | null {
   if (!email) return null
   const [username] = email.split('@')
-  const normalized = username?.trim()
+  const normalized = username ? normalizeUsername(username) : null
   return normalized ? normalized : null
 }
 
@@ -32,10 +33,30 @@ export async function resolveProfileIdFromAuthUser(user: AuthIdentity): Promise<
     if (Number.isFinite(asNumber)) return asNumber
   }
 
+  const adminClient = createSupabaseAdminClient()
+  const { data: canonicalProfile, error: canonicalError } = await adminClient
+    .from('profiles')
+    .select('id')
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+
+  if (canonicalError) {
+    console.error('Error resolving profile by auth_user_id:', canonicalError)
+    return null
+  }
+
+  if (canonicalProfile?.id) {
+    return canonicalProfile.id as number
+  }
+
   const username = extractUsernameFromEmail(user.email)
   if (!username) return null
 
-  const adminClient = createSupabaseAdminClient()
+  console.warn('Falling back to username-derived profile lookup for auth user', {
+    authUserId: user.id,
+    email: user.email ?? null,
+  })
+
   const { data, error } = await adminClient
     .from('profiles')
     .select('id')
