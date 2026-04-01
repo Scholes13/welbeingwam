@@ -27,6 +27,27 @@
 
 ## Active Tasks
 
+### 2026-04-01 - Dashboard vs leaderboard points mismatch
+- Status: completed
+- Owner: PM Agent
+- Delegates: `@coder_backend`, `@qa`, `@reviewer`
+- Scope:
+  - trace why dashboard total points and leaderboard overall points diverge for the same user,
+  - align leaderboard activity aggregation with the full `activities` dataset so sport-session points are not silently dropped,
+  - add focused regression coverage for the activity-fetch path that feeds leaderboard aggregation.
+- Risks:
+  - the leaderboard currently depends on a table that has grown past Supabase's default page size, so silent truncation can affect more than one participant,
+  - changing the fetch path must preserve compatibility with the existing `activities` schema while avoiding duplicate or missing rows.
+- Verification:
+  - focused Vitest coverage for `src/app/api/leaderboard/activities.test.ts`
+  - focused Vitest coverage for `src/lib/gamification.test.ts`
+  - targeted live check of `/api/leaderboard` versus `/api/strava/sync` for the affected user after the fix
+- Notes:
+  - live evidence on 2026-04-01 showed dashboard formula `7005 + 649 + 320 + 474 = 8448` for profile `Pramuji`, while `/api/leaderboard` returned `7799` because sport-session rows were missing from the fetched `activities` set.
+  - root cause: `src/app/api/leaderboard/activities.ts` relied on a single `select('*')` call against `public.activities`, which silently truncated at Supabase's default 1000-row page size once the table reached 1126 rows.
+  - fix: the leaderboard activity fetch now pages through `activities` in 1000-row batches, and focused regression coverage was added so later activity rows continue contributing to leaderboard totals.
+  - post-fix live check on 2026-04-01: `/api/leaderboard` returned `Pramuji` with `sport_points=649` and `overall_points=8448`, matching dashboard math.
+
 ### 2026-04-01 - Auth canonicalization and duplicate-email cleanup
 - Status: completed
 - Owner: PM Agent
