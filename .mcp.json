@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "url": "https://mcp.supabase.com/mcp?project_ref=ihrutobdomnagnwzwncy&read_only=true&features=database,debugging,development,docs"
+    },
+    "context7": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "openaiDeveloperDocs": {
+      "url": "https://developers.openai.com/mcp"
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/"
+    },
+    "chrome-devtools": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest"
+      ],
+      "env": {
+        "SystemRoot": "C:\\Windows",
+        "PROGRAMFILES": "C:\\Program Files"
+      },
+      "startup_timeout_ms": 20000
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "review_policy": {
+    "require_self_review_before_finalization": true,
+    "require_reviewer_agent_for_multi_file_or_multi-layer_changes": true,
+    "block_completion_on_standards_violation": true
+  },
+  "knowledge_sources": {
+    "prefer_repository_docs_for_local_architecture_truth": true,
+    "rules": [
+      "prefer repository code and docs for local architecture truths",
+      "prefer exact current workflow files and package scripts over memory",
+      "prefer the configured MCP servers for up-to-date external documentation and platform context when they fit the task",
+      "prefer the configured Supabase MCP server for safe project introspection before using speculative database assumptions",
+      "do not rely on memory alone for deployment, auth, or Supabase behavior when repo evidence is available"
+    ]
+  },
+  "roles": {
+    "pm_agent": {
+      "must": [
+        "update docs/exec_plans.md before or during substantial work",
+        "delegate implementation by ownership boundary when the task spans multiple layers and delegation is available",
+        "translate conceptual harness roles into the correct sub-agent type",
+        "route OpenAI documentation lookups through openaiDeveloperDocs when applicable",
+        "send completed work through review before presenting it as final"
+      ],
+      "must_not": [
+        "claim work is complete before required verification passes",
+        "expand AGENTS.md into a large instruction dump"
+      ]
+    },
+    "coder_backend": {
+      "owns": [
+        "next route handlers",
+        "auth and session helpers",
+        "supabase integration",
+        "sql migrations",
+        "server-side domain services",
+        "server-oriented scripts",
+        "backend tests"
+      ],
+      "must_not": [
+        "rewrite frontend interaction behavior except for small contract-preserving support changes"
+      ]
+    },
+    "coder_frontend": {
+      "owns": [
+        "app router pages and layouts",
+        "react components",
+        "hooks",
+        "context providers",
+        "client-side state and interaction logic",
+        "frontend tests"
+      ],
+      "must_not": [
+        "change persistence or business rules without backend coordination"
+      ]
+    },
+    "qa": {
+      "owns": [
+        "verification execution",
+        "smoke-test design",
+        "regression validation",
+        "reproduction notes",
+        "evidence for pass or fail status"
+      ],
+      "must_not": [
+        "declare architecture or security review complete in place of reviewer sign-off"
+      ]
+    },
+    "reviewer": {
+      "checks": [
+        "architecture boundary compliance",
+        "auth and session drift",
+        "security-sensitive changes",
+        "error handling",
+        "contract consistency between APIs and UI",
+        "test coverage for changed behavior",
+        "verification command coverage",
+        "qa evidence quality"
+      ]
+    }
+  },
+  "harness_agent_mapping": {
+    "available_types": [
+      "default",
+      "explorer",
+      "worker"
+    ],
+    "role_to_type": {
+      "coder_backend": "worker",
+      "coder_frontend": "worker",
+      "qa_default": "explorer",
+      "qa_test_asset_work": "worker",
+      "reviewer_default": "explorer",
+      "reviewer_escalated": "default",
+      "researcher": "explorer"
+    },
+    "rules": [
+      "spawn workers for implementation tasks with clear file ownership",
+      "spawn explorers for repository discovery, tracing, and read-only review",
+      "spawn QA as explorer for verification design, result checking, and evidence gathering",
+      "use worker for QA only when adding or updating dedicated test assets is the task itself",
+      "use default for reviewer work only when explorer-level review is insufficient",
+      "do not assume permanent sub-agent connectivity; assign and spawn per task"
+    ]
+  },
+  "repo_rules": {
+    "agents_md_must_stay_small": true,
+    "forbid_dependency_changes_without_approval": true,
+    "forbid_new_top_level_directories_without_approval": true,
+    "forbid_destructive_git_commands_without_explicit_approval": true,
+    "prefer_existing_repo_patterns": true
+  },
+  "backend_rules": {
+    "prefer_shared_auth_context_helpers_over_route_local_reimplementation": true,
+    "prefer_single_mutation_boundaries_for_multi_step_side_effects": true,
+    "prefer_database_enforced_invariants_for_concurrency_sensitive_flows": true,
+    "avoid_service_role_usage_for_user_scoped_reads_when_a_lower_privilege_path_exists": true,
+    "must_note_contract_changes_in_exec_plan": true
+  },
+  "frontend_rules": {
+    "prefer_existing_fetch_hooks_and_ui_patterns": true,
+    "avoid_coupling_default_page_loads_to_expensive_sync_endpoints": true,
+    "handle_loading_empty_and_failure_states_when_behavior_changes_require_them": true,
+    "avoid_silent_failures_in_complex_ui_flows": true,
+    "must_coordinate_when_response_shapes_change": true
+  },
+  "docs_rules": {
+    "record_significant_work_in_exec_plans": true,
+    "record_new_architecture_decisions_in_docs_instead_of_chat_only": true,
+    "keep_readme_high_level_and_onboarding_friendly": true,
+    "keep_role-specific operational detail in dedicated playbooks instead of AGENTS.md": true
+  },
+  "verification": {
+    "required_after_code_changes": [
+      "run focused tests for touched behavior when tests exist or are added",
+      "run npm run verify:harness after harness-doc or harness-script changes",
+      "run npm run build after meaningful application changes unless the task is docs-only",
+      "run npm test or focused vitest coverage when behavior-critical server or UI logic changes"
+    ],
+    "required_before_completion": [
+      "review changed files against this standards document",
+      "summarize any remaining risk or skipped verification",
+      "confirm no contract or boundary drift was introduced silently"
+    ]
+  }
+}

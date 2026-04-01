@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Welbeing
+
+Welbeing is a Next.js and Supabase application for event engagement, wellness participation, and reward-driven user journeys. The repository includes participant-facing experiences such as quests, rewards, map check-ins, surveys, profiles, and notifications, plus admin flows and integrations like Strava sync.
+
+## Stack
+- Next.js 16 App Router
+- React 19 and TypeScript
+- Tailwind CSS
+- Supabase Auth, Postgres, and Storage
+- OpenNext on Cloudflare Workers
+- Vitest for focused testing
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+
+```bash
+npm ci
+```
+
+2. Configure environment variables:
+
+```bash
+copy .env.example .env.local
+```
+
+3. Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Useful Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run dev
+npm run build
+npm test
+npm run verify:harness
+npm run ci:verify
+```
 
-## Learn More
+## Repository Guide
+- Agent entry point: `AGENTS.md`
+- Architecture and boundaries: `docs/architecture.md`
+- Strict standards and review gates: `docs/coding_standards.json`
+- Execution tracking and known tech debt: `docs/exec_plans.md`
+- Agentic support docs: `docs/agentic/README.md`
+- Existing operations docs: `docs/operations/`
+- Existing design and implementation plans: `docs/plans/`
+- PR and rollout notes: `docs/prs/`
 
-To learn more about Next.js, take a look at the following resources:
+## Deployment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+CI and deployment expectations are documented in:
+- `docs/operations/2026-03-11-branch-cicd-flow.md`
+- `.github/workflows/ci.yml`
+- `.github/workflows/deploy-cloudflare.yml`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The current branch strategy is:
+- `codex/*` and feature branches -> PR into `staging`
+- `staging` -> integration and staging deploys
+- `main` -> production deploys
 
-## Deploy on Vercel
+## Harness Engineering Foundation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This repository now uses a strict Harness Engineering foundation:
+- `AGENTS.md` stays intentionally small and acts as a table of contents.
+- Durable operating rules live in `docs/`.
+- Multi-file or multi-layer work should be tracked in `docs/exec_plans.md`.
+- The baseline harness structure is enforced by `npm run verify:harness` and is part of `npm run ci:verify`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Current Focus Areas
+- continue hardening auth and profile identity handling
+- keep expensive sync flows off default user read paths
+- preserve reward, attendance, and notification invariants under retry and concurrency
+- improve repo legibility so future agent work scales cleanly
