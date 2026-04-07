@@ -1,4 +1,4 @@
-﻿import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import { parseWellbeingPeriod } from './period-filter'
 import { calculateWellbeingIndex } from './calculator'
 import { resolveDominantDimension } from './dimension-mapper'
@@ -141,11 +141,7 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
       quizCoveragePercent,
       attendanceRatePercent,
     },
-    dimensionDistribution: [
-      { dimension: 'physical', userCount: 0, percentage: 0 },
-      { dimension: 'mental', userCount: 0, percentage: 0 },
-      { dimension: 'social', userCount: 0, percentage: 0 },
-    ],
+    dimensionDistribution: computeDimensionDistribution(userMetrics, sportActivities ?? [], profiles.length),
     attentionCounts: {
       noRecentQuiz: profiles.length - usersWithQuiz,
       lowAttendance: userMetrics.filter(u => u.attendanceCount < 3).length,
@@ -279,6 +275,31 @@ export async function buildWellbeingUserDetail(input: {
   }
 }
 
+function computeDimensionDistribution(
+  userMetrics: Array<{ userId: number; sportCount: number; attendanceCount: number; quizCount: number }>,
+  sportActivities: Array<{ user_id: number }>,
+  totalUsers: number
+): Array<{ dimension: string; userCount: number; percentage: number }> {
+  // v1: Use sport activity as proxy for physical dimension
+  // v2: Add quiz answer dimension mapping when survey schema supports it
+  const physicalUsers = new Set(sportActivities.map(s => s.user_id))
+  const socialUsers = userMetrics.filter(u => u.attendanceCount > 0).length
+  const mentalUsers = userMetrics.filter(u => u.quizCount > 0).length
+
+  const distribution = [
+    { dimension: 'physical', userCount: physicalUsers.size, percentage: 0 },
+    { dimension: 'social', userCount: socialUsers, percentage: 0 },
+    { dimension: 'mental', userCount: mentalUsers, percentage: 0 },
+  ]
+
+  if (totalUsers > 0) {
+    distribution.forEach(d => {
+      d.percentage = Math.round((d.userCount / totalUsers) * 100)
+    })
+  }
+
+  return distribution.sort((a, b) => b.userCount - a.userCount)
+}
 function buildEmptyOverview(period: ReturnType<typeof parseWellbeingPeriod>, warnings: string[]): WellbeingOverviewPayload {
   return {
     meta: {
