@@ -27,7 +27,8 @@
 
 ## Active Tasks
 
-### 2026-04-07 - Admin wellbeing overview dashboard design and planning`r`n- Status: completed
+### 2026-04-07 - Admin wellbeing overview dashboard design and planning
+- Status: completed
 - Owner: PM Agent
 - Delegates: `@coder_backend`, `@coder_frontend`, `@qa`, `@reviewer`
 - Scope:
@@ -39,13 +40,20 @@
   - a vague wellbeing formula could produce numbers that look polished but are not actionable for admins,
   - missing or sparse quiz data must degrade gracefully instead of making the dashboard feel broken,
   - lifetime metrics can hide recent drop-offs if trend comparisons are not surfaced clearly beside the filtered view.
-- Verification:`r`n  - design spec reviewed against `docs/coding_standards.json``r`n  - implementation plan reviewed before code changes begin`r`n  - `npm test``r`n  - `npm exec tsc -- --noEmit``r`n  - `npm run build``r`n  - reviewer and QA sub-agent closure completed on 2026-04-07
+- Verification:
+  - design spec reviewed against `docs/coding_standards.json`
+  - implementation plan reviewed before code changes begin
+  - `npm test`
+  - `npm exec tsc -- --noEmit`
+  - `npm run build`
+  - reviewer and QA sub-agent closure completed on 2026-04-07
 - Notes:
   - user-approved direction so far: `Overview First` dashboard structure with drill-down as a secondary action,
   - user requested metrics to draw from quiz, sport activity, attendance, and other signals besides quest,
   - user requested lifetime support plus period filters instead of a recent-only view,
   - implementation started on 2026-04-07 in isolated worktree `I:\Project\Welbeing\.worktrees\codex-admin-wellbeing-dashboard` on branch `codex/admin-wellbeing-dashboard`,
-  - planned execution order: `@coder_backend` metric and route foundation, `@coder_frontend` overview-first UI integration, then `@reviewer` and `@qa` closure.`r`n  - implementation shipped in worktree on 2026-04-07 with backend aggregation routes, overview-first admin tab integration, dominant-dimension proxy mapping, and guarded wellbeing route error handling.
+  - planned execution order: `@coder_backend` metric and route foundation, `@coder_frontend` overview-first UI integration, then `@reviewer` and `@qa` closure.
+  - implementation shipped in worktree on 2026-04-07 with backend aggregation routes, overview-first admin tab integration, dominant-dimension proxy mapping, and guarded wellbeing route error handling.
 
 ### 2026-04-01 - Settings schema drift repair and error-state hardening
 - Status: completed
