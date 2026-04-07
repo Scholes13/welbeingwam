@@ -20,6 +20,7 @@ describe('adminLayout helpers', () => {
     expect(getAdminCreateLabel('surveys', true)).toBe('Question')
     expect(getAdminCreateLabel('doorprize', false)).toBeNull()
     expect(getAdminCreateLabel('admins', false)).toBeNull()
+    expect(getAdminCreateLabel('wellbeing', false)).toBeNull()
   })
 
   it('returns stable heading metadata for sidebar layout topbar', () => {
@@ -30,6 +31,10 @@ describe('adminLayout helpers', () => {
     expect(getAdminPageMeta('activities')).toEqual({
       title: 'Activities',
       description: 'Manage event schedules, QR attendance, and publication status.',
+    })
+    expect(getAdminPageMeta('wellbeing')).toEqual({
+      title: 'Wellbeing Dashboard',
+      description: 'Monitor user wellbeing index, dominant dimensions, and attention-needed trends.',
     })
   })
 
