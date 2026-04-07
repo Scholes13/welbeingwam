@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase/client'
 import ManageAdmins from './ManageAdmins'
 import type { AdminTab } from './components/AdminTabs'
 import { AdminSidebar } from './components/AdminSidebar'
+import { WellbeingOverview } from './wellbeing/components/WellbeingOverview'
 import {
     ADMIN_SIDEBAR_COLLAPSED_STORAGE_KEY,
     getAdminCreateLabel,
@@ -897,7 +898,6 @@ export default function AdminPage() {
     }
 
     const openActivityTypeModal = () => {
-        setIsModalOpen(false)
 
         if (!isActivityTypeHierarchyEnabled) {
             setNewActivityTypeParentId('')
@@ -1070,7 +1070,6 @@ export default function AdminPage() {
                 body: JSON.stringify(activityForm)
             })
             if (res.ok) {
-                setIsModalOpen(false)
                 setActivityForm(prev => ({
                     ...prev,
                     title: '',
@@ -1142,7 +1141,6 @@ export default function AdminPage() {
             const data = await res.json()
             if (res.ok) {
                 success('QR Spot created!')
-                setIsModalOpen(false)
                 setSpotForm({ name: '', description: '', points: '', maxClaims: '', expiresAt: '', clue: '' })
                 fetchSpots()
             } else {
@@ -1616,7 +1614,6 @@ export default function AdminPage() {
             const data = await res.json()
 
             if (res.ok) {
-                setIsModalOpen(false)
                 if (activeTab === 'users') {
                     setFormData({ username: '', password: '', fullName: '', gender: '' })
                     fetchUsers()
@@ -1750,6 +1747,8 @@ export default function AdminPage() {
                             )}
                             </div>
                         </div>
+
+            {activeTab === 'wellbeing' && <WellbeingOverview />}
 
             {activeTab === 'users' && (
                 <UsersTab
@@ -4712,3 +4711,4 @@ export default function AdminPage() {
         </div>
     )
 }
+

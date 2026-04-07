@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { GET } from './route'
 
 vi.mock('@/utils/auth', () => ({
@@ -103,5 +104,19 @@ describe('GET /api/admin/wellbeing/users/[id]', () => {
       userId: '99',
       searchParams: expect.any(URLSearchParams),
     })
+  })
+
+  it('returns 404 when the requested user is missing', async () => {
+    vi.mocked(verifyAdminPermission).mockResolvedValue({ authorized: true, userId: '1' })
+    vi.mocked(buildWellbeingUserDetail).mockRejectedValue(new Error('User not found'))
+
+    const response = await GET(
+      new Request('http://localhost:3000/api/admin/wellbeing/users/404?period=30D'),
+      { params: Promise.resolve({ id: '404' }) } as never,
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(404)
+    expect(body).toEqual({ error: 'User not found' })
   })
 })

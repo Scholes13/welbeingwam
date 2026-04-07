@@ -1,4 +1,5 @@
-﻿import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import { GET } from './route'
 
 vi.mock('@/utils/auth', () => ({
@@ -104,5 +105,16 @@ describe('GET /api/admin/wellbeing/overview', () => {
     expect(response.status).toBe(200)
     expect(body.meta.appliedPeriod).toBe('7D')
     expect(buildWellbeingOverview).toHaveBeenCalledWith(expect.any(URLSearchParams))
+  })
+
+  it('returns 400 when the requested range is invalid', async () => {
+    vi.mocked(verifyAdminPermission).mockResolvedValue({ authorized: true, userId: '1' })
+    vi.mocked(buildWellbeingOverview).mockRejectedValue(new Error('Invalid custom wellbeing range'))
+
+    const response = await GET(new Request('http://localhost:3000/api/admin/wellbeing/overview?period=Custom'))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toEqual({ error: 'Invalid custom wellbeing range' })
   })
 })

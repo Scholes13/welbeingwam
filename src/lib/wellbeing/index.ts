@@ -1,18 +1,29 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
-import { parseWellbeingPeriod } from './period-filter'
+
 import { calculateWellbeingIndex } from './calculator'
 import { resolveDominantDimension } from './dimension-mapper'
+import { parseWellbeingPeriod } from './period-filter'
 import { normalizeCoverageScore, normalizeCountScore } from './source-normalizer'
 import type { WellbeingOverviewPayload, WellbeingUserDetailPayload } from './types'
 
 // TODO(v2): only add reward or quest signals after they have explicit dimension mapping and a validated wellbeing use case.
+
+type UserMetric = {
+  userId: number
+  username: string
+  wellbeingIndex: number
+  quizCount: number
+  sportCount: number
+  attendanceCount: number
+  isActive: boolean
+  dominantDimension: string
+}
 
 export async function buildWellbeingOverview(searchParams: URLSearchParams): Promise<WellbeingOverviewPayload> {
   const period = parseWellbeingPeriod(searchParams)
   const supabase = createSupabaseAdminClient()
   const warnings: string[] = []
 
-  // Calculate prior period for trend comparison
   let priorStart: Date | null = null
   let priorEnd: Date | null = null
   if (period.start) {
@@ -23,7 +34,6 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
     priorStart.setDate(priorStart.getDate() - periodDays + 1)
   }
 
-  // Fetch all active profiles
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, username')
@@ -33,9 +43,8 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
     return buildEmptyOverview(period, warnings)
   }
 
-  const userIds = profiles.map(p => p.id)
+  const userIds = profiles.map((profile) => profile.id)
 
-  // Fetch quiz submissions in period
   const quizQuery = supabase
     .from('survey_submissions')
     .select('user_id, created_at')
@@ -48,7 +57,6 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
 
   const { data: quizSubmissions } = await quizQuery
 
-  // Fetch sport activities (exclude voided/rejected)
   const sportQuery = supabase
     .from('activities')
     .select('user_id, created_at, mode')
@@ -63,7 +71,6 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
 
   const { data: sportActivities } = await sportQuery
 
-  // Fetch attendance records
   const attendanceQuery = supabase
     .from('attendance')
     .select('user_id, scan_in_at, state')
@@ -76,11 +83,10 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
 
   const { data: attendanceRecords } = await attendanceQuery
 
-  // Aggregate per-user metrics
-  const userMetrics = profiles.map(profile => {
-    const quizCount = quizSubmissions?.filter(q => q.user_id === profile.id).length ?? 0
-    const sportCount = sportActivities?.filter(s => s.user_id === profile.id).length ?? 0
-    const attendanceCount = attendanceRecords?.filter(a => a.user_id === profile.id && a.state === 'present').length ?? 0
+  const userMetrics: UserMetric[] = profiles.map((profile) => {
+    const quizCount = quizSubmissions?.filter((submission) => submission.user_id === profile.id).length ?? 0
+    const sportCount = sportActivities?.filter((activity) => activity.user_id === profile.id).length ?? 0
+    const attendanceCount = attendanceRecords?.filter((record) => record.user_id === profile.id && record.state === 'present').length ?? 0
 
     const quizScore = normalizeCountScore({ count: quizCount, target: 4 })
     const sportScore = normalizeCountScore({ count: sportCount, target: 8 })
@@ -95,6 +101,11 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
     })
 
     const isActive = quizCount > 0 || sportCount > 0 || attendanceCount > 0
+    const dominantDimension = resolveMetricDominantDimension({
+      quizScore,
+      sportScore,
+      attendanceScore,
+    })
 
     return {
       userId: profile.id,
@@ -104,22 +115,23 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
       sportCount,
       attendanceCount,
       isActive,
+      dominantDimension,
     }
   })
 
-  const activeUsers = userMetrics.filter(u => u.isActive)
+  const activeUsers = userMetrics.filter((user) => user.isActive)
   const activeUsersPercent = profiles.length > 0 ? Math.round((activeUsers.length / profiles.length) * 100) : 0
   const averageWellbeingIndex = activeUsers.length > 0
-    ? Math.round(activeUsers.reduce((sum, u) => sum + u.wellbeingIndex, 0) / activeUsers.length)
+    ? Math.round(activeUsers.reduce((sum, user) => sum + user.wellbeingIndex, 0) / activeUsers.length)
     : 0
 
-  const usersWithQuiz = userMetrics.filter(u => u.quizCount > 0).length
-  const quizCoveragePercent = profiles.length > 0 ? Math.round((usersWithQuiz / profiles.length) * 100) : 0
+  const usersWithQuiz = userMetrics.filter((user) => user.quizCount > 0).length
+  const quizCoveragePercent = profiles.length > 0 ? normalizeCoverageScore(usersWithQuiz / profiles.length) : 0
 
   const totalAttendanceOpportunities = profiles.length * 10
-  const totalAttendance = userMetrics.reduce((sum, u) => sum + u.attendanceCount, 0)
+  const totalAttendance = userMetrics.reduce((sum, user) => sum + user.attendanceCount, 0)
   const attendanceRatePercent = totalAttendanceOpportunities > 0
-    ? Math.round((totalAttendance / totalAttendanceOpportunities) * 100)
+    ? normalizeCoverageScore(totalAttendance / totalAttendanceOpportunities)
     : 0
 
   if (quizCoveragePercent < 30) {
@@ -141,31 +153,31 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
       quizCoveragePercent,
       attendanceRatePercent,
     },
-    dimensionDistribution: computeDimensionDistribution(userMetrics, sportActivities ?? [], profiles.length),
+    dimensionDistribution: computeDimensionDistribution(userMetrics, profiles.length),
     attentionCounts: {
       noRecentQuiz: profiles.length - usersWithQuiz,
-      lowAttendance: userMetrics.filter(u => u.attendanceCount < 3).length,
+      lowAttendance: userMetrics.filter((user) => user.attendanceCount < 3).length,
       fallingSport: 0,
       inactive: profiles.length - activeUsers.length,
     },
     operationalTables: {
-      mostActive: activeUsers
-        .sort((a, b) => b.wellbeingIndex - a.wellbeingIndex)
+      mostActive: [...activeUsers]
+        .sort((left, right) => right.wellbeingIndex - left.wellbeingIndex)
         .slice(0, 10)
-        .map(u => ({
-          userId: u.userId,
-          username: u.username,
-          wellbeingIndex: u.wellbeingIndex,
-          dominantDimension: 'unknown',
+        .map((user) => ({
+          userId: user.userId,
+          username: user.username,
+          wellbeingIndex: user.wellbeingIndex,
+          dominantDimension: user.dominantDimension,
         })),
-      highestAttendance: userMetrics
-        .sort((a, b) => b.attendanceCount - a.attendanceCount)
+      highestAttendance: [...userMetrics]
+        .sort((left, right) => right.attendanceCount - left.attendanceCount)
         .slice(0, 10)
-        .map(u => ({
-          userId: u.userId,
-          username: u.username,
-          wellbeingIndex: u.wellbeingIndex,
-          dominantDimension: 'unknown',
+        .map((user) => ({
+          userId: user.userId,
+          username: user.username,
+          wellbeingIndex: user.wellbeingIndex,
+          dominantDimension: user.dominantDimension,
         })),
       biggestDrop: [],
     },
@@ -180,6 +192,10 @@ export async function buildWellbeingUserDetail(input: {
   const supabase = createSupabaseAdminClient()
   const userId = Number(input.userId)
 
+  if (Number.isNaN(userId)) {
+    throw new Error('Invalid user id')
+  }
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, username')
@@ -190,7 +206,6 @@ export async function buildWellbeingUserDetail(input: {
     throw new Error('User not found')
   }
 
-  // Fetch quiz submissions
   const quizQuery = supabase
     .from('survey_submissions')
     .select('created_at')
@@ -203,7 +218,6 @@ export async function buildWellbeingUserDetail(input: {
 
   const { data: quizSubmissions } = await quizQuery
 
-  // Fetch sport activities
   const sportQuery = supabase
     .from('activities')
     .select('created_at')
@@ -218,7 +232,6 @@ export async function buildWellbeingUserDetail(input: {
 
   const { data: sportActivities } = await sportQuery
 
-  // Fetch attendance
   const attendanceQuery = supabase
     .from('attendance')
     .select('scan_in_at, state')
@@ -233,7 +246,7 @@ export async function buildWellbeingUserDetail(input: {
 
   const quizCount = quizSubmissions?.length ?? 0
   const sportCount = sportActivities?.length ?? 0
-  const attendanceCount = attendanceRecords?.filter(a => a.state === 'present').length ?? 0
+  const attendanceCount = attendanceRecords?.filter((record) => record.state === 'present').length ?? 0
 
   const quizScore = normalizeCountScore({ count: quizCount, target: 4 })
   const sportScore = normalizeCountScore({ count: sportCount, target: 8 })
@@ -247,6 +260,12 @@ export async function buildWellbeingUserDetail(input: {
     otherScore,
   })
 
+  const dominantDimension = resolveMetricDominantDimension({
+    quizScore,
+    sportScore,
+    attendanceScore,
+  })
+
   const flags: string[] = []
   if (quizCount === 0) flags.push('No quiz submissions in period')
   if (attendanceCount < 3) flags.push('Low attendance')
@@ -257,7 +276,7 @@ export async function buildWellbeingUserDetail(input: {
     username: profile.username,
     filteredPeriod: {
       wellbeingIndex,
-      dominantDimension: 'unknown',
+      dominantDimension,
       sourceContributions: {
         quiz: quizScore,
         sport: sportScore,
@@ -275,31 +294,38 @@ export async function buildWellbeingUserDetail(input: {
   }
 }
 
+function resolveMetricDominantDimension(input: {
+  quizScore: number
+  sportScore: number
+  attendanceScore: number
+}): string {
+  return resolveDominantDimension({
+    quizDimensions: input.quizScore > 0 ? { mental: input.quizScore } : {},
+    activityDimensions: input.sportScore > 0 ? { physical: input.sportScore } : {},
+    attendanceDimensions: input.attendanceScore > 0 ? { social: input.attendanceScore } : {},
+  }).dimension
+}
+
 function computeDimensionDistribution(
-  userMetrics: Array<{ userId: number; sportCount: number; attendanceCount: number; quizCount: number }>,
-  sportActivities: Array<{ user_id: number }>,
-  totalUsers: number
+  userMetrics: UserMetric[],
+  totalUsers: number,
 ): Array<{ dimension: string; userCount: number; percentage: number }> {
-  // v1: Use sport activity as proxy for physical dimension
-  // v2: Add quiz answer dimension mapping when survey schema supports it
-  const physicalUsers = new Set(sportActivities.map(s => s.user_id))
-  const socialUsers = userMetrics.filter(u => u.attendanceCount > 0).length
-  const mentalUsers = userMetrics.filter(u => u.quizCount > 0).length
+  const counts = new Map<string, number>()
 
-  const distribution = [
-    { dimension: 'physical', userCount: physicalUsers.size, percentage: 0 },
-    { dimension: 'social', userCount: socialUsers, percentage: 0 },
-    { dimension: 'mental', userCount: mentalUsers, percentage: 0 },
-  ]
-
-  if (totalUsers > 0) {
-    distribution.forEach(d => {
-      d.percentage = Math.round((d.userCount / totalUsers) * 100)
-    })
+  for (const user of userMetrics) {
+    if (!user.isActive || user.dominantDimension === 'unknown') continue
+    counts.set(user.dominantDimension, (counts.get(user.dominantDimension) ?? 0) + 1)
   }
 
-  return distribution.sort((a, b) => b.userCount - a.userCount)
+  return [...counts.entries()]
+    .map(([dimension, userCount]) => ({
+      dimension,
+      userCount,
+      percentage: totalUsers > 0 ? Math.round((userCount / totalUsers) * 100) : 0,
+    }))
+    .sort((left, right) => right.userCount - left.userCount)
 }
+
 function buildEmptyOverview(period: ReturnType<typeof parseWellbeingPeriod>, warnings: string[]): WellbeingOverviewPayload {
   return {
     meta: {

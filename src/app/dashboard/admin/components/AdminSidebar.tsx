@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { ArrowLeft, Calendar, ClipboardList, Dumbbell, FileText, Gift, MapPin, PanelLeftClose, PanelLeftOpen, Shield, User, X } from 'lucide-react'
+import { ArrowLeft, BarChart2, Calendar, ClipboardList, Dumbbell, FileText, Gift, MapPin, PanelLeftClose, PanelLeftOpen, Shield, User, X } from 'lucide-react'
 
 import type { AdminTab } from './AdminTabs'
 import { getAdminSidebarMotionClasses, getAdminSidebarPresentation } from './adminLayout'
@@ -33,6 +33,7 @@ const GROUP_ORDER: TabGroupKey[] = ['management', 'events', 'system']
 
 const TAB_ITEMS: TabItem[] = [
   { key: 'users', label: 'Users', group: 'management', Icon: User },
+  { key: 'wellbeing', label: 'Wellbeing', group: 'management', Icon: BarChart2 },
   { key: 'quests', label: 'Daily Quests', group: 'management', Icon: Gift },
   { key: 'surveys', label: 'Surveys', group: 'management', Icon: ClipboardList },
   { key: 'rewards', label: 'Rewards', group: 'management', Icon: Gift },

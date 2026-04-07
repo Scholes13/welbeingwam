@@ -28,6 +28,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
     title: 'Users',
     description: 'Manage user accounts, points, and reset actions.',
   },
+  wellbeing: {
+    title: 'Wellbeing Dashboard',
+    description: 'Monitor user wellbeing index, dominant dimensions, and attention-needed trends.',
+  },
   quests: {
     title: 'Daily Quests',
     description: 'Manage daily mission templates and reward points.',
@@ -75,7 +79,13 @@ export function getAdminPageMeta(activeTab: AdminTab): AdminPageMeta {
 }
 
 export function getAdminCreateLabel(activeTab: AdminTab, hasSelectedSurvey: boolean): string | null {
-  if (activeTab === 'admins' || activeTab === 'doorprize' || activeTab === 'templates' || activeTab === 'sports') return null
+  if (
+    activeTab === 'admins' ||
+    activeTab === 'doorprize' ||
+    activeTab === 'templates' ||
+    activeTab === 'sports' ||
+    activeTab === 'wellbeing'
+  ) return null
   if (activeTab === 'users') return 'User'
   if (activeTab === 'quests') return 'Quest'
   if (activeTab === 'rewards') return 'Reward'

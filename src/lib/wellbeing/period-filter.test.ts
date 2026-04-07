@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { parseWellbeingPeriod } from './period-filter'
 
 describe('parseWellbeingPeriod', () => {
@@ -28,7 +28,7 @@ describe('parseWellbeingPeriod', () => {
     }))
 
     expect(result.kind).toBe('Custom')
-    expect(result.start.toISOString()).toContain('2026-03-01')
+    expect(result.start?.toISOString()).toContain('2026-03-01')
     expect(result.end.toISOString()).toContain('2026-03-31')
   })
 
@@ -42,3 +42,4 @@ describe('parseWellbeingPeriod', () => {
     expect(result.start).toBeNull()
   })
 })
+
