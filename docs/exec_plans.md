@@ -27,6 +27,54 @@
 
 ## Active Tasks
 
+### 2026-04-07 - Admin wellbeing overview dashboard design and planning
+- Status: in_progress
+- Owner: PM Agent
+- Delegates: `@coder_backend`, `@coder_frontend`, `@qa`, `@reviewer`
+- Scope:
+  - design an admin dashboard that summarizes wellbeing trends across users with an overview-first layout,
+  - define a hybrid wellbeing index sourced primarily from quiz, sport activity, attendance, and other non-quest engagement signals,
+  - support global time filters for `7D`, `30D`, `90D`, `Custom`, and `Lifetime` while keeping `30D` as the operational default,
+  - prepare the written design and implementation plan before touching production behavior.
+- Risks:
+  - a vague wellbeing formula could produce numbers that look polished but are not actionable for admins,
+  - missing or sparse quiz data must degrade gracefully instead of making the dashboard feel broken,
+  - lifetime metrics can hide recent drop-offs if trend comparisons are not surfaced clearly beside the filtered view.
+- Verification:
+  - design spec reviewed against `docs/coding_standards.json`
+  - implementation plan reviewed before code changes begin
+- Notes:
+  - user-approved direction so far: `Overview First` dashboard structure with drill-down as a secondary action,
+  - user requested metrics to draw from quiz, sport activity, attendance, and other signals besides quest,
+  - user requested lifetime support plus period filters instead of a recent-only view.
+
+### 2026-04-01 - Settings schema drift repair and error-state hardening
+- Status: completed
+- Owner: PM Agent
+- Delegates: `@coder_backend`, `@coder_frontend`, `@qa`, `@reviewer`
+- Scope:
+  - restore the missing `public.settings` contract in the live Supabase schema,
+  - harden `/api/settings` and `/api/strava/sync` around missing settings drift and JSONB parsing,
+  - remove silent frontend fallbacks that make settings and Strava failures look like healthy defaults,
+  - add focused regression coverage for settings parsing and shared fetch error handling.
+- Risks:
+  - recreating `public.settings` must preserve the API contract expected by both admin and participant-facing settings consumers,
+  - tightening frontend error handling can expose previously hidden failures, so the UI needs explicit degraded states instead of blank screens,
+  - settings rows contain JSONB values, so parsers must tolerate both legacy string payloads and native boolean/number values.
+- Verification:
+  - focused Vitest coverage for `src/lib/settings.test.ts`
+  - focused Vitest coverage for `src/app/api/settings/route.test.ts`
+  - focused Vitest coverage for `src/lib/fetch-json.test.ts`
+  - focused Vitest coverage for `src/lib/strava/sync.test.ts`
+  - `npm run build`
+- Notes:
+  - live Supabase evidence on 2026-04-01 showed `to_regclass('public.settings') = null` while migration history still listed `20260129000000_city_tour_schema` and `20260129000004_seed_default_data`,
+  - the current runtime still queries `settings` from both `/api/settings` and `/api/strava/sync`, so the missing table breaks admin settings, masks feature flags, and forces Strava cooldown fallback to the hardcoded default.
+  - fix shipped in code: added shared settings parsing for JSONB-backed values, hardened `/api/settings` and `/api/strava/sync`, replaced silent frontend fallbacks with explicit error states, and introduced a shared fetch helper that throws on non-2xx responses.
+  - focused verification passed on 2026-04-01: `npm test -- src/lib/settings.test.ts src/app/api/settings/route.test.ts src/lib/fetch-json.test.ts src/lib/strava/sync.test.ts src/components/admin/settings.test.ts src/app/profile/settings/strava.test.ts`
+  - application build passed on 2026-04-01: `npm run build`
+  - live database repair completed on 2026-04-01 via `npx supabase db push --linked --include-all`; follow-up checks confirmed `to_regclass('public.settings') = 'settings'`, `count(*) = 13`, and remote migration `20260401001000` is now recorded.
+
 ### 2026-04-01 - Dashboard vs leaderboard points mismatch
 - Status: completed
 - Owner: PM Agent
