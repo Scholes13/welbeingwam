@@ -145,8 +145,8 @@ it('prefers explicit quiz dimension scores before fallback activity dimensions',
     attendanceDimensions: { social: 20 },
   })
 
-  expect(result.dimension).toBe('physical')
-  expect(result.score).toBe(41)
+  expect(result.dimension).toBe('mental')
+  expect(result.score).toBe(82)
 })
 ```
 
@@ -557,8 +557,7 @@ Implementation notes:
 Implementation notes:
 - keep the change to `src/app/dashboard/admin/page.tsx` minimal,
 - delegate the wellbeing branch to the new `WellbeingOverview` surface instead of inlining UI into the 4700-line page,
-- do not introduce a parallel admin routing model for v1,
-- do not add a duplicate top-level `fetchWellbeing()` branch to the page-level `useEffect`; the wellbeing tab should fetch through `WellbeingOverview` and its SWR hooks only.
+- do not introduce a parallel admin routing model for v1.
 
 ```ts
 if (activeTab === 'wellbeing') {
