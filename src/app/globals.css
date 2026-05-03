@@ -70,6 +70,16 @@ a {
   /* Chrome/Safari */
 }
 
+/* Fix dropdown/select options in dark theme */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #1a1a1a;
+  color: #ffffff;
+}
+
 /* Ensure html/body are covered */
 html,
 body {

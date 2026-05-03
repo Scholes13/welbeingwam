@@ -1,7 +1,7 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 
 import { calculateWellbeingIndex } from './calculator'
-import { resolveDominantDimension } from './dimension-mapper'
+import { resolveDominantDimension, resolveDominantDimensionFromActivities } from './dimension-mapper'
 import { parseWellbeingPeriod } from './period-filter'
 import { normalizeCoverageScore, normalizeCountScore } from './source-normalizer'
 import type { WellbeingOverviewPayload, WellbeingUserDetailPayload } from './types'
@@ -71,6 +71,20 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
 
   const { data: sportActivities } = await sportQuery
 
+  // Fetch ALL activities with dimension_id for dimension distribution
+  const allActivitiesQuery = supabase
+    .from('activities')
+    .select('user_id, created_at, dimension_id, dimension:dimensions(name)')
+    .in('user_id', userIds)
+    .not('review_status', 'in', '(voided,rejected)')
+
+  if (period.start) {
+    allActivitiesQuery.gte('created_at', period.start.toISOString())
+  }
+  allActivitiesQuery.lte('created_at', period.end.toISOString())
+
+  const { data: allActivities } = await allActivitiesQuery
+
   const attendanceQuery = supabase
     .from('attendance')
     .select('user_id, scan_in_at, state')
@@ -88,6 +102,14 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
     const sportCount = sportActivities?.filter((activity) => activity.user_id === profile.id).length ?? 0
     const attendanceCount = attendanceRecords?.filter((record) => record.user_id === profile.id && record.state === 'present').length ?? 0
 
+    // Count activities per dimension for this user
+    const userActivities = allActivities?.filter((a) => a.user_id === profile.id) ?? []
+    const activityDimensions: Record<string, number> = {}
+    for (const act of userActivities) {
+      const dimName = (act.dimension as { name?: string } | null)?.name || 'physical'
+      activityDimensions[dimName] = (activityDimensions[dimName] ?? 0) + 1
+    }
+
     const quizScore = normalizeCountScore({ count: quizCount, target: 4 })
     const sportScore = normalizeCountScore({ count: sportCount, target: 8 })
     const attendanceScore = normalizeCountScore({ count: attendanceCount, target: 10 })
@@ -100,8 +122,9 @@ export async function buildWellbeingOverview(searchParams: URLSearchParams): Pro
       otherScore,
     })
 
-    const isActive = quizCount > 0 || sportCount > 0 || attendanceCount > 0
-    const dominantDimension = resolveMetricDominantDimension({
+    const isActive = quizCount > 0 || sportCount > 0 || attendanceCount > 0 || userActivities.length > 0
+    // Use actual dimension data from activities for dominant dimension
+    const dominantDimension = resolveDominantDimensionFromActivities(activityDimensions, {
       quizScore,
       sportScore,
       attendanceScore,
@@ -260,19 +283,19 @@ export async function buildWellbeingUserDetail(input: {
     otherScore,
   })
 
-  const dominantDimension = resolveMetricDominantDimension({
+  const dominantDimension = resolveDominantDimensionFromActivities({}, {
     quizScore,
     sportScore,
     attendanceScore,
   })
 
   const flags: string[] = []
-  if (quizCount === 0) flags.push('No quiz submissions in period')
-  if (attendanceCount < 3) flags.push('Low attendance')
-  if (sportCount === 0) flags.push('No sport activity')
+  if (quizCount === 0) flags.push('no_quiz')
+  if (sportCount === 0) flags.push('no_sport')
+  if (attendanceCount < 3) flags.push('low_attendance')
 
   return {
-    userId: profile.id,
+    userId,
     username: profile.username,
     filteredPeriod: {
       wellbeingIndex,
@@ -292,18 +315,6 @@ export async function buildWellbeingUserDetail(input: {
     },
     timeSeries: [],
   }
-}
-
-function resolveMetricDominantDimension(input: {
-  quizScore: number
-  sportScore: number
-  attendanceScore: number
-}): string {
-  return resolveDominantDimension({
-    quizDimensions: input.quizScore > 0 ? { mental: input.quizScore } : {},
-    activityDimensions: input.sportScore > 0 ? { physical: input.sportScore } : {},
-    attendanceDimensions: input.attendanceScore > 0 ? { social: input.attendanceScore } : {},
-  }).dimension
 }
 
 function computeDimensionDistribution(

@@ -19,22 +19,57 @@ type Dimension = {
     display_name: string
 }
 
+/* Jenis kegiatan per dimensi sesuai Excel "JENIS WELLBEING" */
+type ActivityConfig = {
+    label: string
+    requiresSteps: boolean  // only for physical "Steps" activity
+}
+
+const ACTIVITIES_BY_DIMENSION: Record<string, ActivityConfig[]> = {
+    physical: [
+        { label: 'Werkudara Workout Fitness', requiresSteps: false },
+        { label: 'Yoga', requiresSteps: false },
+        { label: 'Badminton', requiresSteps: false },
+        { label: 'Mountaineering / Hiking', requiresSteps: false },
+        { label: 'Treadmill', requiresSteps: false },
+        { label: 'Olahraga yang Dilakukan Sendiri', requiresSteps: false },
+        { label: 'Steps', requiresSteps: true },
+    ],
+    emotional: [
+        { label: 'Konsultasi / Konseling / Sharing Session Mental Health', requiresSteps: false },
+        { label: 'Penyaluran Hobi / Minat dengan Aktivitas Sosial', requiresSteps: false },
+    ],
+    social: [
+        { label: 'Team Building / Gathering / WAM / Internal Activities', requiresSteps: false },
+        { label: 'Kegiatan Sosial di Luar Kantor (CSR, Bakti Sosial, Arisan, dsb)', requiresSteps: false },
+        { label: 'CSR', requiresSteps: false },
+    ],
+    financial: [
+        { label: 'Program Tabungan atau Benefit Financial', requiresSteps: false },
+        { label: 'Seminar & Edukasi Pengelolaan Keuangan dan Investasi', requiresSteps: false },
+    ],
+    spiritual: [
+        { label: 'Ibadah Tidak Wajib', requiresSteps: false },
+    ],
+}
+
 const SPORT_OPTIONS = ['Running', 'Cycling', 'Swimming', 'Workout', 'Badminton', 'Futsal', 'Other']
 
 export default function AddActivityBtn() {
     const [isOpen, setIsOpen] = useState(false)
     const [mode, setMode] = useState<ActivityMode>('daily')
     const [steps, setSteps] = useState('')
-    const [distance, setDistance] = useState('')
     const [calories, setCalories] = useState('')
     const [activityType, setActivityType] = useState(SPORT_OPTIONS[0])
     const [proofFile, setProofFile] = useState<File | null>(null)
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+    const [description, setDescription] = useState('')
     const [loading, setLoading] = useState(false)
 
-    // Dimension state for Daily Activity
+    // Dimension & activity type state
     const [dimensions, setDimensions] = useState<Dimension[]>([])
     const [selectedDimensionId, setSelectedDimensionId] = useState<string>('')
+    const [selectedJenisKegiatan, setSelectedJenisKegiatan] = useState<string>('')
 
     const router = useRouter()
     const { success, error: toastError } = useToast()
@@ -46,32 +81,40 @@ export default function AddActivityBtn() {
             .then((data) => {
                 const dims = data.dimensions || []
                 setDimensions(dims)
-                // Default to Physical
                 const physical = dims.find((d) => d.name === 'physical')
-                if (physical && !selectedDimensionId) setSelectedDimensionId(physical.id)
+                if (physical && !selectedDimensionId) {
+                    setSelectedDimensionId(physical.id)
+                    const activities = ACTIVITIES_BY_DIMENSION['physical'] || []
+                    setSelectedJenisKegiatan(activities[0]?.label || '')
+                }
             })
             .catch(() => {})
     }, [isOpen])
 
-    const isPhysicalDimension = dimensions.find((d) => d.id === selectedDimensionId)?.name === 'physical'
+    const selectedDimension = dimensions.find((d) => d.id === selectedDimensionId)
+    const jenisKegiatanOptions = ACTIVITIES_BY_DIMENSION[selectedDimension?.name || ''] || []
+    const selectedActivityConfig = jenisKegiatanOptions.find((a) => a.label === selectedJenisKegiatan)
 
     const resetForm = () => {
         setMode('daily')
         setSteps('')
-        setDistance('')
         setCalories('')
         setActivityType(SPORT_OPTIONS[0])
         setProofFile(null)
+        setDescription('')
         setDate(new Date().toISOString().split('T')[0])
-        // Reset dimension to Physical
         const physical = dimensions.find((d) => d.name === 'physical')
-        if (physical) setSelectedDimensionId(physical.id)
+        if (physical) {
+            setSelectedDimensionId(physical.id)
+            const activities = ACTIVITIES_BY_DIMENSION['physical'] || []
+            setSelectedJenisKegiatan(activities[0]?.label || '')
+        }
     }
 
-    const uploadSportProof = async (file: File) => {
+    const uploadProof = async (file: File) => {
         const supabase = createSupabaseBrowserClient()
         const ext = file.name.split('.').pop() || 'jpg'
-        const path = `sport-sessions/${date}/${Date.now()}.${ext}`
+        const path = `activity-proofs/${date}/${Date.now()}.${ext}`
 
         const { data, error } = await supabase.storage
             .from('quest-proofs')
@@ -87,16 +130,16 @@ export default function AddActivityBtn() {
     }
 
     const handleSubmit = async () => {
-        // Physical daily requires steps; non-physical daily can skip steps
-        if (mode === 'daily' && isPhysicalDimension && !steps) return
+        if (mode === 'daily' && !proofFile) return
+        if (mode === 'daily' && selectedActivityConfig?.requiresSteps && !steps) return
         if (mode === 'sport' && (!calories || !proofFile)) return
 
         setLoading(true)
 
         try {
             let proofUrl: string | null = null
-            if (mode === 'sport' && proofFile) {
-                proofUrl = await uploadSportProof(proofFile)
+            if (proofFile) {
+                proofUrl = await uploadProof(proofFile)
             }
 
             const res = await fetch('/api/activities/create', {
@@ -104,13 +147,14 @@ export default function AddActivityBtn() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode,
-                    steps: mode === 'daily' ? Number(steps || 0) : 0,
-                    distance: distance ? Number(distance) : 0,
+                    steps: selectedActivityConfig?.requiresSteps ? Number(steps || 0) : 0,
+                    distance: 0,
                     calories: mode === 'sport' ? Number(calories) : 0,
                     date,
-                    type: mode === 'sport' ? activityType : 'Daily Activity',
+                    type: mode === 'sport' ? activityType : selectedJenisKegiatan || 'Daily Activity',
                     proof_url: proofUrl,
                     dimension_id: mode === 'daily' ? selectedDimensionId || null : null,
+                    description: description.trim() || null,
                 }),
             })
 
@@ -132,7 +176,7 @@ export default function AddActivityBtn() {
         }
     }
 
-    // --- Downgrade mode: show the multi-dimension wellbeing form instead ---
+    // --- Downgrade mode ---
     if (isDowngradeModeClient()) {
         return (
             <>
@@ -160,7 +204,7 @@ export default function AddActivityBtn() {
 
             <AnimatePresence>
                 {isOpen && (
-                    <div className="fixed inset-0 z-50 flex items-end justify-center">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -174,7 +218,7 @@ export default function AddActivityBtn() {
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
                             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                            className="relative w-full max-w-lg bg-[#111111] border-t border-white/[0.08] rounded-t-3xl p-6 pb-10 shadow-2xl"
+                            className="relative w-full max-w-lg bg-[#111111] border border-white/[0.08] rounded-3xl p-6 pb-8 shadow-2xl mx-4 max-h-[85vh] overflow-y-auto"
                         >
                             {/* Drag handle */}
                             <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5" />
@@ -218,6 +262,7 @@ export default function AddActivityBtn() {
 
                                 {mode === 'daily' ? (
                                     <>
+                                        {/* Dropdown Dimensi Wellbeing */}
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Dimension</label>
                                             <select
@@ -225,45 +270,77 @@ export default function AddActivityBtn() {
                                                 onChange={(e) => {
                                                     setSelectedDimensionId(e.target.value)
                                                     const dim = dimensions.find((d) => d.id === e.target.value)
-                                                    if (dim?.name !== 'physical') setSteps('')
+                                                    const activities = ACTIVITIES_BY_DIMENSION[dim?.name || ''] || []
+                                                    setSelectedJenisKegiatan(activities[0]?.label || '')
+                                                    setDescription('')
                                                 }}
-                                                className="w-full appearance-none bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                                className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             >
                                                 {dimensions.map((dim) => (
-                                                    <option key={dim.id} value={dim.id}>{dim.display_name}</option>
+                                                    <option key={dim.id} value={dim.id} className="bg-[#1a1a1a] text-white">{dim.display_name}</option>
                                                 ))}
                                             </select>
                                         </div>
 
+                                        {/* Dropdown Jenis Kegiatan sesuai dimensi */}
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-                                                Steps{isPhysicalDimension ? '' : ' (optional)'}
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={steps}
-                                                onChange={(e) => setSteps(e.target.value)}
-                                                placeholder={isPhysicalDimension ? 'e.g. 5000' : 'optional'}
-                                                className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Jenis Kegiatan</label>
+                                            <select
+                                                value={selectedJenisKegiatan}
+                                                onChange={(e) => { setSelectedJenisKegiatan(e.target.value); setDescription(''); setSteps('') }}
+                                                className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                            >
+                                                {jenisKegiatanOptions.map((act) => (
+                                                    <option key={act.label} value={act.label} className="bg-[#1a1a1a] text-white">{act.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Steps — hanya muncul jika kegiatan "Steps" dipilih */}
+                                        {selectedActivityConfig?.requiresSteps && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Jumlah Langkah</label>
+                                                <input
+                                                    type="number"
+                                                    value={steps}
+                                                    onChange={(e) => setSteps(e.target.value)}
+                                                    placeholder="e.g. 5000"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                                />
+                                                <p className="mt-1 text-[11px] text-gray-600">1 poin per 10 langkah.</p>
+                                            </div>
+                                        )}
+
+                                        {/* Deskripsi — selalu ada */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Deskripsi Kegiatan</label>
+                                            <textarea
+                                                value={description}
+                                                onChange={(e) => setDescription(e.target.value)}
+                                                className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors resize-none"
+                                                placeholder="Jelaskan kegiatan yang dilakukan..."
+                                                rows={3}
                                             />
                                         </div>
 
+                                        {/* Foto Dokumentasi — selalu ada */}
                                         <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Distance (optional)</label>
-                                            <input
-                                                type="number"
-                                                value={distance}
-                                                onChange={(e) => setDistance(e.target.value)}
-                                                placeholder="meters"
-                                                className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
-                                            />
+                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Foto Dokumentasi</label>
+                                            <label className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-white/[0.02] px-4 py-3.5 text-sm text-gray-400 cursor-pointer hover:border-[#FC4C02]/30 hover:bg-white/[0.04] transition-all">
+                                                <span className="truncate">{proofFile ? proofFile.name : 'Tap untuk upload foto'}</span>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                                                />
+                                            </label>
+                                            {proofFile && (
+                                                <button type="button" onClick={() => setProofFile(null)} className="text-[11px] text-red-400 mt-1.5 hover:text-red-300">
+                                                    Hapus foto
+                                                </button>
+                                            )}
                                         </div>
-                                        {isPhysicalDimension && (
-                                            <p className="text-[11px] text-gray-600">Step points use the existing 1 point per 10 steps rule.</p>
-                                        )}
-                                        {!isPhysicalDimension && (
-                                            <p className="text-[11px] text-gray-600">Activity will be recorded under {dimensions.find((d) => d.id === selectedDimensionId)?.display_name || 'this dimension'}.</p>
-                                        )}
                                     </>
                                 ) : (
                                     <>
@@ -272,10 +349,10 @@ export default function AddActivityBtn() {
                                             <select
                                                 value={activityType}
                                                 onChange={(e) => setActivityType(e.target.value)}
-                                                className="w-full appearance-none bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                                className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             >
                                                 {SPORT_OPTIONS.map((option) => (
-                                                    <option key={option} value={option}>{option}</option>
+                                                    <option key={option} value={option} className="bg-[#1a1a1a] text-white">{option}</option>
                                                 ))}
                                             </select>
                                         </div>
@@ -290,17 +367,6 @@ export default function AddActivityBtn() {
                                                 className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             />
                                             <p className="mt-1.5 text-[11px] text-gray-600">Sport points are 1:1 with calories and go to Physical.</p>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Distance (optional)</label>
-                                            <input
-                                                type="number"
-                                                value={distance}
-                                                onChange={(e) => setDistance(e.target.value)}
-                                                placeholder="meters"
-                                                className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
-                                            />
                                         </div>
 
                                         <div>
@@ -320,10 +386,12 @@ export default function AddActivityBtn() {
 
                                 <button
                                     onClick={handleSubmit}
-                                    disabled={loading || (mode === 'daily' ? (isPhysicalDimension && !steps) : !calories || !proofFile)}
+                                    disabled={loading || (mode === 'daily'
+                                        ? (!proofFile || (selectedActivityConfig?.requiresSteps && !steps))
+                                        : !calories || !proofFile)}
                                     className="w-full bg-[#FC4C02] text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-all mt-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#FC4C02]/20 disabled:shadow-none"
                                 >
-                                    {loading ? 'Saving...' : mode === 'sport' ? 'Save Sport Session' : 'Save Daily Activity'}
+                                    {loading ? 'Saving...' : mode === 'sport' ? 'Save Sport Session' : 'Simpan Kegiatan'}
                                 </button>
                             </div>
                         </motion.div>

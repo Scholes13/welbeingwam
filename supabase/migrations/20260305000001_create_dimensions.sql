@@ -10,14 +10,19 @@ CREATE TABLE IF NOT EXISTS public.dimensions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Seed 6 dimensions
+-- Seed 5 dimensions from Excel "JENIS WELLBEING"
 INSERT INTO public.dimensions (name, display_name, award_title, icon, sort_order) VALUES
-    ('physical', 'Body Upgrade Mode', 'Strong Mode Champion of The Month', 'activity', 1),
-    ('emotional', 'No Drama Zone', 'Most Positive Energy of The Month', 'heart', 2),
-    ('mental', 'Brain Gym', 'Brain Star of The Month', 'brain', 3),
-    ('social', 'Good Energy Circle', 'Team Connector of The Month', 'users', 4),
-    ('spiritual', 'Inner Reset', 'Silent Power of The Month', 'sparkles', 5),
-    ('professional', 'Level Up Career', 'Ownership Champion of The Month', 'briefcase', 6);
+    ('physical', 'Physical Wellbeing', 'Strong Mode Champion of The Month', 'activity', 1),
+    ('emotional', 'Emotional Wellbeing', 'Most Positive Energy of The Month', 'heart', 2),
+    ('social', 'Social Wellbeing', 'Team Connector of The Month', 'users', 3),
+    ('financial', 'Financial Wellbeing', 'Financial Wellness Champion of The Month', 'banknote', 4),
+    ('spiritual', 'Spiritual Wellbeing', 'Silent Power of The Month', 'sparkles', 5)
+ON CONFLICT (name) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    award_title = EXCLUDED.award_title,
+    icon = EXCLUDED.icon,
+    sort_order = EXCLUDED.sort_order,
+    is_active = true;
 
 -- Enable RLS
 ALTER TABLE public.dimensions ENABLE ROW LEVEL SECURITY;

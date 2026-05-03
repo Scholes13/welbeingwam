@@ -103,7 +103,7 @@ export default function AdminPage() {
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('permissions, is_admin')
-                    .eq('id', user.id)
+                    .eq('auth_user_id', user.id)
                     .single()
 
                 if (!profile?.is_admin) {

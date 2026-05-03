@@ -65,9 +65,14 @@ export async function POST(request: Request) {
     // Steps are required for daily activity ONLY when targeting the physical dimension
     // For other dimensions (emotional, social, financial, spiritual), steps are optional
     const isPhysicalDimension = !dimension_id || dimension_id === physicalDimensionId
-    if (normalizedMode === 'daily' && isPhysicalDimension && stepCount <= 0) {
+    // Only require steps for physical daily activity when steps are expected (legacy flow)
+    // New wellbeing flow sends steps=0 for all activities
+    if (normalizedMode === 'daily' && isPhysicalDimension && stepCount <= 0 && !rawType) {
         return NextResponse.json({ error: 'Steps are required for physical daily activity' }, { status: 400 })
     }
+
+    // Photo proof is optional — some activities use check-in instead
+    // (e.g., Team Building / Gathering uses app check-in data)
 
     if (normalizedMode === 'sport') {
 	        if (!rawType) {
@@ -78,16 +83,6 @@ export async function POST(request: Request) {
             if (calorieCount <= 0) {
                 return NextResponse.json({ error: 'Calories are required for sport session' }, { status: 400 })
             }
-
-            if (!proof_url) {
-                return NextResponse.json({ error: 'Photo proof is required for sport session' }, { status: 400 })
-            }
-        } else {
-            // In downgrade mode, photo proof is still required
-            // Calories are required for Physical dimension activities (validated on client)
-            if (!proof_url) {
-                return NextResponse.json({ error: 'Photo proof is required' }, { status: 400 })
-            }
         }
     }
 
@@ -96,7 +91,7 @@ export async function POST(request: Request) {
         .from('activities')
         .insert({
             user_id: userId,
-            name: normalizedMode === 'sport' ? `${activityType} Session` : 'Daily Activity',
+            name: rawType || 'Daily Activity',
             distance: distanceMeters,
             moving_time: normalizedMode === 'sport' ? Math.max(0, Math.floor(toSafeNumber(moving_time))) : 0,
             type: activityType,
@@ -105,9 +100,9 @@ export async function POST(request: Request) {
             mode: normalizedMode,
             calories: normalizedMode === 'sport' ? calorieCount : 0,
             activity_points: normalizedMode === 'sport' ? convertActivityPoints(calorieCount) : 0,
-            proof_url: normalizedMode === 'sport' ? proof_url : null,
+            proof_url: proof_url || null,
             review_status: 'approved',
-            review_reason: isDowngradeMode() && description ? description : null,
+            review_reason: description || null,
             source: 'manual',
             dimension_id: dimension_id || physicalDimensionId,
             id: buildActivityId()
