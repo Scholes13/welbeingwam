@@ -1,4 +1,5 @@
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { isDowngradeMode } from '@/lib/downgrade'
 
 interface QuestTemplate {
   id: string
@@ -14,6 +15,11 @@ interface QuestTemplate {
 }
 
 export async function generateQuestsFromTemplates(triggerType: 'scheduled' | 'activity_linked', activityTypeId?: string) {
+  // Downgrade mode: skip quest auto-generation
+  if (isDowngradeMode()) {
+    return { generated: 0, skipped: true, reason: 'downgrade_mode' }
+  }
+
   const supabase = createSupabaseAdminClient()
 
   let query = supabase
@@ -35,6 +41,19 @@ export async function generateQuestsFromTemplates(triggerType: 'scheduled' | 'ac
 
   const questsToInsert = []
 
+  // Batch-fetch all quests created today for the relevant templates (fixes N+1)
+  const templateIds = (templates as QuestTemplate[]).map((t) => t.id)
+  const { data: existingQuests } = await supabase
+    .from('quests')
+    .select('template_id')
+    .in('template_id', templateIds)
+    .gte('created_at', `${today}T00:00:00Z`)
+    .lte('created_at', `${today}T23:59:59Z`)
+
+  const existingTemplateIds = new Set(
+    (existingQuests ?? []).map((q: { template_id: string }) => q.template_id),
+  )
+
   for (const template of templates as QuestTemplate[]) {
     if (triggerType === 'scheduled') {
       const dayOfWeek = now.getDay()
@@ -45,15 +64,7 @@ export async function generateQuestsFromTemplates(triggerType: 'scheduled' | 'ac
     }
 
     // Check if quest from this template already exists today
-    const { data: existing } = await supabase
-      .from('quests')
-      .select('id')
-      .eq('template_id', template.id)
-      .gte('created_at', `${today}T00:00:00Z`)
-      .lte('created_at', `${today}T23:59:59Z`)
-      .limit(1)
-
-    if (existing && existing.length > 0) continue
+    if (existingTemplateIds.has(template.id)) continue
 
     let expiresAt: string | null = null
     if (template.recurrence === 'daily') {

@@ -9,7 +9,7 @@ import { SettingsProvider, useSettings } from '@/context/SettingsContext'
 
 function AdminSettingsPageContent() {
   const router = useRouter()
-  const { settings, isLoading, refreshSettings } = useSettings()
+  const { settings, isLoading, error, refreshSettings } = useSettings()
   const [isAuthorized, setIsAuthorized] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
 
@@ -50,8 +50,30 @@ function AdminSettingsPageContent() {
     )
   }
 
-  if (!isAuthorized || !settings) {
+  if (!isAuthorized) {
     return null
+  }
+
+  if (error || !settings) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AdminNav />
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-700">
+            <h1 className="text-xl font-semibold">Settings unavailable</h1>
+            <p className="mt-2 text-sm">
+              {error ?? 'The settings store is unavailable right now. Please repair the backend settings contract and try again.'}
+            </p>
+            <button
+              onClick={() => void refreshSettings()}
+              className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

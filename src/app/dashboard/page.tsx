@@ -29,6 +29,7 @@ import AddActivityBtn from '@/components/AddActivityBtn'
 import DailyQuests from '@/components/DailyQuests'
 import { useNotifications, useProfile } from '@/hooks/use-swr-hooks'
 import Loader from '@/components/ui/Loader'
+import { fetchJson } from '@/lib/fetch-json'
 
 interface Dimension {
     id: string
@@ -41,7 +42,7 @@ interface Dimension {
 interface Survey {
     id: string
     title: string
-    description?: string
+    description?: string | null
 }
 
 interface ActivityItem {
@@ -177,6 +178,7 @@ export default function Dashboard() {
         sportPoints,
         totalPhysicalPoints,
         isLoading: profileLoading,
+        isError: profileError,
         mutate: mutateProfile,
     } = useProfile()
     const { unreadCount } = useNotifications()
@@ -195,7 +197,10 @@ export default function Dashboard() {
     const animSport = useCountUp(toSafeNumber(sportPoints))
     const animPhysical = useCountUp(toSafeNumber(totalPhysicalPoints || dimensionPoints.physical))
 
-    const handleRefresh = () => mutateProfile()
+const handleRefresh = () => mutateProfile()
+
+    // Ref to store dimension fetch timeout for cleanup
+    const dimensionFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     useEffect(() => {
         let retries = 0
@@ -209,26 +214,30 @@ export default function Dashboard() {
                     // Retry if empty (API might not be ready yet)
                     if (dims.length === 0 && retries < 3) {
                         retries++
-                        setTimeout(fetchDimensions, 1500 * retries)
+                        dimensionFetchTimeoutRef.current = setTimeout(fetchDimensions, 1500 * retries)
                     }
                 })
                 .catch(() => {
                     if (retries < 3) {
                         retries++
-                        setTimeout(fetchDimensions, 1500 * retries)
+                        dimensionFetchTimeoutRef.current = setTimeout(fetchDimensions, 1500 * retries)
                     } else {
                         setDimensionsLoading(false)
                     }
                 })
         }
         fetchDimensions()
+        return () => {
+            if (dimensionFetchTimeoutRef.current) {
+                clearTimeout(dimensionFetchTimeoutRef.current)
+            }
+        }
     }, [])
 
     useEffect(() => {
         if (!profile) return
 
-        fetch('/api/leaderboard')
-            .then((response) => response.json())
+        fetchJson<{ leaderboard?: Array<{ overall_points: number; user_id: string; dimension_points?: Record<string, number> }> }>('/api/leaderboard')
             .then((data) => {
                 const leaderboard = Array.isArray(data.leaderboard) ? data.leaderboard : []
                 const sorted = leaderboard.sort((left: { overall_points: number }, right: { overall_points: number }) => right.overall_points - left.overall_points)
@@ -241,8 +250,7 @@ export default function Dashboard() {
     }, [profile])
 
     useEffect(() => {
-        fetch('/api/streaks')
-            .then((response) => response.json())
+        fetchJson<{ streaks?: Record<string, { current_streak: number }> }>('/api/streaks')
             .then((data) => {
                 const streaks = Object.values(data.streaks || {}) as { current_streak: number }[]
                 const max = streaks.reduce((accumulator, streak) => Math.max(accumulator, streak.current_streak), 0)
@@ -282,6 +290,19 @@ export default function Dashboard() {
         return <Loader text="LOADING DASHBOARD..." />
     }
 
+    if (profileError && !profile) {
+        return (
+            <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center p-6">
+                <div className="max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
+                    <p className="text-sm font-semibold text-red-300">Failed to load dashboard</p>
+                    <p className="mt-2 text-sm text-red-200">
+                        {profileError instanceof Error ? profileError.message : 'Dashboard data is unavailable right now.'}
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="h-[100dvh] overflow-y-auto bg-[#0A0A0A] text-white pb-36 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* ── Ambient background glows ── */}
@@ -303,8 +324,8 @@ export default function Dashboard() {
                             <div className="flex items-center gap-3">
                                 <div className="relative">
                                     <img
-                                        src={profile.profile}
-                                        alt={profile.username}
+                                        src={profile.profile || undefined}
+                                        alt={profile.username || ''}
                                         className="w-11 h-11 rounded-full ring-2 ring-[#FC4C02]/40 ring-offset-2 ring-offset-[#0A0A0A] object-cover"
                                     />
                                     {maxStreak > 0 && (

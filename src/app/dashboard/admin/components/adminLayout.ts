@@ -1,4 +1,41 @@
-import type { AdminTab } from './AdminTabs'
+import type { ComponentType } from 'react'
+import { Calendar, ClipboardCheck, ClipboardList, Dumbbell, FileText, Flame, Gift, MapPin, Shield, User } from 'lucide-react'
+
+export type AdminTab =
+  | 'users'
+  | 'quests'
+  | 'surveys'
+  | 'rewards'
+  | 'activities'
+  | 'sports'
+  | 'spots'
+  | 'doorprize'
+  | 'admins'
+  | 'templates'
+  | 'streaks'
+  | 'review'
+
+export type AdminTabConfig = {
+  key: AdminTab
+  label: string
+  group: 'management' | 'events' | 'system'
+  Icon: ComponentType<{ size?: number }>
+}
+
+export const ADMIN_TAB_CONFIG: AdminTabConfig[] = [
+  { key: 'users', label: 'Users', group: 'management', Icon: User },
+  { key: 'quests', label: 'Daily Quests', group: 'management', Icon: Gift },
+  { key: 'surveys', label: 'Surveys', group: 'management', Icon: ClipboardList },
+  { key: 'rewards', label: 'Rewards', group: 'management', Icon: Gift },
+  { key: 'activities', label: 'Activities', group: 'events', Icon: Calendar },
+  { key: 'sports', label: 'Sport Sessions', group: 'events', Icon: Dumbbell },
+  { key: 'spots', label: 'QR Spots', group: 'events', Icon: MapPin },
+  { key: 'doorprize', label: 'Doorprize', group: 'events', Icon: Gift },
+  { key: 'admins', label: 'Admins', group: 'system', Icon: Shield },
+  { key: 'templates', label: 'Templates', group: 'management', Icon: FileText },
+  { key: 'streaks', label: 'Streaks', group: 'management', Icon: Flame },
+  { key: 'review', label: 'Review Queue', group: 'management', Icon: ClipboardCheck },
+]
 
 type AdminPageMeta = {
   title: string
@@ -71,6 +108,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
   streaks: {
     title: 'Streak Events',
     description: 'Manage streak challenges with multiplier rewards.',
+  },
+  review: {
+    title: 'Review Queue',
+    description: 'Review pending wellbeing activity submissions and assign points manually.',
   },
 }
 

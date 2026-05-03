@@ -17,7 +17,10 @@
 /.next/
 /.open-next/
 /out/
-.worktrees/
+
+# presentation/temp auth artifacts
+docs/presentations/**/assets/tmp/
+**/playwright-auth.json
 
 # production
 /build
@@ -25,7 +28,6 @@
 # misc
 .DS_Store
 *.pem
-.worktrees/
 
 # debug
 npm-debug.log*
@@ -43,3 +45,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.superpowers/

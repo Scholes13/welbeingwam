@@ -12,7 +12,7 @@ import { Scanner } from '@yudiel/react-qr-scanner'
 import Loader from '@/components/ui/Loader'
 
 export default function ProfilePage() {
-    const { profile, stats, totalPoints, coins, isLoading: loading } = useProfile()
+    const { profile, stats, totalPoints, coins, isLoading: loading, isError } = useProfile()
     const [showIdCard, setShowIdCard] = useState(false)
     const [isScannerOpen, setIsScannerOpen] = useState(false)
     const [scannedUser, setScannedUser] = useState<any>(null)
@@ -157,6 +157,19 @@ export default function ProfilePage() {
         return <Loader text="LOADING PROFILE..." />
     }
 
+    if (isError && !profile) {
+        return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+                <div className="max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
+                    <p className="text-sm font-semibold text-red-300">Failed to load profile</p>
+                    <p className="mt-2 text-sm text-red-200">
+                        {isError instanceof Error ? isError.message : 'Profile data is unavailable right now.'}
+                    </p>
+                </div>
+            </div>
+        )
+    }
+
     if (!profile) return null
 
     return (
@@ -258,8 +271,8 @@ export default function ProfilePage() {
                 <div className="flex flex-col items-center mb-10">
                     <div className="relative mb-4">
                         <img
-                            src={profile.avatar_url}
-                            alt={profile.username}
+                            src={profile.avatar_url || undefined}
+                            alt={String(profile.username || '')}
                             className="w-28 h-28 rounded-full border-4 border-[#FC4C02]/20 object-cover shadow-[0_0_30px_rgba(252,76,2,0.2)]"
                         />
                         <div className="absolute bottom-0 right-0 bg-[#FC4C02] text-white p-1.5 rounded-full border-4 border-black">
@@ -272,9 +285,9 @@ export default function ProfilePage() {
                         </div>
                     </div>
 
-                    <h1 className="text-2xl font-bold">{profile.firstname} {profile.lastname}</h1>
-                    <p className="text-gray-500">@{profile.username}</p>
-                    <p className="text-xs text-stone-500 mt-1 uppercase tracking-widest">{profile.city}, {profile.country}</p>
+                    <h1 className="text-2xl font-bold">{String(profile.firstname || '')} {String(profile.lastname || '')}</h1>
+                    <p className="text-gray-500">@{String(profile.username || '')}</p>
+                    <p className="text-xs text-stone-500 mt-1 uppercase tracking-widest">{String(profile.city || '')}, {String(profile.country || '')}</p>
                 </div>
 
                 {/* Stats Grid */}
@@ -401,25 +414,25 @@ export default function ProfilePage() {
                         <div className="relative flex flex-col items-center">
                             <div className="bg-white p-1.5 rounded-full mb-4 shadow-lg mt-8">
                                 <img
-                                    src={profile.profile}
-                                    alt={profile.username}
+                                    src={profile.profile || undefined}
+                                    alt={String(profile.username || '')}
                                     className="w-20 h-20 rounded-full object-cover border-4 border-white"
                                 />
                             </div>
 
-                            <h2 className="text-2xl font-bold mb-1">{profile.firstname} {profile.lastname}</h2>
-                            <p className="text-gray-500 mb-6">@{profile.instagram_username || profile.username}</p>
+                            <h2 className="text-2xl font-bold mb-1">{String(profile.firstname || '')} {String(profile.lastname || '')}</h2>
+                            <p className="text-gray-500 mb-6">@{String(profile.instagram_username || profile.username || '')}</p>
 
                             <div className="bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.1)] mb-4">
                                 <QRCode
-                                    value={profile.access_code || 'NO-CODE'}
+                                    value={String(profile.access_code || 'NO-CODE')}
                                     size={180}
                                     level="H"
                                 />
                             </div>
 
                             <p className="font-mono text-xl font-bold tracking-widest text-[#FC4C02] mb-8">
-                                {profile.access_code}
+                                {String(profile.access_code || '')}
                             </p>
 
                             <button

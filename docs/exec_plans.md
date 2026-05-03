@@ -27,6 +27,39 @@
 
 ## Active Tasks
 
+### 2026-04-07 - Welbeing product presentation deck design
+- Status: completed
+- Owner: PM Agent
+- Delegates: `@coder_frontend`, `@qa`, `@reviewer`
+- Scope:
+  - design a short 6-8 slide presentation deck that explains what the Welbeing app is,
+  - focus the narrative on user journey and feature demo rather than technical architecture,
+  - highlight dashboard usage, Strava integration, quiz or survey flow, leaderboard, and point system,
+  - keep the tone presentation-ready for users and internal team review in Bahasa Indonesia.
+- Risks:
+  - the deck can become a feature list instead of a clear user story if the narrative is too fragmented,
+  - overly technical wording would weaken the presentation for non-technical viewers,
+  - visual energy can overpower clarity if the layout becomes too decorative for a short deck.
+- Verification:
+  - deck spec reviewed against `docs/coding_standards.json`
+  - final deck checked for slide-count, language consistency, and feature accuracy against repository sources
+- Notes:
+  - user-approved direction so far: short deck, 6-8 slides, full Bahasa Indonesia,
+  - user-approved visual direction so far: `Energetic Gamification`,
+  - user-approved content direction so far: explain user flow and demo the main features instead of a business-focused pitch,
+  - deck visuals refreshed on 2026-04-07 with employee-wellness photography, glassmorphism overlays, and real app screenshots sourced from the live product where possible,
+  - deck art direction was redesigned again on 2026-04-07 toward an enterprise-editorial rhythm with mixed poster, editorial, product-led, and statement slide layouts instead of repeating one overlay treatment,
+  - a formal-executive presentation pass was applied on 2026-04-07 with calmer slate/navy accents, more restrained contrast, and stakeholder-friendly visual pacing,
+  - on 2026-04-08 the user approved a new `editorial luxury agency pitch deck` direction after reference research across agency-style deck examples,
+  - the current pass focuses on stronger slide-to-slide rhythm, shorter copy, larger product visuals, and less template-like repetition,
+  - generated deck output: `docs/presentations/welbeing-user-demo/welbeing-user-demo.pptx`,
+  - generated preview output: `docs/presentations/welbeing-user-demo/index.html`,
+  - generated slide export output: `docs/presentations/welbeing-user-demo/export/slide-01.png` through `slide-07.png`,
+  - supporting assets now include curated photo backgrounds in `docs/presentations/welbeing-user-demo/assets/photos/`, live product captures in `docs/presentations/welbeing-user-demo/assets/app/`, and tighter cropped screenshot variants for presentation use,
+  - browser QA was rerun on 2026-04-08 after the agency-pitch redesign with refreshed Playwright screenshots at `docs/presentations/welbeing-user-demo/qa/full-page.png` and `docs/presentations/welbeing-user-demo/qa/viewport-top.png`,
+  - the final 2026-04-08 pass now uses an editorial-luxury palette, serif-led headlines, distinct slide rhythms, and shorter copy tuned for a more agency-like pitch deck feel,
+  - repo-safe verification passed on 2026-04-08: `npm run verify:harness`.
+
 ### 2026-04-07 - Admin wellbeing overview dashboard design and planning
 - Status: completed
 - Owner: PM Agent

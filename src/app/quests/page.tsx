@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Target, ChevronDown, SlidersHorizontal } from 'lucide-react'
 import { useQuests } from '@/hooks/use-swr-hooks'
 import DailyQuests from '@/components/DailyQuests'
+import { fetchJson } from '@/lib/fetch-json'
 
 interface Dimension {
     id: string
@@ -11,8 +12,24 @@ interface Dimension {
     display_name: string
 }
 
+interface Quest {
+    id: string
+    title: string
+    description?: string
+    points: number
+    dimension_id?: string | null
+    expires_at?: string | null
+    created_at?: string | null
+    is_active?: boolean
+}
+
+interface UserQuest {
+    quest_id: string
+    status?: string | null
+}
+
 export default function QuestsPage() {
-    const { quests, userQuests, isLoading, mutate } = useQuests()
+    const { quests, userQuests, isLoading, isError, mutate } = useQuests()
 
     const [dimensions, setDimensions] = useState<Dimension[]>([])
     const [selectedDimension, setSelectedDimension] = useState<string>('all')
@@ -20,8 +37,7 @@ export default function QuestsPage() {
     const dimRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
-        fetch('/api/dimensions')
-            .then(r => r.json())
+        fetchJson<{ dimensions?: Dimension[] }>('/api/dimensions')
             .then(d => setDimensions(d.dimensions || []))
             .catch(() => {})
     }, [])
@@ -38,13 +54,13 @@ export default function QuestsPage() {
     }, [])
 
     const baseFiltered = selectedDimension === 'all'
-        ? quests
-        : quests.filter((q: any) => q.dimension_id === selectedDimension)
+        ? quests as Quest[]
+        : (quests as Quest[]).filter((q: Quest) => q.dimension_id === selectedDimension)
 
     // Sort: belum selesai dulu → dalam grup: expires_at (daily) di atas → created_at terbaru
-    const filteredQuests = [...baseFiltered].sort((a: any, b: any) => {
-        const aCompleted = userQuests.some((uq: any) => uq.quest_id === a.id)
-        const bCompleted = userQuests.some((uq: any) => uq.quest_id === b.id)
+    const filteredQuests = [...baseFiltered].sort((a: Quest, b: Quest) => {
+        const aCompleted = (userQuests as UserQuest[]).some((uq: UserQuest) => uq.quest_id === a.id)
+        const bCompleted = (userQuests as UserQuest[]).some((uq: UserQuest) => uq.quest_id === b.id)
         if (aCompleted !== bCompleted) return aCompleted ? 1 : -1
         const aHasExpiry = a.expires_at ? 0 : 1
         const bHasExpiry = b.expires_at ? 0 : 1
@@ -52,8 +68,8 @@ export default function QuestsPage() {
         return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     })
 
-    const completedCount = filteredQuests.filter((q: any) =>
-        userQuests.some((uq: any) => uq.quest_id === q.id)
+    const completedCount = filteredQuests.filter((q: Quest) =>
+        (userQuests as UserQuest[]).some((uq: UserQuest) => uq.quest_id === q.id)
     ).length
     const totalCount = filteredQuests.length
     const questPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
@@ -142,6 +158,14 @@ export default function QuestsPage() {
                     <div className="flex items-center justify-center py-16 gap-2 text-gray-600">
                         <div className="w-4 h-4 border-2 border-[#FC4C02]/50 border-t-[#FC4C02] rounded-full animate-spin" />
                         <span className="text-sm">Loading quests...</span>
+                    </div>
+                ) : isError ? (
+                    <div className="text-center py-16 text-red-300">
+                        <Target size={32} className="mx-auto mb-3 opacity-70" />
+                        <p className="text-sm font-semibold">Failed to load quests</p>
+                        <p className="mt-2 text-xs text-red-200">
+                            {isError instanceof Error ? isError.message : 'Quest data is unavailable right now.'}
+                        </p>
                     </div>
                 ) : filteredQuests.length === 0 ? (
                     <div className="text-center py-16 text-gray-600">

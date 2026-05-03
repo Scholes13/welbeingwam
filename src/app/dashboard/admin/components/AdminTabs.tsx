@@ -1,44 +1,17 @@
-import type { ComponentType } from 'react'
-import { BarChart2, Calendar, ClipboardList, Dumbbell, FileText, Flame, Gift, MapPin, Shield, User } from 'lucide-react'
+import { ADMIN_TAB_CONFIG, type AdminTab } from './adminLayout'
 
-export type AdminTab =
-  | 'users'
-  | 'wellbeing'
-  | 'quests'
-  | 'surveys'
-  | 'rewards'
-  | 'activities'
-  | 'sports'
-  | 'spots'
-  | 'doorprize'
-  | 'admins'
-  | 'templates'
-  | 'streaks'
+export type { AdminTab }
 
 type AdminTabsProps = {
-  activeTab: AdminTab
-  onChange: (tab: AdminTab) => void
+  activeTab: string
+  onChange: (tab: string) => void
 }
 
-const TAB_CONFIG: { key: AdminTab; label: string; Icon: ComponentType<{ size?: number }> }[] = [
-  { key: 'users', label: 'Users', Icon: User },
-  { key: 'wellbeing', label: 'Wellbeing', Icon: BarChart2 },
-  { key: 'quests', label: 'Daily Quests', Icon: Gift },
-  { key: 'surveys', label: 'Surveys', Icon: ClipboardList },
-  { key: 'rewards', label: 'Rewards', Icon: Gift },
-  { key: 'activities', label: 'Activities', Icon: Calendar },
-  { key: 'sports', label: 'Sport Sessions', Icon: Dumbbell },
-  { key: 'spots', label: 'QR Spots', Icon: MapPin },
-  { key: 'doorprize', label: 'Doorprize', Icon: Gift },
-  { key: 'admins', label: 'Admins', Icon: Shield },
-  { key: 'templates', label: 'Templates', Icon: FileText },
-  { key: 'streaks', label: 'Streaks', Icon: Flame },
-]
 
 export function AdminTabs({ activeTab, onChange }: AdminTabsProps) {
   return (
     <div className="flex gap-2 md:gap-4 mb-6 overflow-x-auto pb-2 scrollbar-none">
-      {TAB_CONFIG.map(({ key, label, Icon }) => (
+      {ADMIN_TAB_CONFIG.map(({ key, label, Icon }) => (
         <button
           key={key}
           onClick={() => onChange(key)}

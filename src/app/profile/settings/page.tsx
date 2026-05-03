@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Save, Instagram, Lock, Loader2, Activity, ExternalLink, Unplug } from 'lucide-react'
 import Link from 'next/link'
+import { readJsonResponse } from '@/lib/fetch-json'
 
 import { getStravaAvatarState, getStravaConnectionState, getStravaFeedback } from './strava'
 
@@ -56,7 +57,7 @@ export default function SettingsPage() {
                     router.push('/')
                     return
                 }
-                const data = await res.json() as ProfileResponse
+                const data = await readJsonResponse<ProfileResponse>(res)
                 if (data.profile) {
                     const profile = data.profile
                     setFormData(prev => ({
@@ -77,6 +78,7 @@ export default function SettingsPage() {
                 }
             } catch (err) {
                 console.error('Error fetching profile:', err)
+                setError(err instanceof Error ? err.message : 'Failed to load Strava settings')
             } finally {
                 setLoading(false)
             }

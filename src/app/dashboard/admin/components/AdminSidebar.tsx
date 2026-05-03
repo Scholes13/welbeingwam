@@ -1,8 +1,7 @@
-import type { ComponentType } from 'react'
-import { ArrowLeft, BarChart2, Calendar, ClipboardList, Dumbbell, FileText, Gift, MapPin, PanelLeftClose, PanelLeftOpen, Shield, User, X } from 'lucide-react'
+import { ArrowLeft, PanelLeftClose, PanelLeftOpen, Shield, X } from 'lucide-react'
 
 import type { AdminTab } from './AdminTabs'
-import { getAdminSidebarMotionClasses, getAdminSidebarPresentation } from './adminLayout'
+import { ADMIN_TAB_CONFIG, getAdminSidebarMotionClasses, getAdminSidebarPresentation } from './adminLayout'
 
 type AdminSidebarProps = {
   activeTab: AdminTab
@@ -16,13 +15,6 @@ type AdminSidebarProps = {
 
 type TabGroupKey = 'management' | 'events' | 'system'
 
-type TabItem = {
-  key: AdminTab
-  label: string
-  group: TabGroupKey
-  Icon: ComponentType<{ size?: number }>
-}
-
 const GROUP_LABELS: Record<TabGroupKey, string> = {
   management: 'Management',
   events: 'Events',
@@ -31,19 +23,6 @@ const GROUP_LABELS: Record<TabGroupKey, string> = {
 
 const GROUP_ORDER: TabGroupKey[] = ['management', 'events', 'system']
 
-const TAB_ITEMS: TabItem[] = [
-  { key: 'users', label: 'Users', group: 'management', Icon: User },
-  { key: 'wellbeing', label: 'Wellbeing', group: 'management', Icon: BarChart2 },
-  { key: 'quests', label: 'Daily Quests', group: 'management', Icon: Gift },
-  { key: 'surveys', label: 'Surveys', group: 'management', Icon: ClipboardList },
-  { key: 'rewards', label: 'Rewards', group: 'management', Icon: Gift },
-  { key: 'activities', label: 'Activities', group: 'events', Icon: Calendar },
-  { key: 'sports', label: 'Sport Sessions', group: 'events', Icon: Dumbbell },
-  { key: 'spots', label: 'QR Spots', group: 'events', Icon: MapPin },
-  { key: 'doorprize', label: 'Doorprize', group: 'events', Icon: Gift },
-  { key: 'templates', label: 'Templates', group: 'management', Icon: FileText },
-  { key: 'admins', label: 'Admins', group: 'system', Icon: Shield },
-]
 
 type SidebarContentProps = {
   activeTab: AdminTab
@@ -86,7 +65,7 @@ function SidebarContent({ activeTab, isCollapsed, onBack, onChange, onToggleColl
 
       <nav className="flex-1 space-y-5 overflow-y-auto pr-1">
         {GROUP_ORDER.map((group) => {
-          const items = TAB_ITEMS.filter((item) => item.group === group)
+          const items = ADMIN_TAB_CONFIG.filter((item) => item.group === group)
           return (
             <div key={group} className="space-y-2">
               <div className={`overflow-hidden text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500 transition-all duration-200 ease-in-out ${motionClasses.groupHeaderClass}`}>

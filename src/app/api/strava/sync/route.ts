@@ -1,75 +1,23 @@
 import { getAuthProfileContext } from '@/utils/auth'
-import {
-  buildStravaAvatarSyncUpdate,
-  isMissingAvatarPreferenceColumnsError,
-  omitAvatarPreferenceFields,
-} from '@/lib/profile-avatar'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
-import { calculateAvailableCoins, calculateTotalEarnedPoints, convertStepsToPoints, sumNumericField, toSafeNumber } from '@/lib/points'
+import { toSafeNumber, sumNumericField } from '@/lib/points'
 import {
   buildCombinedActivities,
-  sumApprovedQuestPoints,
   type AttendanceItem,
   type Quest,
   type UserQuest,
 } from '@/lib/gamification'
 import {
-  buildStravaProfileUpdate,
-  getStravaActivitiesNeedingDetail,
   getStoredStravaAccessToken,
   getStoredStravaExpiresAt,
   getStoredStravaRefreshToken,
   hasStoredStravaConnection,
-  mergeStravaActivity,
-  resolveStravaSyncCooldown,
-  shouldRefreshStravaToken,
-  shouldRunStravaSync,
-  type ExistingStravaActivity,
-  type StravaActivityDetail,
-  type StravaActivitySummary,
 } from '@/lib/strava/sync'
+import { isDowngradeMode } from '@/lib/downgrade'
 import { NextResponse } from 'next/server'
-
-type ProfileRow = {
-  id: string | number
-  full_name: string | null
-  avatar_url: string | null
-  manual_avatar_url?: string | null
-  strava_avatar_url?: string | null
-  avatar_source?: 'manual' | 'strava' | null
-  strava_access_token?: string | null
-  strava_refresh_token?: string | null
-  strava_expires_at?: number | null
-  strava_athlete_id?: number | null
-  access_token?: string | null
-  refresh_token?: string | null
-  expires_at?: number | null
-  last_strava_sync_at?: string | null
-  [key: string]: unknown
-}
-
-function supportsAvatarPreferences(profile: ProfileRow): boolean {
-  return (
-    Object.prototype.hasOwnProperty.call(profile, 'manual_avatar_url') &&
-    Object.prototype.hasOwnProperty.call(profile, 'strava_avatar_url') &&
-    Object.prototype.hasOwnProperty.call(profile, 'avatar_source')
-  )
-}
-
-type StravaTokenResponse = {
-  access_token?: string
-  refresh_token?: string
-  expires_at?: number
-}
-
-type StravaProfileResponse = {
-  profile?: string | null
-}
-
-type ExistingStravaActivityRow = ExistingStravaActivity & {
-  id: string | number
-  external_id: string | null
-}
+import { supportsAvatarPreferences, type ProfileRow } from '@/lib/strava/types'
+import { getPhysicalDimensionId, syncStravaActivities } from '@/lib/strava/activities'
+import { calculateSyncPoints } from '@/lib/strava/points'
 
 type ActivityRow = {
   id: string | number
@@ -137,266 +85,12 @@ function extractAttendanceActivity(row: AttendanceRow): AttendanceActivity | nul
   return row.activity
 }
 
-function buildStravaRecordId(stravaActivityId: number): number {
-  return -Math.abs(Math.trunc(stravaActivityId))
-}
-
-async function getPhysicalDimensionId(supabase: ReturnType<typeof createSupabaseAdminClient>) {
-  const { data, error } = await supabase
-    .from('dimensions')
-    .select('id')
-    .eq('name', 'physical')
-    .maybeSingle()
-
-  if (error) {
-    console.error('Failed to resolve physical dimension:', error)
-    return null
-  }
-
-  return (data?.id as string | undefined) ?? null
-}
-
-async function getStravaSyncCooldownMinutes(supabase: ReturnType<typeof createSupabaseAdminClient>) {
-  const { data, error } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'strava_sync_cooldown_minutes')
-    .maybeSingle()
-
-  if (error) {
-    console.error('Failed to read Strava sync cooldown:', error)
-  }
-
-  return resolveStravaSyncCooldown((data as { value?: string | null } | null)?.value)
-}
-
-async function refreshStravaAccessToken(input: {
-  supabase: ReturnType<typeof createSupabaseAdminClient>
-  profile: ProfileRow
-  userId: string | number
-}): Promise<string | null> {
-  const currentAccessToken = getStoredStravaAccessToken(input.profile)
-  if (!currentAccessToken) return null
-
-  if (
-    !shouldRefreshStravaToken({
-      expiresAt: getStoredStravaExpiresAt(input.profile),
-    }) ||
-    !getStoredStravaRefreshToken(input.profile)
-  ) {
-    return currentAccessToken
-  }
-
-  const refreshRes = await fetch('https://www.strava.com/api/v3/oauth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: process.env.STRAVA_CLIENT_ID,
-      client_secret: process.env.STRAVA_CLIENT_SECRET,
-      grant_type: 'refresh_token',
-      refresh_token: getStoredStravaRefreshToken(input.profile),
-    }),
-  })
-
-  if (!refreshRes.ok) {
-    console.error('Failed to refresh Strava token:', refreshRes.status, refreshRes.statusText)
-    return currentAccessToken
-  }
-
-  const newTokens = (await refreshRes.json()) as StravaTokenResponse
-  if (!newTokens.access_token) return currentAccessToken
-
-  const { error } = await input.supabase
-    .from('profiles')
-    .update(
-      buildStravaProfileUpdate({
-        accessToken: newTokens.access_token,
-        refreshToken: newTokens.refresh_token,
-        expiresAt: newTokens.expires_at,
-      }),
-    )
-    .eq('id', input.userId)
-
-  if (error) {
-    console.error('Failed to persist refreshed Strava tokens:', error)
-  }
-
-  return newTokens.access_token
-}
-
-async function fetchStravaJson<T>(url: string, accessToken: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
-    throw new Error(`Strava request failed for ${url}: ${response.status} ${response.statusText}`)
-  }
-
-  return (await response.json()) as T
-}
-
-async function syncStravaActivities(input: {
-  supabase: ReturnType<typeof createSupabaseAdminClient>
-  profile: ProfileRow
-  userId: string | number
-  physicalDimensionId: string | null
-}): Promise<Partial<ProfileRow> | null> {
-  const hasStrava = hasStoredStravaConnection(input.profile)
-  if (!hasStrava) return null
-
-  const nowIso = new Date().toISOString()
-  const cooldownMinutes = await getStravaSyncCooldownMinutes(input.supabase)
-
-  if (
-    !shouldRunStravaSync({
-      lastSyncedAt: input.profile.last_strava_sync_at,
-      now: nowIso,
-      cooldownMinutes,
-    })
-  ) {
-    return null
-  }
-
-  const accessToken = await refreshStravaAccessToken(input)
-  if (!accessToken) return null
-
-  const [profileResult, summariesResult] = await Promise.allSettled([
-    fetchStravaJson<StravaProfileResponse>('https://www.strava.com/api/v3/athlete', accessToken),
-    fetchStravaJson<StravaActivitySummary[]>('https://www.strava.com/api/v3/athlete/activities?per_page=30', accessToken),
-  ])
-
-  if (summariesResult.status !== 'fulfilled') {
-    console.error('Strava summary sync failed:', summariesResult.reason)
-    return null
-  }
-
-  const stravaProfile = profileResult.status === 'fulfilled' ? profileResult.value : null
-  const summaries = Array.isArray(summariesResult.value) ? summariesResult.value : []
-  const externalIds = summaries.map((summary) => String(summary.id))
-
-  let existingActivities: ExistingStravaActivityRow[] = []
-  if (externalIds.length > 0) {
-    const { data, error } = await input.supabase
-      .from('activities')
-      .select('id, external_id, review_status, review_reason, proof_url, calories, has_calories, last_synced_at')
-      .eq('user_id', input.userId)
-      .eq('source', 'strava')
-      .in('external_id', externalIds)
-
-    if (error) {
-      console.error('Failed to load existing Strava activities:', error)
-    } else {
-      existingActivities = (data ?? []) as ExistingStravaActivityRow[]
-    }
-  }
-
-  const detailCandidates = getStravaActivitiesNeedingDetail({
-    summaries,
-    existingActivities,
-  })
-
-  const detailResults = await Promise.all(
-    detailCandidates.map(async (summary) => {
-      try {
-        const detail = await fetchStravaJson<StravaActivityDetail>(
-          `https://www.strava.com/api/v3/activities/${summary.id}`,
-          accessToken
-        )
-
-        return [String(summary.id), detail] as const
-      } catch (error) {
-        console.error(`Failed to hydrate Strava activity ${summary.id}:`, error)
-        return [String(summary.id), {} as StravaActivityDetail] as const
-      }
-    })
-  )
-
-  const detailByExternalId = new Map(detailResults)
-  const existingByExternalId = new Map(
-    existingActivities
-      .filter((activity) => activity.external_id)
-      .map((activity) => [String(activity.external_id), activity])
-  )
-
-  const payloads = summaries.map((summary) => {
-    const existing = existingByExternalId.get(String(summary.id)) ?? null
-    const detail = detailByExternalId.get(String(summary.id)) ?? { calories: existing?.calories ?? null }
-
-    return mergeStravaActivity({
-      summary,
-      detail,
-      existing,
-      physicalDimensionId: input.physicalDimensionId,
-      userId: input.userId,
-      syncedAt: nowIso,
-      recordId: existing?.id ?? buildStravaRecordId(summary.id),
-    })
-  })
-
-  let activitySyncSucceeded = true
-  if (payloads.length > 0) {
-    const { error } = await input.supabase.from('activities').upsert(payloads, { onConflict: 'id' })
-    if (error) {
-      console.error('Error saving Strava sport sessions:', error)
-      activitySyncSucceeded = false
-    }
-  }
-
-  const avatarPreferencesSupported = supportsAvatarPreferences(input.profile)
-  const profileUpdates: Record<string, unknown> = activitySyncSucceeded
-    ? {
-        last_strava_sync_at: nowIso,
-        updated_at: nowIso,
-      }
-    : {}
-
-  if (stravaProfile?.profile && avatarPreferencesSupported && activitySyncSucceeded) {
-    Object.assign(
-      profileUpdates,
-      buildStravaAvatarSyncUpdate({
-        currentAvatarUrl: input.profile.avatar_url,
-        stravaAvatarUrl: stravaProfile.profile,
-        avatarSource: input.profile.avatar_source ?? 'manual',
-      }),
-    )
-  }
-
-  if (Object.keys(profileUpdates).length > 0) {
-    let { error: profileError } = await input.supabase
-      .from('profiles')
-      .update(profileUpdates)
-      .eq('id', input.userId)
-
-    if (profileError && isMissingAvatarPreferenceColumnsError(profileError)) {
-      const fallback = await input.supabase
-        .from('profiles')
-        .update(omitAvatarPreferenceFields(profileUpdates))
-        .eq('id', input.userId)
-
-      profileError = fallback.error
-    }
-
-    if (profileError) {
-      console.error('Failed to update Strava sync metadata on profile:', profileError)
-    }
-  }
-
-  return {
-    avatar_url: (profileUpdates.avatar_url as string | null | undefined) ?? input.profile.avatar_url,
-    strava_avatar_url:
-      (profileUpdates.strava_avatar_url as string | null | undefined) ?? input.profile.strava_avatar_url ?? null,
-    strava_avatar_preview_url: stravaProfile?.profile ?? input.profile.strava_avatar_url ?? null,
-    last_strava_sync_at: activitySyncSucceeded ? nowIso : input.profile.last_strava_sync_at ?? null,
-  }
-}
-
 export async function GET() {
   const context = await getAuthProfileContext()
   if (!context) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const userId = context.profileId
+  const downgradeActive = isDowngradeMode()
 
   try {
     const supabase = createSupabaseAdminClient()
@@ -414,12 +108,15 @@ export async function GET() {
     }
     const avatarPreferencesSupported = supportsAvatarPreferences(profile)
 
-    const profileUpdates = await syncStravaActivities({
-      supabase,
-      profile,
-      userId,
-      physicalDimensionId,
-    })
+    // Skip Strava sync in downgrade mode, but still load all user data
+    const profileUpdates = downgradeActive
+      ? null
+      : await syncStravaActivities({
+          supabase,
+          profile,
+          userId,
+          physicalDimensionId,
+        })
 
   const responseProfile = {
       ...profile,
@@ -513,40 +210,21 @@ export async function GET() {
       status: userQuest.status,
     }))
 
-    const totalSteps = sumNumericField(activities, (activity) => activity.steps)
-    const totalActivityPoints = sumNumericField(
-      activities.filter((activity) => activity.review_status !== 'voided' && activity.review_status !== 'rejected'),
-      (activity) => activity.activity_points
-    )
-    const stepPoints = convertStepsToPoints(totalSteps)
-    const totalQuestPoints = sumApprovedQuestPoints(userQuests, quests)
-    const totalAdjustments = sumNumericField(adjustments as { points: number | null }[] | null | undefined, (row) => row.points)
-    const approvedQuestIds = new Set(userQuests.filter((userQuest) => userQuest.status === 'approved').map((userQuest) => userQuest.quest_id))
-    const physicalQuestPoints = sumNumericField(
-      quests.filter((quest) => approvedQuestIds.has(quest.id) && quest.dimension?.name === 'physical'),
-      (quest) => quest.points
-    )
-    const physicalAdjustmentPoints = sumNumericField(
-      (adjustments as { points: number | null; dimension_id?: string | null }[] | null | undefined)?.filter(
-        (row) => row.dimension_id && row.dimension_id === physicalDimensionId
-      ),
-      (row) => row.points
-    )
-
-    const totalPoints = calculateTotalEarnedPoints({
-      totalSteps,
-      totalActivityPoints,
-      questPoints: totalQuestPoints,
-      adjustmentPoints: totalAdjustments,
-    })
-
     const { data: spentRewards } = await supabase.from('user_rewards').select('cost').eq('user_id', userId)
     const totalSpent = sumNumericField(spentRewards as { cost: number | null }[] | null | undefined, (row) => row.cost)
 
     const { data: coinTransactions } = await supabase.from('coin_transactions').select('amount').eq('user_id', userId)
     const coinTransactionTotal = sumNumericField(coinTransactions as { amount: number | null }[] | null | undefined, (row) => row.amount)
 
-    const availableCoins = calculateAvailableCoins({ totalEarned: totalPoints, totalSpent }) + coinTransactionTotal
+    const pointTotals = calculateSyncPoints({
+      activities,
+      quests,
+      userQuests,
+      adjustments: adjustments as { points: number | null; dimension_id?: string | null }[] | null | undefined,
+      physicalDimensionId,
+      totalSpent,
+      coinTransactionTotal,
+    })
 
     return NextResponse.json({
       profile: {
@@ -559,11 +237,7 @@ export async function GET() {
       quests: questsData ?? [],
       userQuests: userQuestsData ?? [],
       surveys: surveys ?? [],
-      totalPoints,
-      stepPoints,
-      sportPoints: totalActivityPoints,
-      totalPhysicalPoints: stepPoints + totalActivityPoints + physicalQuestPoints + physicalAdjustmentPoints,
-      coins: availableCoins,
+      ...pointTotals,
     })
   } catch (error) {
     console.error('Sync Error:', error)

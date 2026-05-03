@@ -2,9 +2,10 @@ import useSWR from 'swr'
 import { useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { convertStepsToPoints } from '@/lib/points'
+import { fetchJson } from '@/lib/fetch-json'
 
 // Generic fetcher
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = <T,>(url: string) => fetchJson<T>(url)
 
 type ProfileActivity = {
     id?: string | number
@@ -22,9 +23,116 @@ type ProfileActivity = {
     source?: string | null
 }
 
+type QuestItem = {
+    id: string
+    title?: string
+    description?: string | null
+    points?: number | null
+    dimension_id?: string | null
+    expires_at?: string | null
+    created_at?: string | null
+    is_active?: boolean
+    dimension?: { id?: string; name?: string | null; display_name?: string | null; icon?: string | null } | null
+    verification_type?: string | null
+    requires_photo?: boolean
+}
+
+type UserQuestItem = {
+    quest_id: string
+    status?: string | null
+    user_id?: string
+}
+
+type QuestsResponse = {
+    quests?: QuestItem[]
+    userQuests?: UserQuestItem[]
+}
+
+type RewardItem = {
+    id: string
+    title: string
+    description?: string | null
+    image_url?: string | null
+    required_points: number
+    max_claims: number
+    type?: string | null
+    claimed_count?: number
+}
+
+type RewardsResponse = {
+    rewards?: RewardItem[]
+    rerollPrice?: number
+    userStats?: {
+        totalPoints: number
+        totalSteps: number
+        availableCoins?: number
+    }
+}
+
+type LeaderboardEntry = {
+    user_id: string
+    full_name: string
+    avatar_url: string
+    total_steps: number
+    quest_points: number
+    overall_points: number
+    dimension_points?: Record<string, number>
+}
+
+type LeaderboardResponse = {
+    leaderboard?: LeaderboardEntry[]
+    currentParticipant?: LeaderboardEntry | null
+}
+
+type ProfileItem = {
+    id?: string | number
+    username?: string
+    full_name?: string | null
+    firstname?: string
+    lastname?: string
+    avatar_url?: string | null
+    profile?: string | null
+    manual_avatar_url?: string | null
+    strava_avatar_url?: string | null
+    strava_avatar_preview_url?: string | null
+    avatar_source?: 'manual' | 'strava' | null
+    avatar_preferences_supported?: boolean
+    is_strava_connected?: boolean
+    strava_access_token?: string | null
+    strava_refresh_token?: string | null
+    strava_expires_at?: number | null
+    is_admin?: boolean
+    instagram_username?: string | null
+    [key: string]: unknown
+}
+
+type SurveyItem = {
+    id: string
+    title: string
+    description?: string | null
+    is_active?: boolean
+}
+
+type ProfileResponse = {
+    profile?: ProfileItem | null
+    activities?: ProfileActivity[]
+    quests?: QuestItem[]
+    userQuests?: UserQuestItem[]
+    surveys?: SurveyItem[]
+    totalPoints?: number
+    stepPoints?: number
+    sportPoints?: number
+    totalPhysicalPoints?: number
+    coins?: number
+}
+
+type NotificationCountResponse = {
+    count?: number
+}
+
 // Hook for Quests & User Progress
 export function useQuests() {
-    const { data, error, isLoading, mutate } = useSWR('/api/strava/sync', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<QuestsResponse>('/api/strava/sync', fetcher, {
         revalidateOnFocus: false, // Don't revalidate on window focus (too aggressive)
         revalidateOnReconnect: true,
         dedupingInterval: 60000, // Cache for 1 minute
@@ -41,7 +149,7 @@ export function useQuests() {
 
 // Hook for Rewards
 export function useRewards() {
-    const { data, error, isLoading, mutate } = useSWR('/api/rewards/list', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<RewardsResponse>('/api/rewards/list', fetcher, {
         revalidateOnFocus: false,
         dedupingInterval: 60000,
     })
@@ -58,7 +166,7 @@ export function useRewards() {
 
 // Hook for Leaderboard with Realtime updates
 export function useLeaderboard() {
-    const { data, error, isLoading, mutate } = useSWR('/api/leaderboard', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<LeaderboardResponse>('/api/leaderboard', fetcher, {
         revalidateOnFocus: true, // Leaderboard changes often, keep it fresh
         refreshInterval: 30000, // Auto refresh every 30s
     })
@@ -117,7 +225,7 @@ export function useLeaderboard() {
 
 // Hook for Profile (Shares cache with Quests via /api/strava/sync)
 export function useProfile() {
-    const { data, error, isLoading, mutate } = useSWR('/api/strava/sync', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<ProfileResponse>('/api/strava/sync', fetcher, {
         revalidateOnFocus: true, // Enable revalidation to sync points with leaderboard immediately
         dedupingInterval: 5000, // Reduced from 60000 to 5000 to allow fresher updates
     })
@@ -153,7 +261,7 @@ export function useProfile() {
 
 // Hook for Notifications
 export function useNotifications() {
-    const { data, error, isLoading, mutate } = useSWR('/api/notifications?count_only=true', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR<NotificationCountResponse>('/api/notifications?count_only=true', fetcher, {
         revalidateOnFocus: true,
         refreshInterval: 60000, // Check every minute
     })

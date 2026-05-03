@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyAdminPermission } from '@/utils/auth'
+import { buildSettingsRows, DEFAULT_SETTINGS, isMissingSettingsTableError, parseSettingsRows, type AppSettings } from '../../../lib/settings'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES = 15
 
 export const dynamic = 'force-dynamic'
 
@@ -17,16 +17,76 @@ function parseCooldownValue(value: unknown): number | null {
   return numeric
 }
 
+const POINT_KEYS = ['base_checkin_points', 'photo_bonus_points', 'category_streak_bonus', 'speed_demon_bonus'] as const
+
+type ValidationSuccess = { valid: true; data: Partial<AppSettings> }
+type ValidationFailure = { valid: false; error: string }
+
+export function validateSettingsPayload(
+  body: unknown,
+): ValidationSuccess | ValidationFailure {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { valid: false, error: 'Request body must be a JSON object' }
+  }
+
+  const raw = body as Record<string, unknown>
+  const data: Partial<AppSettings> = {}
+
+  for (const key of POINT_KEYS) {
+    if (key in raw) {
+      const v = raw[key]
+      const n = typeof v === 'number' ? v : Number(v)
+      if (!Number.isInteger(n) || n <= 0) {
+        return { valid: false, error: `${key} must be a positive integer` }
+      }
+      data[key] = n
+    }
+  }
+
+  if ('strava_sync_cooldown_minutes' in raw) {
+    data.strava_sync_cooldown_minutes = raw.strava_sync_cooldown_minutes as number
+  }
+
+  if ('features' in raw) {
+    const f = raw.features
+    if (f === null || typeof f !== 'object' || Array.isArray(f)) {
+      return { valid: false, error: 'features must be an object with boolean values' }
+    }
+    const featuresObj = f as Record<string, unknown>
+    const validatedFeatures: Record<string, boolean> = {}
+    for (const [fk, fv] of Object.entries(featuresObj)) {
+      if (typeof fv !== 'boolean') {
+        return { valid: false, error: `features.${fk} must be a boolean` }
+      }
+      validatedFeatures[fk] = fv
+    }
+    data.features = validatedFeatures as AppSettings['features']
+  }
+
+  return { valid: true, data }
+}
+
 export async function GET() {
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Fetch all settings
     const { data, error } = await supabase
       .from('settings')
       .select('key, value')
 
     if (error) {
+      if (isMissingSettingsTableError(error)) {
+        console.error('Settings table is unavailable:', error)
+        return NextResponse.json(
+          {
+            error: 'Settings store unavailable',
+            degraded: true,
+            settings: DEFAULT_SETTINGS,
+          },
+          { status: 503 },
+        )
+      }
+
       console.error('Error fetching settings:', error)
       return NextResponse.json(
         { error: 'Failed to fetch settings' },
@@ -34,27 +94,7 @@ export async function GET() {
       )
     }
 
-    // Transform settings array into structured object
-    const settingsMap = new Map(data?.map(s => [s.key, s.value]) || [])
-    const parsedCooldown = parseCooldownValue(settingsMap.get('strava_sync_cooldown_minutes'))
-
-    const settings = {
-      base_checkin_points: parseInt(settingsMap.get('base_checkin_points') || '50'),
-      photo_bonus_points: parseInt(settingsMap.get('photo_bonus_points') || '50'),
-      category_streak_bonus: parseInt(settingsMap.get('category_streak_bonus') || '200'),
-      speed_demon_bonus: parseInt(settingsMap.get('speed_demon_bonus') || '300'),
-      strava_sync_cooldown_minutes: parsedCooldown ?? DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES,
-      features: {
-        qr_checkin: settingsMap.get('feature_qr_checkin') === 'true',
-        gps_checkin: settingsMap.get('feature_gps_checkin') === 'true',
-        photo_checkin: settingsMap.get('feature_photo_checkin') === 'true',
-        badges: settingsMap.get('feature_badges') === 'true',
-        leaderboard: settingsMap.get('feature_leaderboard') === 'true',
-        rewards: settingsMap.get('feature_rewards') === 'true',
-        surveys: settingsMap.get('feature_surveys') === 'true',
-        category_filter: settingsMap.get('feature_category_filter') === 'true'
-      }
-    }
+    const settings = parseSettingsRows(data ?? [])
 
     return NextResponse.json({ settings })
   } catch (error) {
@@ -74,69 +114,67 @@ export async function PUT(request: Request) {
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    const body = await request.json()
+    const rawBody = await request.json()
 
-    // Update settings in database
-    const updates = []
+    const validation = validateSettingsPayload(rawBody)
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const body = validation.data
 
-    if (body.base_checkin_points !== undefined) {
-      updates.push({ key: 'base_checkin_points', value: body.base_checkin_points.toString() })
-    }
-    if (body.photo_bonus_points !== undefined) {
-      updates.push({ key: 'photo_bonus_points', value: body.photo_bonus_points.toString() })
-    }
-    if (body.category_streak_bonus !== undefined) {
-      updates.push({ key: 'category_streak_bonus', value: body.category_streak_bonus.toString() })
-    }
-    if (body.speed_demon_bonus !== undefined) {
-      updates.push({ key: 'speed_demon_bonus', value: body.speed_demon_bonus.toString() })
-    }
+    const updates = buildSettingsRows({
+      ...DEFAULT_SETTINGS,
+      ...body,
+      strava_sync_cooldown_minutes:
+        body.strava_sync_cooldown_minutes !== undefined
+          ? parseCooldownValue(body.strava_sync_cooldown_minutes) ?? DEFAULT_SETTINGS.strava_sync_cooldown_minutes
+          : DEFAULT_SETTINGS.strava_sync_cooldown_minutes,
+      features: {
+        ...DEFAULT_SETTINGS.features,
+        ...(body.features ?? {}),
+      },
+    })
+
     if (body.strava_sync_cooldown_minutes !== undefined) {
       const cooldownMinutes = parseCooldownValue(body.strava_sync_cooldown_minutes)
       if (cooldownMinutes === null) {
         return NextResponse.json(
-          { error: `strava_sync_cooldown_minutes must be a positive integer. Default is ${DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES}.` },
+          { error: `strava_sync_cooldown_minutes must be a positive integer. Default is ${DEFAULT_SETTINGS.strava_sync_cooldown_minutes}.` },
           { status: 400 }
         )
       }
-
-      updates.push({ key: 'strava_sync_cooldown_minutes', value: cooldownMinutes.toString() })
     }
 
-    if (body.features) {
-      if (body.features.qr_checkin !== undefined) {
-        updates.push({ key: 'feature_qr_checkin', value: body.features.qr_checkin.toString() })
-      }
-      if (body.features.gps_checkin !== undefined) {
-        updates.push({ key: 'feature_gps_checkin', value: body.features.gps_checkin.toString() })
-      }
-      if (body.features.photo_checkin !== undefined) {
-        updates.push({ key: 'feature_photo_checkin', value: body.features.photo_checkin.toString() })
-      }
-      if (body.features.badges !== undefined) {
-        updates.push({ key: 'feature_badges', value: body.features.badges.toString() })
-      }
-      if (body.features.leaderboard !== undefined) {
-        updates.push({ key: 'feature_leaderboard', value: body.features.leaderboard.toString() })
-      }
-      if (body.features.rewards !== undefined) {
-        updates.push({ key: 'feature_rewards', value: body.features.rewards.toString() })
-      }
-      if (body.features.surveys !== undefined) {
-        updates.push({ key: 'feature_surveys', value: body.features.surveys.toString() })
-      }
-      if (body.features.category_filter !== undefined) {
-        updates.push({ key: 'feature_category_filter', value: body.features.category_filter.toString() })
-      }
-    }
+    const requestedKeys = new Set<string>([
+      ...(body.base_checkin_points !== undefined ? ['base_checkin_points'] : []),
+      ...(body.photo_bonus_points !== undefined ? ['photo_bonus_points'] : []),
+      ...(body.category_streak_bonus !== undefined ? ['category_streak_bonus'] : []),
+      ...(body.speed_demon_bonus !== undefined ? ['speed_demon_bonus'] : []),
+      ...(body.strava_sync_cooldown_minutes !== undefined ? ['strava_sync_cooldown_minutes'] : []),
+      ...(body.features?.qr_checkin !== undefined ? ['feature_qr_checkin'] : []),
+      ...(body.features?.gps_checkin !== undefined ? ['feature_gps_checkin'] : []),
+      ...(body.features?.photo_checkin !== undefined ? ['feature_photo_checkin'] : []),
+      ...(body.features?.badges !== undefined ? ['feature_badges'] : []),
+      ...(body.features?.leaderboard !== undefined ? ['feature_leaderboard'] : []),
+      ...(body.features?.rewards !== undefined ? ['feature_rewards'] : []),
+      ...(body.features?.surveys !== undefined ? ['feature_surveys'] : []),
+      ...(body.features?.category_filter !== undefined ? ['feature_category_filter'] : []),
+    ])
 
-    // Upsert all settings
-    for (const update of updates) {
+    for (const update of updates.filter((row) => requestedKeys.has(row.key))) {
       const { error } = await supabase
         .from('settings')
         .upsert(update, { onConflict: 'key' })
 
       if (error) {
+        if (isMissingSettingsTableError(error)) {
+          console.error('Settings table is unavailable:', error)
+          return NextResponse.json(
+            { error: 'Settings store unavailable' },
+            { status: 503 }
+          )
+        }
+
         console.error('Error updating setting:', update.key, error)
         return NextResponse.json(
           { error: `Failed to update setting: ${update.key}` },

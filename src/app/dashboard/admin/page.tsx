@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu, FileText, Zap } from 'lucide-react'
 import QRCode from 'react-qr-code'
@@ -50,6 +50,12 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
+    // Auth gate state
+    const [isAuthorized, setIsAuthorized] = useState(false)
+    const [authChecking, setAuthChecking] = useState(true)
+
+    const router = useRouter()
+
     const [isEditingSurvey, setIsEditingSurvey] = useState(false)
     const [editingSurveyId, setEditingSurveyId] = useState<string | null>(null)
 
@@ -58,24 +64,63 @@ export default function AdminPage() {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [myPermissions, setMyPermissions] = useState<string[]>([])
 
+    // Review Queue state (downgrade mode)
+    type PendingActivity = {
+        id: string | number
+        user_id: string
+        name: string
+        type: string
+        start_date: string
+        calories: number | null
+        distance: number | null
+        moving_time: number | null
+        activity_points: number | null
+        review_status: string
+        review_reason: string | null
+        proof_url: string | null
+        source: string | null
+        dimension_id: string | null
+        created_at: string
+        mode: string | null
+        user: { full_name: string | null; avatar_url: string | null }
+        dimension: { name: string; display_name: string } | null
+    }
+    const [pendingActivities, setPendingActivities] = useState<PendingActivity[]>([])
+    const [reviewLoading, setReviewLoading] = useState(false)
+    const [reviewPointInputs, setReviewPointInputs] = useState<Record<string, string>>({})
+    const [reviewRejectReasons, setReviewRejectReasons] = useState<Record<string, string>>({})
+    const [reviewActionLoading, setReviewActionLoading] = useState<string | null>(null)
+
     useEffect(() => {
         // Fetch my permissions using Supabase Auth
         const checkMe = async () => {
-            const { data: { user } } = await supabase.auth.getUser()
-            if (user) {
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) {
+                    router.push('/dashboard')
+                    return
+                }
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('permissions, is_admin')
                     .eq('id', user.id)
                     .single()
 
+                if (!profile?.is_admin) {
+                    router.push('/dashboard')
+                    return
+                }
+
+                setIsAuthorized(true)
                 if (profile?.permissions) {
                     setMyPermissions(profile.permissions)
                 }
+            } finally {
+                setAuthChecking(false)
             }
         }
         checkMe()
-    }, [])
+    }, [router])
 
     // ... (keep existing state) ...
 
@@ -370,8 +415,6 @@ export default function AdminPage() {
     const [copiedCode, setCopiedCode] = useState<string | null>(null)
     const [toggleLoadingSpotId, setToggleLoadingSpotId] = useState<string | null>(null)
 
-    const router = useRouter()
-
     // Form State (User)
     const [formData, setFormData] = useState({
         username: '',
@@ -456,6 +499,63 @@ export default function AdminPage() {
         setSelectedSurvey(null)
         setIsSidebarOpen(false)
         setIsActivityTypeModalOpen(false)
+        if (tab === 'review') fetchPendingActivities()
+    }
+
+    // ---- Review Queue functions (downgrade mode) ----
+    const fetchPendingActivities = async () => {
+        setReviewLoading(true)
+        try {
+            const res = await fetch('/api/admin/activities/review')
+            const data = await res.json()
+            setPendingActivities(data.needs_points || [])
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setReviewLoading(false)
+        }
+    }
+
+    const handleReviewAssignPoints = async (activityId: string | number) => {
+        const points = Number(reviewPointInputs[String(activityId)] || 0)
+        if (points <= 0) {
+            toastError('Masukkan jumlah poin terlebih dahulu')
+            return
+        }
+        setReviewActionLoading(String(activityId))
+        try {
+            const res = await fetch('/api/admin/activities/review', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ activity_id: activityId, action: 'assign_points', points }),
+            })
+            if (!res.ok) throw new Error('Failed')
+            success(`Poin ${points} berhasil diberikan`)
+            fetchPendingActivities()
+        } catch {
+            toastError('Gagal memberikan poin')
+        } finally {
+            setReviewActionLoading(null)
+        }
+    }
+
+    const handleReviewReject = async (activityId: string | number) => {
+        const reason = reviewRejectReasons[String(activityId)] || ''
+        setReviewActionLoading(String(activityId))
+        try {
+            const res = await fetch('/api/admin/activities/review', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ activity_id: activityId, action: 'reject', reason }),
+            })
+            if (!res.ok) throw new Error('Failed')
+            success('Kegiatan ditolak')
+            fetchPendingActivities()
+        } catch {
+            toastError('Gagal menolak kegiatan')
+        } finally {
+            setReviewActionLoading(null)
+        }
     }
 
     const pageMeta = getAdminPageMeta(activeTab)
@@ -1702,6 +1802,22 @@ export default function AdminPage() {
         }
     }
 
+    // Auth gate: show loading while checking, redirect if not authorized
+    if (authChecking) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="flex items-center gap-3 text-gray-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span className="text-sm font-medium">Checking permissions...</span>
+                </div>
+            </div>
+        )
+    }
+
+    if (!isAuthorized) {
+        return null
+    }
+
     return (
         <div className="min-h-screen bg-black text-white">
             <div className="flex min-h-screen">
@@ -2883,6 +2999,160 @@ export default function AdminPage() {
                     </div>
                 )
             }
+
+            {/* Review Queue Tab (Downgrade Mode) */}
+            {activeTab === 'review' && (
+                <div className="space-y-6 pb-24">
+                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-bold">Review Queue</h2>
+                            <span className="bg-yellow-500/20 text-yellow-400 px-2.5 py-1 rounded-full text-xs font-bold">
+                                {pendingActivities.length} kegiatan
+                            </span>
+                        </div>
+                        <button
+                            onClick={fetchPendingActivities}
+                            disabled={reviewLoading}
+                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+                        >
+                            {reviewLoading ? 'Loading...' : 'Refresh'}
+                        </button>
+                    </div>
+
+                    {reviewLoading && pendingActivities.length === 0 ? (
+                        <div className="text-center py-20 text-gray-500">
+                            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                            <p>Memuat data...</p>
+                        </div>
+                    ) : pendingActivities.length === 0 ? (
+                        <div className="text-center py-20 text-gray-500 border border-dashed border-white/10 rounded-2xl">
+                            <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <p className="font-medium">Belum ada kegiatan yang disubmit</p>
+                            <p className="text-sm mt-1">Kegiatan dari karyawan akan muncul di sini</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {pendingActivities.map((activity) => {
+                                const aid = String(activity.id)
+                                const isActioning = reviewActionLoading === aid
+                                return (
+                                    <div
+                                        key={activity.id}
+                                        className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden"
+                                    >
+                                        {/* Header: user + dimension */}
+                                        <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-gray-300">
+                                                    {(activity.user.full_name || '?')[0]?.toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-white">{activity.user.full_name || 'Unknown'}</p>
+                                                    <p className="text-[11px] text-gray-500">
+                                                        {new Date(activity.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {activity.dimension && (
+                                                <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider ${
+                                                    activity.dimension.name === 'physical' ? 'bg-orange-500/20 text-orange-400' :
+                                                    activity.dimension.name === 'emotional' ? 'bg-rose-500/20 text-rose-400' :
+                                                    activity.dimension.name === 'social' ? 'bg-sky-500/20 text-sky-400' :
+                                                    activity.dimension.name === 'spiritual' ? 'bg-amber-500/20 text-amber-400' :
+                                                    'bg-emerald-500/20 text-emerald-400'
+                                                }`}>
+                                                    {activity.dimension.display_name || activity.dimension.name}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="p-4 space-y-3">
+                                            {/* Activity info */}
+                                            <div>
+                                                <p className="text-white font-semibold">{activity.type || activity.name}</p>
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    Tanggal: {new Date(activity.start_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                                </p>
+                                            </div>
+
+                                            {/* Metadata chips */}
+                                            <div className="flex flex-wrap gap-2">
+                                                {activity.calories != null && activity.calories > 0 && (
+                                                    <span className="text-[11px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-gray-300">
+                                                        🔥 {activity.calories} kal
+                                                    </span>
+                                                )}
+                                                {activity.moving_time != null && activity.moving_time > 0 && (
+                                                    <span className="text-[11px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-gray-300">
+                                                        ⏱ {Math.round(activity.moving_time / 60)} menit
+                                                    </span>
+                                                )}
+                                                {activity.distance != null && activity.distance > 0 && (
+                                                    <span className="text-[11px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-gray-300">
+                                                        📏 {activity.distance >= 1000 ? `${(activity.distance / 1000).toFixed(1)} km` : `${Math.round(activity.distance)} m`}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Description */}
+                                            {activity.review_reason && (
+                                                <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+                                                    <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-1">Deskripsi</p>
+                                                    <p className="text-sm text-gray-300 whitespace-pre-wrap">{activity.review_reason}</p>
+                                                </div>
+                                            )}
+
+                                            {/* Photo proof */}
+                                            {activity.proof_url && (
+                                                <div>
+                                                    <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-1.5">Foto Dokumentasi</p>
+                                                    <a href={activity.proof_url} target="_blank" rel="noopener noreferrer">
+                                                        <img
+                                                            src={activity.proof_url}
+                                                            alt="Proof"
+                                                            className="w-full max-w-sm h-48 object-cover rounded-xl border border-white/10 hover:border-[#FC4C02]/50 transition-colors cursor-pointer"
+                                                        />
+                                                    </a>
+                                                </div>
+                                            )}
+
+                                            {/* Action area */}
+                                            <div className="border-t border-white/[0.06] pt-4 space-y-3">
+                                                {/* Poin yang sudah diberikan */}
+                                                {activity.activity_points != null && activity.activity_points > 0 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Poin:</span>
+                                                        <span className="text-sm font-bold text-green-400">+{activity.activity_points}</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Reject reason input */}
+                                                <input
+                                                    type="text"
+                                                    value={reviewRejectReasons[aid] || ''}
+                                                    onChange={(e) => setReviewRejectReasons(prev => ({ ...prev, [aid]: e.target.value }))}
+                                                    placeholder="Alasan reject (opsional)"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-lg py-2 px-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-white/20"
+                                                />
+
+                                                {/* Reject button */}
+                                                <button
+                                                    onClick={() => handleReviewReject(activity.id)}
+                                                    disabled={isActioning}
+                                                    className="w-full flex items-center justify-center gap-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {isActioning ? <Loader2 size={14} className="animate-spin" /> : <X size={14} />}
+                                                    Reject Kegiatan
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* QR Spots Tab */}
             {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import useSWR from 'swr'
 
 import Loader from '@/components/ui/Loader'
+import { fetchJson } from '@/lib/fetch-json'
 
 interface LeaderboardEntry {
     user_id: string
@@ -22,7 +23,7 @@ interface Dimension {
     display_name: string
 }
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json())
+const fetcher = <T,>(url: string) => fetchJson<T>(url)
 
 const METRIC_TABS = [
     { key: 'overall', label: 'Overall' },
@@ -116,13 +117,13 @@ export default function Leaderboard() {
         ? '/api/leaderboard'
         : `/api/leaderboard?dimension=${selectedDimension}`
 
-    const { data, isLoading: loading } = useSWR(leaderboardUrl, fetcher, {
+    const { data, error, isLoading: loading } = useSWR<{ leaderboard?: LeaderboardEntry[] }>(leaderboardUrl, fetcher, {
         revalidateOnFocus: true,
         refreshInterval: 30000,
     })
 
     // Current user from /api/strava/sync (reuses existing SWR cache)
-    const { data: syncData } = useSWR('/api/strava/sync', fetcher, {
+    const { data: syncData } = useSWR<{ profile?: { id?: string | null } }>('/api/strava/sync', fetcher, {
         revalidateOnFocus: true,
         dedupingInterval: 5000,
     })
@@ -130,8 +131,10 @@ export default function Leaderboard() {
 
     const leaders: LeaderboardEntry[] = data?.leaderboard || []
 
-    useEffect(() => {
-        fetch('/api/dimensions').then(r => r.json()).then(d => setDimensions(d.dimensions || []))
+useEffect(() => {
+        fetchJson<{ dimensions?: Dimension[] }>('/api/dimensions')
+            .then(d => setDimensions(d.dimensions || []))
+            .catch(() => { /* silently fallback to empty dimensions */ })
     }, [])
 
     // Close dimension dropdown on outside click
@@ -164,6 +167,19 @@ export default function Leaderboard() {
         : dimensions.find(d => d.id === selectedDimension)?.display_name ?? '...'
 
     if (loading) return <Loader text="LOADING LEADERBOARD..." />
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+                <div className="max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
+                    <p className="text-sm font-semibold text-red-300">Failed to load leaderboard</p>
+                    <p className="mt-2 text-sm text-red-200">
+                        {error instanceof Error ? error.message : 'Leaderboard data is unavailable right now.'}
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="min-h-screen bg-black text-white pb-40">

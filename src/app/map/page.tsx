@@ -55,7 +55,7 @@ function MapPageContent() {
   }
 
   // Check if category filter is enabled from settings
-  const categoryFilterEnabled = settings?.features.category_filter !== false
+  const categoryFilterEnabled = settings?.features.category_filter === true
 
   return (
     <div className="fixed inset-0 bg-gray-900">

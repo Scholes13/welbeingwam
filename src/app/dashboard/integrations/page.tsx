@@ -1,17 +1,29 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Copy, Check, Smartphone, Link as LinkIcon, Lock } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Smartphone, Link as LinkIcon, Lock, Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { isDowngradeModeClient } from '@/lib/downgrade'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 
 export default function IntegrationsPage() {
     const [loading, setLoading] = useState(true)
     const [syncKey, setSyncKey] = useState('')
     const [copied, setCopied] = useState(false)
+    const [showKey, setShowKey] = useState(false)
     const router = useRouter()
 
     useEffect(() => {
         const fetchKey = async () => {
+            // Auth check first
+            const supabase = createSupabaseBrowserClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) {
+                router.push('/dashboard')
+                setLoading(false)
+                return
+            }
+
             try {
                 const res = await fetch('/api/integrations/get-key')
                 const data = await res.json()
@@ -25,12 +37,42 @@ export default function IntegrationsPage() {
             }
         }
         fetchKey()
-    }, [])
+    }, [router])
 
     const handleCopy = () => {
         navigator.clipboard.writeText(syncKey)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
+    }
+
+    const toggleShowKey = () => {
+        setShowKey(!showKey)
+    }
+
+    // Mask the sync key - show only last 4 chars with dots
+    const maskedKey = syncKey.length > 4 ? '••••••••' + syncKey.slice(-4) : syncKey
+
+    if (isDowngradeModeClient()) {
+        return (
+            <div className="min-h-screen bg-black text-white p-8">
+                <button
+                    onClick={() => router.back()}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white mb-8 transition-colors"
+                >
+                    <ArrowLeft size={20} />
+                    Back to Dashboard
+                </button>
+                <div className="max-w-2xl mx-auto text-center py-20">
+                    <div className="p-4 bg-gray-800/50 rounded-2xl inline-block mb-4">
+                        <Smartphone className="w-12 h-12 text-gray-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-400 mb-2">Integrasi Tidak Tersedia</h2>
+                    <p className="text-gray-600">
+                        Fitur integrasi sedang dalam maintenance. Silakan input kegiatan secara manual melalui tombol + di dashboard.
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -68,8 +110,15 @@ export default function IntegrationsPage() {
 
                     <div className="flex gap-2">
                         <div className="flex-1 bg-black border border-white/10 rounded-xl p-4 font-mono text-center text tracking-wider text-gray-300">
-                            {loading ? 'Loading...' : syncKey}
+                            {loading ? 'Loading...' : showKey ? syncKey : maskedKey}
                         </div>
+                        <button
+                            onClick={toggleShowKey}
+                            className="bg-white/10 hover:bg-white/20 text-gray-400 px-4 rounded-xl transition-colors flex items-center justify-center"
+                            aria-label={showKey ? 'Hide key' : 'Show key'}
+                        >
+                            {showKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
                         <button
                             onClick={handleCopy}
                             className="bg-[#FC4C02] hover:bg-orange-600 text-white px-6 rounded-xl font-bold transition-colors flex items-center gap-2"
