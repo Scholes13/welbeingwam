@@ -23,7 +23,7 @@ describe('POST /api/admin/users/create', () => {
   })
 
   it('creates a bigint profile row linked by auth_user_id instead of writing the auth UUID into profiles.id', async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null })
+    const upsert = vi.fn().mockResolvedValue({ error: null })
     const ilike = vi.fn().mockReturnValue({
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     })
@@ -33,7 +33,7 @@ describe('POST /api/admin/users/create', () => {
         select: vi.fn().mockReturnValue({
           ilike,
         }),
-        insert,
+        upsert,
       }),
       auth: {
         admin: {
@@ -61,11 +61,12 @@ describe('POST /api/admin/users/create', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(insert).toHaveBeenCalledTimes(1)
+    expect(upsert).toHaveBeenCalledTimes(1)
 
-    const insertedProfile = insert.mock.calls[0][0]
+    const insertedProfile = upsert.mock.calls[0][0]
     expect(insertedProfile.auth_user_id).toBe('706dabb3-a2b4-49ad-9832-975c9cea26ac')
     expect(insertedProfile.id).not.toBe('706dabb3-a2b4-49ad-9832-975c9cea26ac')
+    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'auth_user_id' })
   })
 
   it('rejects usernames that collide after canonical lowercasing', async () => {

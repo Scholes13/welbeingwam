@@ -1,0 +1,118 @@
+{
+  "deckTitle": "Welbeing",
+  "deckSubtitle": "Platform wellbeing untuk membangun kebiasaan sehat yang lebih terukur, lebih engaging, dan lebih mudah diikuti setiap hari.",
+  "slides": [
+    {
+      "id": "cover",
+      "type": "cover",
+      "backgroundImage": "assets/photos/office-meeting.jpg",
+      "featureImage": "assets/app/dashboard-cropped.png",
+      "kicker": "PLATFORM WELLBEING BERBASIS GAMIFIKASI",
+      "title": "Welbeing",
+      "subtitle": "Platform wellbeing yang menggabungkan progress harian, aktivitas olahraga, quiz, dan motivasi dalam satu pengalaman yang terasa ringan dipakai.",
+      "chips": ["Dashboard", "Strava", "Quiz", "Leaderboard", "Point"],
+      "footer": "Pitch deck singkat untuk user dan tim"
+    },
+    {
+      "id": "overview",
+      "type": "overview",
+      "backgroundImage": "assets/photos/office-meeting.jpg",
+      "kicker": "APLIKASI INI APA",
+      "title": "Satu ruang untuk aktivitas sehat, insight, dan motivasi.",
+      "summary": "Welbeing menyatukan tracking aktivitas, quiz, dan reward dalam satu alur yang mudah dipakai setiap hari.",
+      "bullets": [
+        "Progress wellbeing terlihat dari satu dashboard.",
+        "Aktivitas sehat terasa lebih engaging.",
+        "Motivasi dijaga lewat point dan kompetisi sehat."
+      ],
+      "statLabels": ["Aktivitas Tercatat", "Quiz Interaktif", "Progress Lebih Terukur"]
+    },
+    {
+      "id": "dashboard",
+      "type": "dashboard",
+      "backgroundImage": "assets/photos/workspace-notes.jpg",
+      "featureImage": "assets/app/dashboard-cropped.png",
+      "kicker": "CARA MEMULAI",
+      "title": "Dashboard menjadi titik mulai.",
+      "summary": "Pengguna langsung melihat progress, aktivitas, dan pintu masuk ke fitur penting.",
+      "flow": [
+        "Lihat ringkasan aktivitas dan point.",
+        "Pantau progress harian dengan cepat.",
+        "Masuk ke quiz, leaderboard, atau fitur lain dari satu tempat.",
+        "Kembali ke dashboard untuk kontrol harian."
+      ],
+      "panels": ["Total Point", "Aktivitas Harian", "Quiz Tersedia", "Akses Leaderboard"]
+    },
+    {
+      "id": "strava",
+      "type": "strava",
+      "backgroundImage": "assets/photos/group-walk.jpg",
+      "featureImage": "assets/app/profile-tight.png",
+      "kicker": "INTEGRASI STRAVA",
+      "title": "Strava tersambung ke alur wellbeing.",
+      "summary": "Aktivitas olahraga dapat ikut tercatat tanpa membuat pengguna pindah alur dari kebiasaan sehat hariannya.",
+      "bullets": [
+        "Hubungkan akun Strava dari area integrasi.",
+        "Sinkronisasi membantu membawa data aktivitas ke aplikasi.",
+        "Aktivitas yang masuk ikut mendukung progress dan point."
+      ],
+      "labels": ["Connect Strava", "Sinkron Aktivitas", "Progress Fisik"]
+    },
+    {
+      "id": "quiz",
+      "type": "quiz",
+      "backgroundImage": "assets/photos/workspace-notes.jpg",
+      "featureImage": "assets/app/survey-edge-12s.png",
+      "kicker": "QUIZ ATAU SURVEY",
+      "title": "Quiz membantu aplikasi membaca kondisi pengguna.",
+      "summary": "Selain aktivitas, pengguna juga bisa memberi input kondisi dan preferensi agar pengalaman terasa lebih personal.",
+      "bullets": [
+        "Pertanyaan dibuat ringan dan interaktif.",
+        "Jawaban membantu membaca kebutuhan pengguna.",
+        "Insight terasa lebih personal."
+      ],
+      "question": "Bagaimana kondisi energi kamu hari ini?",
+      "options": ["Sangat baik", "Cukup stabil", "Perlu istirahat"],
+      "resultTitle": "Insight Pengguna",
+      "resultText": "Quiz membuat pengalaman lebih personal dan membantu aplikasi membaca kondisi pengguna."
+    },
+    {
+      "id": "points",
+      "type": "points",
+      "backgroundImage": "assets/photos/team-support.jpg",
+      "featureImage": "assets/app/leaderboard-tight.png",
+      "kicker": "POINT DAN LEADERBOARD",
+      "title": "Point memberi progres. Leaderboard memberi dorongan.",
+      "summary": "Pengguna dapat melihat hasil aktivitasnya dengan cepat, lalu terdorong untuk tetap aktif lewat kompetisi yang sehat.",
+      "bullets": [
+        "Point berasal dari aktivitas dan partisipasi.",
+        "Progress terasa cepat dipahami.",
+        "Leaderboard membuat pengalaman lebih hidup."
+      ],
+      "metrics": [
+        { "label": "Aktivitas", "value": "+120" },
+        { "label": "Quiz", "value": "+80" },
+        { "label": "Total Point", "value": "1.240" }
+      ],
+      "leaders": [
+        { "name": "Alya", "score": "1.240" },
+        { "name": "Bima", "score": "1.120" },
+        { "name": "Citra", "score": "980" }
+      ]
+    },
+    {
+      "id": "closing",
+      "type": "closing",
+      "backgroundImage": "assets/photos/group-walk.jpg",
+      "kicker": "PENUTUP",
+      "title": "Welbeing membuat wellbeing terasa nyata, personal, dan terus bergerak.",
+      "summary": "Dengan dashboard, Strava, quiz, point, dan leaderboard, kebiasaan sehat terasa lebih jelas untuk dijalani setiap hari.",
+      "closingPoints": [
+        "Lebih terukur karena progress terlihat jelas.",
+        "Lebih personal karena ada input dari quiz.",
+        "Lebih memotivasi karena ada point dan leaderboard."
+      ],
+      "footer": "Siap dipresentasikan sebagai pengalaman wellbeing yang modern, aktif, dan engaging."
+    }
+  ]
+}

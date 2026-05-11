@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Welbeing Deck Preview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f1ea;
+      --paper: rgba(255,255,255,0.72);
+      --line: rgba(28,29,33,0.09);
+      --text: #1c1d21;
+      --muted: #6a625a;
+      --accent: #b26f49;
+      --shadow: rgba(28,29,33,0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Aptos", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(214,171,142,0.16), transparent 32%),
+        linear-gradient(180deg, #fcf8f3 0%, #f0e8dd 100%);
+      color: var(--text);
+      padding: 48px 24px 80px;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    .hero {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 32px;
+      padding: 28px 30px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 28px;
+      box-shadow: 0 24px 60px var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .hero h1 {
+      margin: 0;
+      font-family: "Georgia", serif;
+      font-size: 44px;
+      line-height: 1.05;
+    }
+    .hero p {
+      margin: 0;
+      max-width: 760px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .slide-card {
+      margin-top: 26px;
+      padding: 18px;
+      border-radius: 26px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.74);
+      box-shadow: 0 20px 52px var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .slide-meta {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 14px;
+    }
+    .slide-meta h2 {
+      margin: 4px 0 0;
+      font-family: "Georgia", serif;
+      font-size: 24px;
+      line-height: 1.15;
+    }
+    .slide-meta p {
+      margin: 0;
+      color: var(--accent);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .slide-index {
+      display: inline-flex;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(178,111,73,0.1);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 18px;
+      border: 1px solid rgba(28,29,33,0.06);
+      background: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p>Editorial luxury agency pitch deck</p>
+      <h1>Welbeing</h1>
+      <p>Platform wellbeing untuk membangun kebiasaan sehat yang lebih terukur, lebih engaging, dan lebih mudah diikuti setiap hari.</p>
+    </header>
+          <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 01</span>
+          <div>
+            <p>PLATFORM WELLBEING BERBASIS GAMIFIKASI</p>
+            <h2>Welbeing</h2>
+          </div>
+        </div>
+        <img src="./export/slide-01.png" alt="Slide 01 - Welbeing" />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 02</span>
+          <div>
+            <p>APLIKASI INI APA</p>
+            <h2>Satu ruang untuk aktivitas sehat, insight, dan motivasi.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-02.png" alt="Slide 02 - Satu ruang untuk aktivitas sehat, insight, dan motivasi." />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 03</span>
+          <div>
+            <p>CARA MEMULAI</p>
+            <h2>Dashboard menjadi titik mulai.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-03.png" alt="Slide 03 - Dashboard menjadi titik mulai." />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 04</span>
+          <div>
+            <p>INTEGRASI STRAVA</p>
+            <h2>Strava tersambung ke alur wellbeing.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-04.png" alt="Slide 04 - Strava tersambung ke alur wellbeing." />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 05</span>
+          <div>
+            <p>QUIZ ATAU SURVEY</p>
+            <h2>Quiz membantu aplikasi membaca kondisi pengguna.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-05.png" alt="Slide 05 - Quiz membantu aplikasi membaca kondisi pengguna." />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 06</span>
+          <div>
+            <p>POINT DAN LEADERBOARD</p>
+            <h2>Point memberi progres. Leaderboard memberi dorongan.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-06.png" alt="Slide 06 - Point memberi progres. Leaderboard memberi dorongan." />
+      </section>
+      <section class="slide-card">
+        <div class="slide-meta">
+          <span class="slide-index">Slide 07</span>
+          <div>
+            <p>PENUTUP</p>
+            <h2>Welbeing membuat wellbeing terasa nyata, personal, dan terus bergerak.</h2>
+          </div>
+        </div>
+        <img src="./export/slide-07.png" alt="Slide 07 - Welbeing membuat wellbeing terasa nyata, personal, dan terus bergerak." />
+      </section>
+  </div>
+</body>
+</html>

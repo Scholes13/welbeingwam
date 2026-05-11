@@ -2,18 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart2, MapPin, Users, Settings, Home, Calendar, Tag } from 'lucide-react'
+import { Home } from 'lucide-react'
 
 export default function AdminNav() {
   const pathname = usePathname()
 
   const links = [
-    { href: '/dashboard/admin', label: 'Dashboard', icon: Home },
-    { href: '/dashboard/admin/analytics', label: 'Analytics', icon: BarChart2 },
-    { href: '/dashboard/admin/quest-spots', label: 'Quest Spots', icon: MapPin },
-    { href: '/dashboard/admin/categories', label: 'Categories', icon: Tag },
-    { href: '/dashboard/admin/sessions', label: 'Sessions', icon: Calendar },
-    { href: '/dashboard/admin/settings', label: 'Settings', icon: Settings },
+    { href: '/dashboard/admin', label: 'Welbeing Admin', icon: Home },
   ]
 
   return (

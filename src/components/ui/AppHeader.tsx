@@ -6,8 +6,8 @@ import SessionTimer from './SessionTimer'
 export default function AppHeader() {
   const pathname = usePathname()
 
-  // Don't show on login page, tour page, or admin dashboard pages
-  if (pathname === '/' || pathname === '/tour' || pathname?.startsWith('/dashboard/admin')) {
+  // Don't show on login page or admin dashboard pages.
+  if (pathname === '/' || pathname?.startsWith('/dashboard/admin')) {
     return null
   }
 

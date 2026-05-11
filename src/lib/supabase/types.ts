@@ -1,4 +1,4 @@
-// Database types for City Tour Map
+// Database types for Welbeing
 
 export interface Participant {
   id: string
