@@ -40,6 +40,7 @@ import {
     getCreateActivityTimeGridClass,
     getCreateActivityTypeGridClass,
 } from './components/createActivityModalLayout'
+import { applyCreateUserSuccess } from './components/createUserJourney'
 import { RewardsTab } from './components/RewardsTab'
 import { UsersTab } from './components/UsersTab'
 import { useUserSelection } from './hooks/useUserSelection'
@@ -1716,8 +1717,7 @@ export default function AdminPage() {
 
             if (res.ok) {
                 if (activeTab === 'users') {
-                    setFormData({ username: '', password: '', fullName: '', gender: '' })
-                    fetchUsers()
+                    applyCreateUserSuccess({ setFormData, setIsModalOpen, fetchUsers, success })
                 } else if (activeTab === 'quests') {
                     setQuestTitle('')
                     setQuestDesc('')

@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const { verifyAdminPermissionMock, createSupabaseAdminClientMock } = vi.hoisted(() => ({
   verifyAdminPermissionMock: vi.fn(),
@@ -22,8 +24,11 @@ describe('POST /api/admin/users/create', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
   })
 
-  it('creates a bigint profile row linked by auth_user_id instead of writing the auth UUID into profiles.id', async () => {
-    const upsert = vi.fn().mockResolvedValue({ error: null })
+  it('updates the trigger-created profile linked by auth_user_id without replacing profiles.id', async () => {
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    })
+    const upsert = vi.fn()
     const ilike = vi.fn().mockReturnValue({
       maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     })
@@ -33,6 +38,7 @@ describe('POST /api/admin/users/create', () => {
         select: vi.fn().mockReturnValue({
           ilike,
         }),
+        update,
         upsert,
       }),
       auth: {
@@ -61,12 +67,12 @@ describe('POST /api/admin/users/create', () => {
     )
 
     expect(response.status).toBe(200)
-    expect(upsert).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(upsert).not.toHaveBeenCalled()
 
-    const insertedProfile = upsert.mock.calls[0][0]
-    expect(insertedProfile.auth_user_id).toBe('706dabb3-a2b4-49ad-9832-975c9cea26ac')
-    expect(insertedProfile.id).not.toBe('706dabb3-a2b4-49ad-9832-975c9cea26ac')
-    expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'auth_user_id' })
+    const updatedProfile = update.mock.calls[0][0]
+    expect(updatedProfile.auth_user_id).toBeUndefined()
+    expect(updatedProfile.id).toBeUndefined()
   })
 
   it('rejects usernames that collide after canonical lowercasing', async () => {
@@ -108,5 +114,26 @@ describe('POST /api/admin/users/create', () => {
       error: 'Username already taken',
     })
     expect(createUser).not.toHaveBeenCalled()
+  })
+
+  it('keeps the auth signup trigger compatible with bigint profile ids', () => {
+    const migration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/20260401002000_fix_auth_signup_trigger_bigint_profiles.sql'),
+      'utf8',
+    )
+
+    expect(migration).toContain('CREATE SEQUENCE IF NOT EXISTS public.profiles_manual_id_seq')
+    expect(migration).toContain("nextval('public.profiles_manual_id_seq'::regclass)")
+    expect(migration).not.toContain('new.id, -- Valid if profiles.id is UUID')
+  })
+
+  it('uses the partial auth_user_id unique index when the auth signup trigger upserts profiles', () => {
+    const migration = readFileSync(
+      join(process.cwd(), 'supabase/migrations/20260401002100_fix_auth_signup_trigger_conflict_target.sql'),
+      'utf8',
+    )
+
+    expect(migration).toContain('ON CONFLICT (auth_user_id) WHERE auth_user_id IS NOT NULL DO UPDATE SET')
+    expect(migration).not.toContain('ON CONFLICT (auth_user_id) DO UPDATE SET')
   })
 })

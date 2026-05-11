@@ -72,19 +72,17 @@ export async function POST(request: Request) {
     // Create profile linked to auth user
     // Use upsert because the `on_auth_user_created` trigger may have already
     // inserted a skeleton profile row when the auth user was created above.
-    const profileId = generateProfileId()
     const { error } = await supabase
         .from('profiles')
-        .upsert({
-            id: profileId,
-            auth_user_id: authUser.user.id,
+        .update({
             username: normalizedUsername,
             full_name: fullName || username,
             avatar_url: avatarUrl,
             gender: gender || null,
             is_manual: true,
             access_code: `CODE-${Math.floor(Math.random() * 9000) + 1000}`
-        }, { onConflict: 'auth_user_id' })
+        })
+        .eq('auth_user_id', authUser.user.id)
 
     if (error) {
         console.error('Create User Error:', error)
