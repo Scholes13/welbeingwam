@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Dumbbell, FileText, Flame, Gift, MapPin, Settings2, Shield, User } from 'lucide-react'
+import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Download, Dumbbell, FileText, Flame, Gift, MapPin, Settings2, Shield, User } from 'lucide-react'
 
 export type AdminTab =
   | 'users'
@@ -16,6 +16,7 @@ export type AdminTab =
   | 'streaks'
   | 'review'
   | 'activity-types'
+  | 'exports'
 
 export type AdminTabConfig = {
   key: AdminTab
@@ -39,6 +40,7 @@ export const ADMIN_TAB_CONFIG: AdminTabConfig[] = [
   { key: 'streaks', label: 'Streaks', group: 'management', Icon: Flame },
   { key: 'review', label: 'Audit Poin', group: 'management', Icon: ClipboardCheck },
   { key: 'activity-types', label: 'Activity CMS', group: 'management', Icon: Settings2 },
+  { key: 'exports', label: 'Export Data', group: 'system', Icon: Download },
 ]
 
 type AdminPageMeta = {
@@ -120,6 +122,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
   'activity-types': {
     title: 'Activity CMS',
     description: 'Edit nama dan poin tiap jenis kegiatan, atau nonaktifkan kegiatan tanpa menghapus.',
+  },
+  exports: {
+    title: 'Export Data',
+    description: 'Backup snapshot leaderboard, users, activities, point adjustments, dan coin transactions ke file CSV.',
   },
 }
 
