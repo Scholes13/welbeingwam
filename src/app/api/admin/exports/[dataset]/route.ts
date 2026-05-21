@@ -28,6 +28,7 @@ import { fetchLeaderboardActivities } from '@/app/api/leaderboard/activities'
 export const dynamic = 'force-dynamic'
 
 type Dataset =
+    | 'user-summary'
     | 'leaderboard'
     | 'users'
     | 'activities'
@@ -35,6 +36,7 @@ type Dataset =
     | 'coin-transactions'
 
 const DATASETS: ReadonlySet<Dataset> = new Set([
+    'user-summary',
     'leaderboard',
     'users',
     'activities',
@@ -126,6 +128,65 @@ export async function GET(
         }
 
         const stamp = timestampSuffix()
+
+        if (dataset === 'user-summary') {
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url, instagram_username, username')
+
+            const activities = await fetchLeaderboardActivities(supabase)
+
+            const { data: userQuests } = await supabase
+                .from('user_quests')
+                .select('user_id, quest:quests(points, dimension_id)')
+                .eq('status', 'approved')
+
+            const { data: adjustments } = await supabase
+                .from('point_adjustments')
+                .select('user_id, points, dimension_id')
+
+            const leaderboard = computeLeaderboardEntries({
+                profiles: (profiles ?? []) as LeaderboardProfile[],
+                activities,
+                userQuests: (userQuests ?? []) as LeaderboardQuestRow[],
+                adjustments: (adjustments ?? []) as LeaderboardAdjustment[],
+            }).sort((a, b) => b.overall_points - a.overall_points)
+
+            const { data: coinRows } = await supabase
+                .from('coin_transactions')
+                .select('user_id, amount')
+
+            const coinByUser = new Map<string, number>()
+            for (const row of (coinRows ?? []) as { user_id: string; amount: number }[]) {
+                const prev = coinByUser.get(row.user_id) ?? 0
+                coinByUser.set(row.user_id, prev + Number(row.amount || 0))
+            }
+
+            const usernameById = new Map(
+                ((profiles ?? []) as LeaderboardProfile[]).map((p) => [p.id, p.username ?? '']),
+            )
+
+            const rows = leaderboard.map((entry, idx) => ({
+                rank: idx + 1,
+                user_id: entry.user_id,
+                username: usernameById.get(entry.user_id) ?? '',
+                full_name: entry.full_name ?? '',
+                instagram_username: entry.instagram_username ?? '',
+                total_points: entry.overall_points,
+                step_points: entry.step_points,
+                sport_points: entry.sport_points,
+                quest_points: entry.quest_points,
+                coins: coinByUser.get(entry.user_id) ?? 0,
+            }))
+
+            const csv = toCsv(rows, [
+                'rank', 'user_id', 'username', 'full_name', 'instagram_username',
+                'total_points', 'step_points', 'sport_points', 'quest_points',
+                'coins',
+            ])
+
+            return csvResponse(`user-summary-${stamp}.csv`, csv)
+        }
 
         if (dataset === 'leaderboard') {
             const { data: profiles } = await supabase
