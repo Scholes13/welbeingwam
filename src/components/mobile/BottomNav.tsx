@@ -18,11 +18,10 @@ export default function BottomNav() {
         { href: '/profile', label: 'Profile', icon: User },
     ]
 
-    // Don't show on login page, survey, doorprize, admin dashboard, or while a fullscreen overlay is active.
+    // Don't show on login page, survey, admin dashboard, or while a fullscreen overlay is active.
     if (
         pathname === '/' ||
         pathname?.startsWith('/survey') ||
-        pathname?.startsWith('/doorprize') ||
         pathname === '/dashboard/admin' ||
         overlayActive
     ) {

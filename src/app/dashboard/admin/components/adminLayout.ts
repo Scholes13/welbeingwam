@@ -10,7 +10,6 @@ export type AdminTab =
   | 'activities'
   | 'sports'
   | 'spots'
-  | 'doorprize'
   | 'admins'
   | 'templates'
   | 'streaks'
@@ -35,7 +34,6 @@ export const ADMIN_TAB_CONFIG: AdminTabConfig[] = [
   { key: 'activities', label: 'Activities', group: 'events', Icon: Calendar },
   { key: 'sports', label: 'Sport Sessions', group: 'events', Icon: Dumbbell },
   { key: 'spots', label: 'QR Spots', group: 'events', Icon: MapPin },
-  { key: 'doorprize', label: 'Doorprize', group: 'events', Icon: Gift },
   { key: 'admins', label: 'Admins', group: 'system', Icon: Shield },
   { key: 'templates', label: 'Templates', group: 'management', Icon: FileText },
   { key: 'streaks', label: 'Streaks', group: 'management', Icon: Flame },
@@ -101,10 +99,6 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
     title: 'QR Spots',
     description: 'Manage spot codes, claims, and activity status.',
   },
-  doorprize: {
-    title: 'Doorprize',
-    description: 'Create sessions, configure prizes, and review winners.',
-  },
   admins: {
     title: 'Admins',
     description: 'Manage admin access and permissions.',
@@ -142,7 +136,6 @@ export function getAdminPageMeta(activeTab: AdminTab): AdminPageMeta {
 export function getAdminCreateLabel(activeTab: AdminTab, hasSelectedSurvey: boolean): string | null {
   if (
     activeTab === 'admins' ||
-    activeTab === 'doorprize' ||
     activeTab === 'templates' ||
     activeTab === 'sports' ||
     activeTab === 'wellbeing' ||

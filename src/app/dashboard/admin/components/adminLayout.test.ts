@@ -18,7 +18,6 @@ describe('adminLayout helpers', () => {
     expect(getAdminCreateLabel('spots', false)).toBe('QR Spot')
     expect(getAdminCreateLabel('surveys', false)).toBe('Survey')
     expect(getAdminCreateLabel('surveys', true)).toBe('Question')
-    expect(getAdminCreateLabel('doorprize', false)).toBeNull()
     expect(getAdminCreateLabel('admins', false)).toBeNull()
     expect(getAdminCreateLabel('wellbeing', false)).toBeNull()
   })
