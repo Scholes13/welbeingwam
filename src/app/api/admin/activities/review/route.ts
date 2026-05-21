@@ -16,7 +16,7 @@ export async function GET() {
 
     // Check if user is admin
     const { data: participant } = await supabase
-      .from('participants')
+      .from('profiles')
       .select('is_admin')
       .eq('id', context.profileId)
       .maybeSingle()
@@ -108,7 +108,7 @@ export async function PATCH(request: Request) {
 
     // Check admin
     const { data: participant } = await supabase
-      .from('participants')
+      .from('profiles')
       .select('is_admin')
       .eq('id', context.profileId)
       .maybeSingle()
