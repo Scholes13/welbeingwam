@@ -605,6 +605,36 @@ const handleRefresh = () => mutateProfile()
                                             </motion.div>
                                         )
                                     })}
+
+                                    {/* Coming Soon — placeholder card to keep grid balanced */}
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 16 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ duration: 0.4, delay: dimensions.length * 0.08, ease: [0.25, 0.46, 0.45, 0.94] }}
+                                        className="group relative overflow-hidden rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02]"
+                                    >
+                                        <div className="relative z-10 p-4">
+                                            <div className="flex items-start justify-between mb-3">
+                                                <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-white/[0.03] ring-1 ring-inset ring-white/[0.06]">
+                                                    <Sparkles size={20} className="text-gray-600" />
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] text-gray-600 font-semibold uppercase tracking-wider">
+                                                        Soon
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p className="text-[13px] font-semibold leading-tight mb-3 text-gray-500">
+                                                More Dimensions
+                                            </p>
+                                            <div className="relative h-1.5 bg-white/[0.04] rounded-full overflow-hidden">
+                                                <div className="absolute inset-y-0 left-0 w-full bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(255,255,255,0.04)_4px,rgba(255,255,255,0.04)_8px)]" />
+                                            </div>
+                                            <p className="mt-2 text-[10px] text-gray-600 leading-relaxed">
+                                                Dimensi baru lagi disiapkan, stay tuned.
+                                            </p>
+                                        </div>
+                                    </motion.div>
                                 </div>
                             )}
                         </motion.div>
@@ -612,9 +642,19 @@ const handleRefresh = () => mutateProfile()
                         {/* ── Recent Activities ── */}
                         {dashboardActivities.length > 0 && (
                             <motion.div variants={itemVariants} className="mb-8">
-                                <SectionHeader icon={Trophy} title="Recent Activities" />
+                                <SectionHeader
+                                    icon={Trophy}
+                                    title="Recent Activities"
+                                    trailing={
+                                        dashboardActivities.length > 5 ? (
+                                            <Link href="/dashboard/history" className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#FC4C02] transition-colors">
+                                                Lihat Semua <ChevronRight size={14} />
+                                            </Link>
+                                        ) : null
+                                    }
+                                />
                                 <div className="space-y-2.5">
-                                    {dashboardActivities.map((activity, index) => {
+                                    {dashboardActivities.slice(0, 5).map((activity, index) => {
                                         const mode = normalizeMode(activity)
                                         const isEvent = mode === 'event'
                                         const isSport = mode === 'sport'
