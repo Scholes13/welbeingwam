@@ -1,23 +1,20 @@
-import { verifyAdminPermission } from '@/utils/auth'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
+import { verifyAdminPermission } from '@/utils/auth'
 import { NextResponse } from 'next/server'
 
-function isMissingParentTypeColumnError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  return 'code' in error && error.code === 'PGRST204'
+const ALLOWED_FIELDS = new Set(['name', 'points', 'is_active', 'sort_order'])
+
+type PatchPayload = {
+  id?: string
+  name?: string
+  points?: number
+  is_active?: boolean
+  sort_order?: number
 }
 
-async function isHierarchyEnabled(supabase: ReturnType<typeof createSupabaseAdminClient>): Promise<boolean> {
-  const { error } = await supabase
-    .from('activity_types')
-    .select('parent_type_id')
-    .limit(1)
-
-  if (!error) return true
-  if (isMissingParentTypeColumnError(error)) return false
-  throw error
-}
-
+// ---------------------------------------------------------------------------
+// GET — full catalog (active + inactive) for admin CMS view
+// ---------------------------------------------------------------------------
 export async function GET() {
   const { authorized } = await verifyAdminPermission('manage_activities')
   if (!authorized) {
@@ -28,82 +25,37 @@ export async function GET() {
     const supabase = createSupabaseAdminClient()
     const { data, error } = await supabase
       .from('activity_types')
-      .select('*, dimension:dimensions(id, name, display_name)')
+      .select(`
+        id, code, name, mode, dimension_id, points,
+        requires_steps, requires_calories, is_active, sort_order,
+        dimension:dimensions(id, name, display_name)
+      `)
+      .order('mode', { ascending: true })
+      .order('sort_order', { ascending: true })
       .order('name', { ascending: true })
 
-    if (error) throw error
-    const hierarchyEnabled = await isHierarchyEnabled(supabase)
-    return NextResponse.json({ types: data ?? [], hierarchyEnabled })
+    if (error) {
+      console.error('Admin activity-types GET error:', error)
+      return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
+    }
+
+    const types = (data ?? []).map((row) => ({
+      ...row,
+      dimension: Array.isArray(row.dimension) ? (row.dimension[0] ?? null) : row.dimension,
+    }))
+
+    return NextResponse.json({ types })
   } catch (error) {
-    console.error('List activity types error:', error)
-    return NextResponse.json({ error: 'Failed to fetch activity types' }, { status: 500 })
+    console.error('Admin activity-types GET error:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
-  const { authorized } = await verifyAdminPermission('manage_activities')
-  if (!authorized) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  try {
-    const body = await request.json()
-    const name = String(body.name || '').trim()
-    const description = body.description ? String(body.description).trim() : null
-    const parentTypeId = body.parentTypeId ? String(body.parentTypeId).trim() : null
-    const dimensionId = body.dimension_id ? String(body.dimension_id).trim() : null
-
-    if (!name) {
-      return NextResponse.json({ error: 'Type name is required' }, { status: 400 })
-    }
-
-    const supabase = createSupabaseAdminClient()
-    const hierarchyEnabled = await isHierarchyEnabled(supabase)
-
-    if (parentTypeId && !hierarchyEnabled) {
-      return NextResponse.json(
-        { error: 'Activity type hierarchy is not ready. Please run migration 20260217000004_activity_type_hierarchy.sql first.' },
-        { status: 400 },
-      )
-    }
-
-    if (parentTypeId) {
-      const { data: parentType, error: parentError } = await supabase
-        .from('activity_types')
-        .select('id')
-        .eq('id', parentTypeId)
-        .single()
-
-      if (parentError || !parentType) {
-        return NextResponse.json({ error: 'Parent type not found' }, { status: 400 })
-      }
-    }
-
-    const { data, error } = await supabase
-      .from('activity_types')
-      .insert(hierarchyEnabled ? {
-        name,
-        description,
-        is_active: body.isActive ?? true,
-        parent_type_id: parentTypeId,
-        dimension_id: dimensionId,
-      } : {
-        name,
-        description,
-        is_active: body.isActive ?? true,
-        dimension_id: dimensionId,
-      })
-      .select('*')
-      .single()
-
-    if (error) throw error
-    return NextResponse.json({ success: true, type: data })
-  } catch (error) {
-    console.error('Create activity type error:', error)
-    return NextResponse.json({ error: 'Failed to create activity type' }, { status: 500 })
-  }
-}
-
+// ---------------------------------------------------------------------------
+// PATCH — update name / points / is_active / sort_order for a single row.
+// `code`, `mode`, `dimension_id`, `requires_steps`, `requires_calories`
+// are intentionally not editable to keep historical activities consistent.
+// ---------------------------------------------------------------------------
 export async function PATCH(request: Request) {
   const { authorized } = await verifyAdminPermission('manage_activities')
   if (!authorized) {
@@ -111,83 +63,69 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const body = await request.json()
-    const id = String(body.id || '')
-    if (!id) {
-      return NextResponse.json({ error: 'Type ID is required' }, { status: 400 })
+    const body = (await request.json()) as PatchPayload
+    if (!body.id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    const updates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
+    const updates: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(body)) {
+      if (!ALLOWED_FIELDS.has(key)) continue
+      if (value === undefined) continue
+      updates[key] = value
     }
 
-    if (typeof body.name === 'string') updates.name = body.name.trim()
-    if (typeof body.description === 'string') updates.description = body.description.trim()
-    if (typeof body.isActive === 'boolean') updates.is_active = body.isActive
-    if ('dimension_id' in body) updates.dimension_id = body.dimension_id || null
+    if (typeof updates.name === 'string') {
+      const trimmed = (updates.name as string).trim()
+      if (!trimmed) {
+        return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 })
+      }
+      if (trimmed.length > 200) {
+        return NextResponse.json({ error: 'Name too long' }, { status: 400 })
+      }
+      updates.name = trimmed
+    }
+
+    if (updates.points !== undefined) {
+      const points = Number(updates.points)
+      if (!Number.isInteger(points) || points < 0 || points > 10000) {
+        return NextResponse.json({ error: 'Points must be an integer 0-10000' }, { status: 400 })
+      }
+      updates.points = points
+    }
+
+    if (updates.sort_order !== undefined) {
+      const order = Number(updates.sort_order)
+      if (!Number.isInteger(order)) {
+        return NextResponse.json({ error: 'sort_order must be an integer' }, { status: 400 })
+      }
+      updates.sort_order = order
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
 
     const supabase = createSupabaseAdminClient()
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('activity_types')
       .update(updates)
-      .eq('id', id)
+      .eq('id', body.id)
+      .select('id, code, name, mode, dimension_id, points, requires_steps, requires_calories, is_active, sort_order')
+      .maybeSingle()
 
-    if (error) throw error
-    return NextResponse.json({ success: true })
+    if (error) {
+      console.error('Admin activity-types PATCH error:', error)
+      return NextResponse.json({ error: 'Failed to update' }, { status: 500 })
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: 'Activity type not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ type: data })
   } catch (error) {
-    console.error('Update activity type error:', error)
-    return NextResponse.json({ error: 'Failed to update activity type' }, { status: 500 })
-  }
-}
-
-export async function DELETE(request: Request) {
-  const { authorized } = await verifyAdminPermission('manage_activities')
-  if (!authorized) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-
-    if (!id) {
-      return NextResponse.json({ error: 'Type ID is required' }, { status: 400 })
-    }
-
-    const supabase = createSupabaseAdminClient()
-    const hierarchyEnabled = await isHierarchyEnabled(supabase)
-
-    if (hierarchyEnabled) {
-      const { count: childCount, error: childCountError } = await supabase
-        .from('activity_types')
-        .select('*', { count: 'exact', head: true })
-        .eq('parent_type_id', id)
-
-      if (childCountError) throw childCountError
-      if ((childCount ?? 0) > 0) {
-        return NextResponse.json({ error: 'Type has subcategories. Delete subcategories first.' }, { status: 400 })
-      }
-    }
-
-    const { count, error: countError } = await supabase
-      .from('admin_activities')
-      .select('*', { count: 'exact', head: true })
-      .eq('type_id', id)
-
-    if (countError) throw countError
-    if ((count ?? 0) > 0) {
-      return NextResponse.json({ error: 'Type is still used by activities' }, { status: 400 })
-    }
-
-    const { error } = await supabase
-      .from('activity_types')
-      .delete()
-      .eq('id', id)
-
-    if (error) throw error
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Delete activity type error:', error)
-    return NextResponse.json({ error: 'Failed to delete activity type' }, { status: 500 })
+    console.error('Admin activity-types PATCH error:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }

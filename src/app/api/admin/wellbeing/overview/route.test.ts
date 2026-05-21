@@ -32,9 +32,15 @@ describe('GET /api/admin/wellbeing/overview', () => {
       kpis: {
         activeUsersPercent: 75,
         averageWellbeingIndex: 68,
+        averageWellbeingIndexPrevious: 0,
+        averageWellbeingIndexDelta: 68,
         quizCoveragePercent: 60,
         attendanceRatePercent: 55,
       },
+      dimensionScores: [],
+      monthlyTrend: [],
+      insights: [],
+      recommendations: [],
       dimensionDistribution: [],
       attentionCounts: {
         noRecentQuiz: 5,
@@ -82,9 +88,15 @@ describe('GET /api/admin/wellbeing/overview', () => {
       kpis: {
         activeUsersPercent: 80,
         averageWellbeingIndex: 70,
+        averageWellbeingIndexPrevious: 0,
+        averageWellbeingIndexDelta: 70,
         quizCoveragePercent: 65,
         attendanceRatePercent: 60,
       },
+      dimensionScores: [],
+      monthlyTrend: [],
+      insights: [],
+      recommendations: [],
       dimensionDistribution: [],
       attentionCounts: {
         noRecentQuiz: 4,

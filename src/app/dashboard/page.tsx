@@ -58,6 +58,7 @@ interface ActivityItem {
     step_points?: number | null
     review_status?: string | null
     proof_url?: string | null
+    proof_urls?: string[] | null
     source?: string | null
 }
 
@@ -304,7 +305,7 @@ const handleRefresh = () => mutateProfile()
     }
 
     return (
-        <div className="h-[100dvh] overflow-y-auto bg-[#0A0A0A] text-white pb-36 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="h-[100dvh] overflow-y-auto bg-[#0A0A0A] text-white pb-36 scrollbar-hide">
             {/* ── Ambient background glows ── */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#FC4C02] rounded-full blur-[160px] opacity-[0.07]" />
@@ -324,7 +325,7 @@ const handleRefresh = () => mutateProfile()
                             <div className="flex items-center gap-3">
                                 <div className="relative">
                                     <img
-                                        src={profile.profile || undefined}
+                                        src={profile.avatar_url || undefined}
                                         alt={profile.username || ''}
                                         className="w-11 h-11 rounded-full ring-2 ring-[#FC4C02]/40 ring-offset-2 ring-offset-[#0A0A0A] object-cover"
                                     />

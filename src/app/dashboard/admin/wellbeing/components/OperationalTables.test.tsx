@@ -16,6 +16,10 @@ describe('OperationalTables', () => {
               username: 'andi',
               wellbeingIndex: 78,
               dominantDimension: 'physical',
+              quizCount: 2,
+              sportCount: 4,
+              attendanceCount: 5,
+              activityCount: 6,
             },
           ],
           highestAttendance: [
@@ -24,6 +28,10 @@ describe('OperationalTables', () => {
               username: 'sinta',
               wellbeingIndex: 70,
               dominantDimension: 'social',
+              quizCount: 1,
+              sportCount: 0,
+              attendanceCount: 8,
+              activityCount: 1,
             },
           ],
           biggestDrop: [],
@@ -36,6 +44,8 @@ describe('OperationalTables', () => {
     expect(html).toContain('Highest Attendance')
     expect(html).toContain('sinta')
     expect(html).toContain('Biggest Drop')
-    expect(html).toContain('Trend comparison rows will appear')
+    expect(html).toContain('Belum ada penurunan signifikan')
+    expect(html).toContain('Q2')
+    expect(html).toContain('A8')
   })
 })

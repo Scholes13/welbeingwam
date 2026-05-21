@@ -11,7 +11,7 @@ export default async function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-black overflow-hidden relative">
+    <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-[#0A0A0A] overflow-hidden relative">
       {/* Background Ambient */}
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-[#FC4C02] rounded-full mix-blend-screen filter blur-[150px] opacity-15" />

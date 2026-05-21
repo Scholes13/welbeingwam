@@ -33,7 +33,7 @@ export default function CluesPage() {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-4 pb-32">
+        <div className="min-h-screen bg-[#0A0A0A] text-white p-4 pb-32">
             {/* Ambient Background */}
             <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-10%] left-[-10%] w-[300px] h-[300px] bg-yellow-500 rounded-full mix-blend-screen filter blur-[80px] opacity-15" />

@@ -19,9 +19,15 @@ describe('KPICards', () => {
           kpis: {
             activeUsersPercent: 78,
             averageWellbeingIndex: 64,
+            averageWellbeingIndexPrevious: 60,
+            averageWellbeingIndexDelta: 4,
             quizCoveragePercent: 29,
             attendanceRatePercent: 56,
           },
+          dimensionScores: [],
+          monthlyTrend: [],
+          insights: [],
+          recommendations: [],
           dimensionDistribution: [],
           attentionCounts: {
             noRecentQuiz: 10,
@@ -40,9 +46,8 @@ describe('KPICards', () => {
 
     expect(html).toContain('Active Users')
     expect(html).toContain('78%')
-    expect(html).toContain('Average Wellbeing Index')
+    expect(html).toContain('Average Index')
     expect(html).toContain('64')
-    expect(html).toContain('Data Caveats')
     expect(html).toContain('Quiz coverage is sparse')
   })
 })

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Dumbbell, FileText, Flame, Gift, MapPin, Shield, User } from 'lucide-react'
+import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Dumbbell, FileText, Flame, Gift, MapPin, Settings2, Shield, User } from 'lucide-react'
 
 export type AdminTab =
   | 'users'
@@ -15,6 +15,7 @@ export type AdminTab =
   | 'templates'
   | 'streaks'
   | 'review'
+  | 'activity-types'
 
 export type AdminTabConfig = {
   key: AdminTab
@@ -36,7 +37,8 @@ export const ADMIN_TAB_CONFIG: AdminTabConfig[] = [
   { key: 'admins', label: 'Admins', group: 'system', Icon: Shield },
   { key: 'templates', label: 'Templates', group: 'management', Icon: FileText },
   { key: 'streaks', label: 'Streaks', group: 'management', Icon: Flame },
-  { key: 'review', label: 'Review Queue', group: 'management', Icon: ClipboardCheck },
+  { key: 'review', label: 'Audit Poin', group: 'management', Icon: ClipboardCheck },
+  { key: 'activity-types', label: 'Activity CMS', group: 'management', Icon: Settings2 },
 ]
 
 type AdminPageMeta = {
@@ -112,8 +114,12 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
     description: 'Manage streak challenges with multiplier rewards.',
   },
   review: {
-    title: 'Review Queue',
-    description: 'Review pending wellbeing activity submissions and assign points manually.',
+    title: 'Audit Poin',
+    description: 'Semua kegiatan otomatis dapat poin sesuai CMS. Gunakan halaman ini untuk override poin atau tolak kegiatan tertentu.',
+  },
+  'activity-types': {
+    title: 'Activity CMS',
+    description: 'Edit nama dan poin tiap jenis kegiatan, atau nonaktifkan kegiatan tanpa menghapus.',
   },
 }
 
@@ -127,7 +133,8 @@ export function getAdminCreateLabel(activeTab: AdminTab, hasSelectedSurvey: bool
     activeTab === 'doorprize' ||
     activeTab === 'templates' ||
     activeTab === 'sports' ||
-    activeTab === 'wellbeing'
+    activeTab === 'wellbeing' ||
+    activeTab === 'activity-types'
   ) return null
   if (activeTab === 'users') return 'User'
   if (activeTab === 'quests') return 'Quest'

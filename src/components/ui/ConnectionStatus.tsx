@@ -9,9 +9,9 @@ interface ConnectionStatusProps {
   showWhenOnline?: boolean
 }
 
-export default function ConnectionStatus({ 
-  className = '', 
-  showWhenOnline = false 
+export default function ConnectionStatus({
+  className = '',
+  showWhenOnline = false,
 }: ConnectionStatusProps) {
   const { isOnline } = useConnectionStatus()
 
@@ -27,21 +27,23 @@ export default function ConnectionStatus({
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+          role="status"
+          aria-live="polite"
+          className={`fixed top-3 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border backdrop-blur-md ${
             isOnline
-              ? 'bg-green-100 text-green-800'
-              : 'bg-red-100 text-red-800'
+              ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              : 'bg-red-500/15 border-red-500/30 text-red-300'
           } ${className}`}
         >
           {isOnline ? (
             <>
-              <Wifi className="w-4 h-4" />
+              <Wifi className="w-3.5 h-3.5" />
               <span>Online</span>
             </>
           ) : (
             <>
-              <WifiOff className="w-4 h-4" />
-              <span>Offline</span>
+              <WifiOff className="w-3.5 h-3.5" />
+              <span>Offline — perubahan akan dicoba ulang</span>
             </>
           )}
         </motion.div>

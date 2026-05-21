@@ -27,6 +27,32 @@
 
 ## Active Tasks
 
+### 2026-05-21 - Replace daily activity catalog from Excel point matrix
+- Status: implemented (pending DB apply + smoke test)
+- Owner: PM Agent
+- Delegates: `@coder_backend` (migration), `@coder_frontend` (downgrade form sync), `@qa` (smoke + regression)
+- Scope:
+  - replace the seeded daily `activity_types` catalog with the 25 entries defined in `Excel/Wellbeing_Points_Based_on_Calorie_Equivalent.xlsx`,
+  - apply 1:1 kcal-to-point mapping from the Excel `Equivalent Calories` column,
+  - soft-deactivate every old daily code that is not in the new whitelist (FK preserved),
+  - drop daily physical entries from the catalog (sport sessions and `physical.steps` keep handling physical points),
+  - keep WAM, Mid-Year Recharge, and Internal Activities event-based via `admin_activities` + attendance,
+  - sync `WellbeingActivityForm.tsx` (downgrade-mode form) so its hardcoded names match the new migration verbatim, including new "Bukti Aktivitas" hints in `descriptionHint`.
+- Risks:
+  - point inflation for new submissions (e.g. Konsultasi 50 -> 150) compared with historical rows; release notes required,
+  - admin must publish WAM/Mid-Year/Internal as `admin_activities` events before users can earn those points,
+  - users that used to log daily physical via UI must switch to Sport mode (Strava/manual sport entry).
+- Verification:
+  - design doc: `docs/plans/2026-05-21-replace-daily-activity-catalog-design.md`
+  - migration: `supabase/migrations/20260521000000_replace_daily_activity_catalog.sql`
+  - frontend: `src/components/WellbeingActivityForm.tsx` updated to match
+  - `npx tsc --noEmit` clean
+  - `npx vitest run` 175/175 passing
+  - manual smoke test pending: apply migration in staging, hit `GET /api/activity-types`, then submit one daily activity per dimension and confirm `activities.activity_points` matches Excel value
+- Notes:
+  - schema guard `ALTER TABLE activity_types ADD COLUMN IF NOT EXISTS description text` added defensively because two historical migrations defined the table with different column sets,
+  - migration is idempotent via `ON CONFLICT (code) DO UPDATE`, safe to re-run.
+
 ### 2026-04-07 - Welbeing product presentation deck design
 - Status: completed
 - Owner: PM Agent

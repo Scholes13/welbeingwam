@@ -4,8 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Calendar, Camera, FileText, ChevronRight,
-  Dumbbell, Heart, Users, Wallet, Sparkles,
-  Clock, Flame,
+  Heart, Users, Wallet, Sparkles,
+  Clock,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -32,7 +32,7 @@ type ActivityDef = {
 type DimensionDef = {
   id: string
   name: string
-  icon: typeof Dumbbell
+  icon: typeof Heart
   color: string
   /** If true, calories field is shown and required */
   requiresCalories: boolean
@@ -41,77 +41,6 @@ type DimensionDef = {
 
 const WELLBEING_DIMENSIONS: DimensionDef[] = [
   {
-    id: 'physical',
-    name: 'Physical Wellbeing',
-    icon: Dumbbell,
-    color: 'orange',
-    requiresCalories: true,
-    activities: [
-      {
-        name: 'Werkudara Workout Fitness',
-        mandatory: true,
-        supportBy: 'werkudara',
-        rules: [
-          'Mengikuti sesuai jadwal olahraga',
-          'Durasi kegiatan 50 menit - 1 jam',
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-      {
-        name: 'Yoga',
-        mandatory: true,
-        supportBy: 'werkudara',
-        rules: [
-          'Mengikuti sesuai jadwal olahraga',
-          'Durasi kegiatan 45 menit - 1 jam',
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-      {
-        name: 'Badminton',
-        mandatory: false,
-        supportBy: 'werkudara',
-        rules: [
-          'Durasi kegiatan 1-3 jam',
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-      {
-        name: 'Mountaineering / Hiking',
-        mandatory: false,
-        supportBy: 'werkudara',
-        rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-      {
-        name: 'Treadmill',
-        mandatory: false,
-        supportBy: 'werkudara',
-        durationPresets: [
-          { label: '20 menit', minutes: 20 },
-          { label: '30 menit', minutes: 30 },
-          { label: '45 menit', minutes: 45 },
-          { label: '60 menit', minutes: 60 },
-        ],
-        rules: [
-          'Minimal kegiatan: treadmill selama 20 menit',
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-      {
-        name: 'Olahraga Sendiri',
-        mandatory: false,
-        supportBy: 'personal',
-        requiresDescription: true,
-        descriptionHint: 'Jelaskan jenis olahraga yang dilakukan',
-        rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-        ],
-      },
-    ],
-  },
-  {
     id: 'emotional',
     name: 'Emotional Wellbeing',
     icon: Heart,
@@ -119,22 +48,87 @@ const WELLBEING_DIMENSIONS: DimensionDef[] = [
     requiresCalories: false,
     activities: [
       {
-        name: 'Konsultasi / Konseling / Sharing Session Mental Health',
+        name: 'Konsultasi / Coaching / Mentoring',
         mandatory: false,
         supportBy: 'werkudara',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
         ],
       },
       {
-        name: 'Penyaluran Hobi / Minat dengan Aktivitas Sosial',
+        name: 'Menonton Film / Dokumenter (1,5-2,5 Jam)',
         mandatory: false,
         supportBy: 'personal',
         requiresDescription: true,
-        descriptionHint: 'Jelaskan kegiatan hobi/minat yang dilakukan',
+        descriptionHint: 'Buat rangkuman singkat dari film / dokumenter',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-          'Mengisi deskripsi kegiatan',
+          'Foto, screenshot, atau bukti partisipasi',
+          'Mengisi rangkuman kegiatan',
+        ],
+      },
+      {
+        name: 'Sharing Session',
+        mandatory: false,
+        supportBy: 'werkudara',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Seminar Mengenai Mental Health',
+        mandatory: false,
+        supportBy: 'werkudara',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Meditasi',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Membaca 1 Buku Fisik (Novel, Fiction, Action, Thriller, Biography, Komik)',
+        mandatory: false,
+        supportBy: 'personal',
+        requiresDescription: true,
+        descriptionHint: 'Buat rangkuman / review buku yang dibaca',
+        rules: [
+          'Foto cover & isi halaman buku',
+          'Mengisi rangkuman kegiatan',
+        ],
+      },
+      {
+        name: 'Membaca 1 Buku E-Book (Novel, Fiction, Action, Thriller, Biography, Komik)',
+        mandatory: false,
+        supportBy: 'personal',
+        requiresDescription: true,
+        descriptionHint: 'Buat rangkuman / review e-book yang dibaca',
+        rules: [
+          'Screenshot cover & beberapa halaman',
+          'Mengisi rangkuman kegiatan',
+        ],
+      },
+      {
+        name: 'Mendengarkan Podcast',
+        mandatory: false,
+        supportBy: 'personal',
+        requiresDescription: true,
+        descriptionHint: 'Buat rangkuman singkat podcast yang didengar',
+        rules: [
+          'Foto / screenshot bukti mendengarkan',
+          'Mengisi rangkuman kegiatan',
         ],
       },
     ],
@@ -147,31 +141,45 @@ const WELLBEING_DIMENSIONS: DimensionDef[] = [
     requiresCalories: false,
     activities: [
       {
-        name: 'Team Building / Gathering / WAM / Mid-Year Recharge / Internal Activities',
-        mandatory: true,
-        supportBy: 'werkudara',
-        rules: [
-          'Data check in aplikasi',
-        ],
-      },
-      {
-        name: 'Kegiatan Sosial Luar Kantor (CSR, Bakti Sosial, Arisan, dsb)',
+        name: 'Penyaluran Hobi / Minat Non Physical, Non Spiritual',
         mandatory: false,
         supportBy: 'personal',
         requiresDescription: true,
-        descriptionHint: 'Jelaskan kegiatan sosial yang dilakukan',
+        descriptionHint: 'Jelaskan kegiatan hobi / minat yang dilakukan',
         rules: [
-          'Terdapat foto dokumentasi kehadiran dan tanggal pelaksanaan',
-          'Kecuali arisan yang tidak ada kegiatan/setor uang',
+          'Foto, screenshot, atau bukti partisipasi',
           'Mengisi deskripsi kegiatan',
         ],
       },
       {
-        name: 'CSR',
-        mandatory: true,
-        supportBy: 'werkudara',
+        name: 'Donor Darah',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Kartu donor atau sertifikat',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
+          'Upload kartu donor atau sertifikat',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Buddy Program',
+        mandatory: false,
+        supportBy: 'werkudara',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Mengikuti Training Berkaitan dengan Hard Skills & Soft Skills',
+        mandatory: false,
+        supportBy: 'werkudara',
+        requiresDescription: true,
+        descriptionHint: 'Buat rangkuman mengenai materi training',
+        rules: [
+          'Sertifikat atau foto kegiatan',
+          'Mengisi rangkuman training',
         ],
       },
     ],
@@ -184,22 +192,74 @@ const WELLBEING_DIMENSIONS: DimensionDef[] = [
     requiresCalories: false,
     activities: [
       {
-        name: 'Program Tabungan atau Benefit Financial',
+        name: 'Membuka Tabungan Emas',
         mandatory: false,
         supportBy: 'personal',
+        descriptionHint: 'Screenshot / bukti transaksi',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
+          'Upload screenshot / bukti transaksi',
+          'Terdapat tanggal pelaksanaan',
         ],
       },
       {
-        name: 'Seminar / Edukasi Pengelolaan Keuangan dan Investasi',
-        mandatory: true,
-        supportBy: 'werkudara',
-        requiresDescription: true,
-        descriptionHint: 'Buat summary mengenai kegiatan yang dilaksanakan',
+        name: 'Membuka Tabungan Deposito',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Screenshot / bukti transaksi',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-          'Pembuatan summary mengenai kegiatan yang dilaksanakan',
+          'Upload screenshot / bukti transaksi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Membuka Tabungan Saham / Reksadana',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Screenshot / bukti transaksi',
+        rules: [
+          'Upload screenshot / bukti transaksi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Membuka Tabungan Crypto',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Screenshot / bukti transaksi',
+        rules: [
+          'Upload screenshot / bukti transaksi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Membuat Program Tabungan Tertentu',
+        mandatory: false,
+        supportBy: 'personal',
+        requiresDescription: true,
+        descriptionHint: 'Jelaskan program tabungan yang dibuat',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Mengisi deskripsi program',
+        ],
+      },
+      {
+        name: 'Membeli Asuransi (di Luar BPJS Kes / Ketenagakerjaan)',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Screenshot / bukti transaksi',
+        rules: [
+          'Upload screenshot / bukti transaksi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Mengikuti Koperasi (Membuka Tabungan / Mengikuti Kegiatan)',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
         ],
       },
     ],
@@ -212,15 +272,66 @@ const WELLBEING_DIMENSIONS: DimensionDef[] = [
     requiresCalories: false,
     activities: [
       {
-        name: 'Ibadah Tidak Wajib',
+        name: 'Mengikuti Kajian Rohani',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+          'Yang tidak terhitung: Muslim (Sholat 5 waktu, Sholat Jumat, Puasa Ramadhan), Kristen/Katholik (Ibadah Sabtu/Minggu, Natal, Paskah), Hindu (Purnama, Tilem, Galungan, Nyepi)',
+        ],
+      },
+      {
+        name: 'Pelayanan',
         mandatory: false,
         supportBy: 'personal',
         requiresDescription: true,
-        descriptionHint: 'Buat jurnaling mengenai kegiatan ibadah yang dilaksanakan',
+        descriptionHint: 'Jelaskan pelayanan yang dilakukan',
         rules: [
-          'Terdapat foto dokumentasi dan tanggal pelaksanaan',
-          'Pembuatan jurnaling mengenai kegiatan yang dilaksanakan',
-          'Yang tidak terhitung: Muslim (Sholat 5 waktu, Sholat Jumat, Puasa Ramadhan), Kristen/Katholik (Ibadah Sabtu/Minggu, Natal, Paskah), Hindu (Purnama, Tilem, Galungan, Nyepi)',
+          'Foto, screenshot, atau bukti partisipasi',
+          'Mengisi deskripsi pelayanan',
+        ],
+      },
+      {
+        name: 'Bakti Sosial',
+        mandatory: false,
+        supportBy: 'personal',
+        requiresDescription: true,
+        descriptionHint: 'Jelaskan kegiatan bakti sosial yang dilakukan',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Mengisi deskripsi kegiatan',
+        ],
+      },
+      {
+        name: 'Perayaan Hari Besar Keagamaan',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'Donasi',
+        mandatory: false,
+        supportBy: 'personal',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Upload bukti donasi',
+          'Terdapat tanggal pelaksanaan',
+        ],
+      },
+      {
+        name: 'CSR',
+        mandatory: false,
+        supportBy: 'werkudara',
+        descriptionHint: 'Foto, screenshot, atau bukti partisipasi',
+        rules: [
+          'Foto, screenshot, atau bukti partisipasi',
+          'Terdapat tanggal pelaksanaan',
         ],
       },
     ],
@@ -250,10 +361,9 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
   const [selectedDimension, setSelectedDimension] = useState<DimensionDef | null>(null)
   const [selectedActivity, setSelectedActivity] = useState<ActivityDef | null>(null)
   const [description, setDescription] = useState('')
-  const [proofFile, setProofFile] = useState<File | null>(null)
+  const [proofFiles, setProofFiles] = useState<File[]>([])
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [duration, setDuration] = useState('')
-  const [calories, setCalories] = useState('')
   const [loading, setLoading] = useState(false)
   const [dimensionDbId, setDimensionDbId] = useState<string | null>(null)
 
@@ -298,10 +408,9 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
     setSelectedDimension(null)
     setSelectedActivity(null)
     setDescription('')
-    setProofFile(null)
+    setProofFiles([])
     setDate(new Date().toISOString().split('T')[0])
     setDuration('')
-    setCalories('')
     setDimensionDbId(null)
   }
 
@@ -310,10 +419,10 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
     closeTimerRef.current = setTimeout(resetForm, 300)
   }
 
-  const uploadProof = async (file: File) => {
+  const uploadProof = async (file: File, index: number) => {
     const supabase = createSupabaseBrowserClient()
     const ext = file.name.split('.').pop() || 'jpg'
-    const path = `wellbeing-proofs/${date}/${Date.now()}.${ext}`
+    const path = `wellbeing-proofs/${date}/${Date.now()}-${index}.${ext}`
 
     const { data, error } = await supabase.storage
       .from('quest-proofs')
@@ -334,8 +443,7 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
   const canSubmit =
     !!selectedDimension &&
     !!selectedActivity &&
-    !!proofFile &&
-    (!isPhysical || Number(calories) > 0) &&
+    proofFiles.length > 0 &&
     (!needsDescription || description.trim().length > 0)
 
   const handleSubmit = async () => {
@@ -343,7 +451,7 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
 
     setLoading(true)
     try {
-      const proofUrl = await uploadProof(proofFile!)
+      const proofUrls = await Promise.all(proofFiles.map((file, i) => uploadProof(file, i)))
 
       const res = await fetch('/api/activities/create', {
         method: 'POST',
@@ -352,10 +460,11 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
           mode: 'sport',
           steps: 0,
           distance: 0,
-          calories: isPhysical ? Number(calories) : 0,
+          calories: 0,
           date,
           type: selectedActivity.name,
-          proof_url: proofUrl,
+          proof_url: proofUrls[0] ?? null,
+          proof_urls: proofUrls,
           moving_time: duration ? Number(duration) * 60 : 0,
           dimension_id: dimensionDbId,
           description,
@@ -572,28 +681,6 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
                   </div>
                 </div>
 
-                {/* Calories — only for Physical */}
-                {isPhysical && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
-                      Kalori *
-                    </label>
-                    <div className="relative">
-                      <Flame className="absolute left-3.5 top-3 text-gray-500 w-4 h-4" />
-                      <input
-                        type="number"
-                        value={calories}
-                        onChange={(e) => setCalories(e.target.value)}
-                        placeholder="contoh: 320"
-                        className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 pl-11 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
-                      />
-                    </div>
-                    <p className="mt-1 text-[11px] text-gray-600">
-                      Wajib diisi untuk kegiatan Physical Wellbeing.
-                    </p>
-                  </div>
-                )}
-
                 {/* Duration — preset buttons for Treadmill, free input for others */}
                 {selectedActivity.durationPresets ? (
                   <div>
@@ -664,23 +751,42 @@ export default function WellbeingActivityForm({ isOpen, onClose }: WellbeingActi
                   <label className="flex items-center gap-3 rounded-xl border border-dashed border-white/[0.1] bg-white/[0.02] px-4 py-3.5 text-sm text-gray-400 cursor-pointer hover:border-[#FC4C02]/30 hover:bg-white/[0.04] transition-all">
                     <Camera className="w-5 h-5 text-gray-500" />
                     <span className="truncate">
-                      {proofFile ? proofFile.name : 'Upload foto bukti kegiatan'}
+                      {proofFiles.length > 0
+                        ? `${proofFiles.length} foto dipilih — tap untuk tambah`
+                        : 'Upload foto bukti kegiatan (bisa lebih dari 1)'}
                     </span>
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       className="hidden"
-                      onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || [])
+                        if (files.length > 0) setProofFiles((prev) => [...prev, ...files])
+                        e.target.value = ''
+                      }}
                     />
                   </label>
-                  {proofFile && (
-                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={URL.createObjectURL(proofFile)}
-                        alt="Preview"
-                        className="w-full h-32 object-cover"
-                      />
+                  {proofFiles.length > 0 && (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {proofFiles.map((file, idx) => (
+                        <div key={`${file.name}-${idx}`} className="relative rounded-lg overflow-hidden border border-white/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Preview ${idx + 1}`}
+                            className="w-full h-20 object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setProofFiles((prev) => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none transition-colors"
+                            aria-label="Hapus foto"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

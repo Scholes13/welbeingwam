@@ -12,6 +12,7 @@ type CreateActivityPayload = {
   date?: string
   type?: string
   proof_url?: string | null
+  proof_urls?: string[] | null
   moving_time?: number
   dimension_id?: string | null
   description?: string | null
@@ -39,7 +40,17 @@ function buildActivityId(): number {
 
 export async function POST(request: Request) {
   try {
-    const { steps, distance, calories, date, type, mode, proof_url, moving_time, dimension_id, description } = (await request.json()) as CreateActivityPayload
+    const { steps, distance, calories, date, type, mode, proof_url, proof_urls, moving_time, dimension_id, description } = (await request.json()) as CreateActivityPayload
+
+    const proofUrlList = (() => {
+        const fromArray = Array.isArray(proof_urls)
+            ? proof_urls.filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+            : []
+        if (fromArray.length > 0) return fromArray
+        if (typeof proof_url === 'string' && proof_url.trim().length > 0) return [proof_url]
+        return []
+    })()
+    const primaryProofUrl = proofUrlList[0] ?? null
     const context = await getAuthProfileContext()
 
     if (!context) {
@@ -86,6 +97,28 @@ export async function POST(request: Request) {
         }
     }
 
+    // Compute activity_points so every saved entry awards points immediately.
+    //   - Sport with calories → 1:1 calories → points
+    //   - Daily "Steps" entry → 0 here; total points come from the steps aggregation
+    //   - Anything else → fixed lookup from `activity_types` (admin editable)
+    let activityPointsValue = 0
+    if (normalizedMode === 'sport' && calorieCount > 0) {
+        activityPointsValue = convertActivityPoints(calorieCount)
+    } else if (rawType) {
+        const { data: typeRow } = await supabase
+            .from('activity_types')
+            .select('points, requires_steps')
+            .eq('mode', normalizedMode)
+            .eq('name', rawType)
+            .eq('is_active', true)
+            .maybeSingle()
+
+        // Steps activity earns its points via step aggregation, not a fixed value.
+        if (typeRow && !typeRow.requires_steps) {
+            activityPointsValue = Math.max(0, Math.floor(toSafeNumber(typeRow.points)))
+        }
+    }
+
     // Insert Activity
     const { error } = await supabase
         .from('activities')
@@ -99,8 +132,9 @@ export async function POST(request: Request) {
             steps: normalizedMode === 'daily' ? stepCount : 0,
             mode: normalizedMode,
             calories: normalizedMode === 'sport' ? calorieCount : 0,
-            activity_points: normalizedMode === 'sport' ? convertActivityPoints(calorieCount) : 0,
-            proof_url: proof_url || null,
+            activity_points: activityPointsValue,
+            proof_url: primaryProofUrl,
+            proof_urls: proofUrlList,
             review_status: 'approved',
             review_reason: description || null,
             source: 'manual',

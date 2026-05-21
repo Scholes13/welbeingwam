@@ -135,16 +135,16 @@ export default function NotificationsPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-black text-white p-4 flex items-center justify-center">
+            <div className="min-h-screen bg-[#0A0A0A] text-white p-4 flex items-center justify-center">
                 <Loader2 className="animate-spin text-[#FC4C02]" size={32} />
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-black text-white pb-24">
+        <div className="min-h-screen bg-[#0A0A0A] text-white pb-32">
             {/* Header */}
-            <div className="fixed top-0 left-0 right-0 z-10 bg-black/80 backdrop-blur-md border-b border-white/10 p-4">
+            <div className="fixed top-0 left-0 right-0 z-10 bg-[#0A0A0A]/80 backdrop-blur-md border-b border-white/[0.06] p-4">
                 <div className="max-w-md mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Link href="/dashboard" className="p-2 -ml-2 hover:bg-white/5 rounded-full transition-colors">
@@ -172,7 +172,7 @@ export default function NotificationsPage() {
                         <motion.div
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="text-center py-12 text-gray-500 border border-dashed border-white/10 rounded-2xl"
+                            className="text-center py-12 text-gray-500 border border-dashed border-white/[0.12] rounded-2xl"
                         >
                             <Bell size={48} className="mx-auto mb-4 opacity-20" />
                             <p>No notifications yet</p>
@@ -186,15 +186,15 @@ export default function NotificationsPage() {
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, height: 0 }}
                                 className={`p-4 rounded-2xl border transition-colors ${notification.is_read
-                                    ? 'bg-[#1a1a1a] border-white/5 opacity-60'
-                                    : 'bg-[#1a1a1a] border-[#FC4C02]/30 shadow-[0_0_15px_-5px_#FC4C02]'
+                                    ? 'bg-[#111111] border-white/[0.06] opacity-70'
+                                    : 'bg-[#111111] border-[#FC4C02]/30 shadow-[0_0_15px_-5px_#FC4C02]'
                                     }`}
                             >
                                 <div className="flex gap-4">
                                     {/* Sender Avatar or Default Icon */}
                                     <div className="shrink-0 pt-1">
                                         {notification.sender ? (
-                                            <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10">
+                                            <div className="w-10 h-10 rounded-full overflow-hidden border border-white/[0.12]">
                                                 <img
                                                     src={notification.sender.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${notification.sender.username}`}
                                                     alt={notification.sender.username}
@@ -202,7 +202,7 @@ export default function NotificationsPage() {
                                                 />
                                             </div>
                                         ) : (
-                                            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+                                            <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/[0.12]">
                                                 <Bell size={18} className="text-[#FC4C02]" />
                                             </div>
                                         )}
@@ -222,7 +222,7 @@ export default function NotificationsPage() {
                                             {notification.message}
                                         </p>
 
-                                        <div className="flex justify-end gap-3 pt-2 border-t border-white/5">
+                                        <div className="flex justify-end gap-3 pt-2 border-t border-white/[0.06]">
                                             {notification.sender && (
                                                 <button
                                                     onClick={() => openReplyModal({ ...notification.sender, id: notification.sender_id })}
@@ -274,16 +274,20 @@ export default function NotificationsPage() {
                             </h3>
 
                             <div className="flex items-center gap-3 mb-4 p-3 bg-black/50 rounded-lg">
-                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
-                                    <img src={replyTarget.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} className="w-full h-full object-cover" />
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/[0.12]">
+                                    <img
+                                        src={replyTarget.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                                        alt={replyTarget.username || 'avatar'}
+                                        className="w-full h-full object-cover"
+                                    />
                                 </div>
-                                <p className="text-sm text-gray-400 line-clamp-2 italic">"{replyMessage || 'Writing reply...'}"</p>
+                                <p className="text-sm text-gray-400 line-clamp-2 italic">"{replyMessage || 'Tulis balasanmu di bawah...'}"</p>
                             </div>
 
                             <textarea
                                 value={replyMessage}
                                 onChange={(e) => setReplyMessage(e.target.value)}
-                                className="w-full bg-black border border-white/10 rounded-lg p-3 text-sm focus:border-[#FC4C02] outline-none mb-4 h-24 resize-none"
+                                className="w-full bg-black border border-white/[0.12] rounded-lg p-3 text-sm focus:border-[#FC4C02] outline-none mb-4 h-24 resize-none"
                                 placeholder="Type your reply..."
                                 autoFocus
                             />

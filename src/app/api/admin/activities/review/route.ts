@@ -41,6 +41,7 @@ export async function GET() {
         review_status,
         review_reason,
         proof_url,
+        proof_urls,
         source,
         dimension_id,
         created_at,

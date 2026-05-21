@@ -80,7 +80,7 @@ function PodiumCard({
             {cfg.crown && <span className="text-xl mb-0.5">👑</span>}
             <div className="relative">
                 <img
-                    src={entry.avatar_url || 'https://via.placeholder.com/150'}
+                    src={entry.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(entry.full_name || 'leader')}`}
                     alt={entry.full_name}
                     className={`rounded-full object-cover ${cfg.ring} ${rank === 1 ? 'w-16 h-16' : 'w-12 h-12'}`}
                 />
@@ -160,7 +160,9 @@ useEffect(() => {
     const isSteps      = selectedDimension === 'overall' && activeTab === 'steps'
     const unit         = isSteps ? 'steps' : 'pts'
     const top3         = sortedLeaders.slice(0, 3)
-    const rest         = sortedLeaders.slice(3)
+    const rest         = sortedLeaders.length >= 3 ? sortedLeaders.slice(3) : []
+    const fallbackAvatar = (name: string) =>
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name || 'leader')}`
 
     const activeDimLabel = selectedDimension === 'overall'
         ? 'All Dimensions'
@@ -170,7 +172,7 @@ useEffect(() => {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+            <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center p-6">
                 <div className="max-w-sm rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
                     <p className="text-sm font-semibold text-red-300">Failed to load leaderboard</p>
                     <p className="mt-2 text-sm text-red-200">
@@ -182,7 +184,7 @@ useEffect(() => {
     }
 
     return (
-        <div className="min-h-screen bg-black text-white pb-40">
+        <div className="min-h-screen bg-[#0A0A0A] text-white pb-40">
             {/* Ambient glow */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute -top-20 -right-20 w-72 h-72 bg-[#FC4C02] rounded-full mix-blend-screen blur-[90px] opacity-10" />
@@ -204,7 +206,7 @@ useEffect(() => {
                     <div className="relative" ref={dimRef}>
                         <button
                             onClick={() => setDimOpen(v => !v)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-gray-300 hover:bg-white/10 transition-all"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/[0.12] text-xs font-semibold text-gray-300 hover:bg-white/10 transition-all"
                         >
                             <svg className="w-3.5 h-3.5 text-[#FC4C02]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2M9 16h6" />
@@ -216,7 +218,7 @@ useEffect(() => {
                         </button>
 
                         {dimOpen && (
-                            <div className="absolute right-0 mt-2 w-52 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
+                            <div className="absolute right-0 mt-2 w-52 bg-[#111111] border border-white/[0.12] rounded-2xl shadow-2xl overflow-hidden z-50">
                                 <button
                                     onClick={() => { setSelectedDimension('overall'); setDimOpen(false) }}
                                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedDimension === 'overall' ? 'text-[#FC4C02] bg-[#FC4C02]/10' : 'text-gray-300 hover:bg-white/5'}`}
@@ -237,8 +239,8 @@ useEffect(() => {
                     </div>
                 </div>
 
-                {/* ── Podium ── */}
-                {top3.length === 3 && (
+                {/* ── Podium / Compact top list when fewer than 3 ── */}
+                {top3.length === 3 ? (
                     <div className="flex items-end gap-2 mb-6 px-2">
                         {([2, 1, 3] as (1|2|3)[]).map(rank => {
                             const entry = top3[rank - 1]
@@ -253,11 +255,52 @@ useEffect(() => {
                             )
                         })}
                     </div>
+                ) : top3.length > 0 ? (
+                    <div className="space-y-2 mb-6">
+                        {top3.map((entry, i) => {
+                            const rank = i + 1
+                            return (
+                                <div
+                                    key={entry.user_id}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-2xl border bg-white/[0.04] border-white/[0.06]"
+                                >
+                                    <span className="w-6 text-center text-xs font-bold text-[#FC4C02] flex-shrink-0">
+                                        {rank}
+                                    </span>
+                                    <img
+                                        src={entry.avatar_url || fallbackAvatar(entry.full_name)}
+                                        alt={entry.full_name}
+                                        className="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-1 ring-white/10"
+                                    />
+                                    <div className="flex-grow min-w-0">
+                                        <p className="text-sm font-bold text-white truncate leading-tight">{entry.full_name}</p>
+                                        {entry.instagram_username && (
+                                            <p className="text-[11px] text-gray-500 truncate">@{entry.instagram_username}</p>
+                                        )}
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                        <span className="text-sm font-mono font-extrabold text-white">{getPoints(entry).toLocaleString()}</span>
+                                        <span className="block text-[9px] text-gray-600 mt-0.5">{unit}</span>
+                                    </div>
+                                </div>
+                            )
+                        })}
+                        <p className="text-center text-[11px] text-gray-600 pt-2">
+                            Belum cukup peserta untuk memunculkan podium 3 besar.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-6 py-10 mb-6 text-center">
+                        <p className="text-sm font-semibold text-gray-300">Leaderboard masih kosong</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                            Selesaikan quest atau catat kegiatan untuk masuk ke papan peringkat.
+                        </p>
+                    </div>
                 )}
 
                 {/* ── Metric Tabs ── */}
                 {selectedDimension === 'overall' && (
-                    <div className="flex bg-white/5 rounded-full p-1 mb-5 border border-white/5">
+                    <div className="flex bg-white/5 rounded-full p-1 mb-5 border border-white/[0.06]">
                         {METRIC_TABS.map(t => (
                             <button
                                 key={t.key}
@@ -294,7 +337,7 @@ useEffect(() => {
                                     {rank}
                                 </span>
                                 <img
-                                    src={entry.avatar_url || 'https://via.placeholder.com/150'}
+                                    src={entry.avatar_url || fallbackAvatar(entry.full_name)}
                                     alt={entry.full_name}
                                     className={`w-9 h-9 rounded-full object-cover flex-shrink-0 ${isMe ? 'ring-2 ring-[#FC4C02]/60' : 'ring-1 ring-white/10'}`}
                                 />

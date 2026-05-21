@@ -68,7 +68,8 @@ export default function LoginForm() {
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="Username"
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
+                        className="w-full bg-white/5 border border-white/[0.12] rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
+                        aria-label="Username"
                     />
                 </div>
 
@@ -81,7 +82,8 @@ export default function LoginForm() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Password"
-                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
+                        className="w-full bg-white/5 border border-white/[0.12] rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02] focus:bg-white/10 transition-all font-medium"
+                        aria-label="Password"
                     />
                 </div>
 

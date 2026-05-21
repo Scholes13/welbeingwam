@@ -7,6 +7,7 @@ import { useToast } from '@/context/ToastContext'
 import Loader from '@/components/ui/Loader'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
+import { useFullscreenOverlay } from '@/context/OverlayContext'
 
 export default function RewardsSection() {
     const { rewards, rerollPrice, userStats, isLoading, mutate } = useRewards()
@@ -30,6 +31,9 @@ export default function RewardsSection() {
     const CLUE_REVEAL_PRICE = 200
 
     const { success, error } = useToast()
+
+    // Hide BottomNav while any fullscreen reward modal is open.
+    useFullscreenOverlay(showPreview || showBgPreview || showClueModal)
 
     // Auto-fetch handled by SWR
 
@@ -232,7 +236,13 @@ export default function RewardsSection() {
             {/* Reroll Modal */}
             <AnimatePresence>
                 {showPreview && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        key="reroll-modal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                    >
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -264,7 +274,7 @@ export default function RewardsSection() {
                                 <div className="flex items-center justify-center gap-4 mb-8">
                                     {/* Old Avatar */}
                                     <div className={`transition-opacity duration-500 ${isRerolling ? 'opacity-50 grayscale scale-90' : 'opacity-50 grayscale scale-75'}`}>
-                                        <div className="w-20 h-20 rounded-full bg-black border-2 border-white/10 overflow-hidden mx-auto mb-2">
+                                        <div className="w-20 h-20 rounded-full bg-black border-2 border-white/[0.12] overflow-hidden mx-auto mb-2">
                                             <img src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=default`} alt="Old" className="w-full h-full object-cover" />
                                         </div>
                                         <p className="text-xs text-gray-500 font-mono">CURRENT</p>
@@ -303,7 +313,7 @@ export default function RewardsSection() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             onClick={closeModal}
-                                            className="py-3 rounded-xl font-bold border border-white/10 hover:bg-white/5 transition-colors text-gray-400"
+                                            className="py-3 rounded-xl font-bold border border-white/[0.12] hover:bg-white/5 transition-colors text-gray-400"
                                         >
                                             Keep Old
                                         </button>
@@ -321,14 +331,20 @@ export default function RewardsSection() {
                                 )}
                             </div>
                         </motion.div>
-                    </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
             {/* Background Reroll Modal */}
             <AnimatePresence>
                 {showBgPreview && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        key="bg-reroll-modal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                    >
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -390,7 +406,7 @@ export default function RewardsSection() {
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             onClick={closeBgModal}
-                                            className="py-3 rounded-xl font-bold border border-white/10 hover:bg-white/5 transition-colors text-gray-400"
+                                            className="py-3 rounded-xl font-bold border border-white/[0.12] hover:bg-white/5 transition-colors text-gray-400"
                                         >
                                             Keep Old
                                         </button>
@@ -408,14 +424,20 @@ export default function RewardsSection() {
                                 )}
                             </div>
                         </motion.div>
-                    </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
             {/* Clue Reveal Modal */}
             <AnimatePresence>
                 {showClueModal && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <motion.div
+                        key="clue-modal"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+                    >
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -492,7 +514,7 @@ export default function RewardsSection() {
                                 )}
                             </div>
                         </motion.div>
-                    </div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 
@@ -597,10 +619,10 @@ export default function RewardsSection() {
                     <div
                         key={reward.id}
                         className={`relative bg-[#1a1a1a] border rounded-2xl overflow-hidden flex flex-col justify-between group
-                            ${reward.status === 'LOCKED' ? 'border-white/5 opacity-80'
+                            ${reward.status === 'LOCKED' ? 'border-white/[0.06] opacity-80'
                                 : reward.status === 'CLAIMED' ? 'border-green-500/50'
                                     : reward.status === 'SOLD_OUT' ? 'border-red-500/50 grayscale'
-                                        : 'border-white/10 hover:border-[#FC4C02] transition-colors'}
+                                        : 'border-white/[0.12] hover:border-[#FC4C02] transition-colors'}
                         `}
                     >
                         {/* Image / Icon Area */}
@@ -700,7 +722,7 @@ export default function RewardsSection() {
                     </div>
                 ))}
                 {rewards.length === 0 && (
-                    <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-8 text-center text-gray-500 text-sm">
+                    <div className="col-span-full border border-dashed border-white/[0.12] rounded-2xl p-8 text-center text-gray-500 text-sm">
                         No rewards available yet. Check back soon!
                     </div>
                 )}

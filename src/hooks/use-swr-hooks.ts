@@ -20,6 +20,7 @@ type ProfileActivity = {
     step_points?: number | null
     review_status?: string | null
     proof_url?: string | null
+    proof_urls?: string[] | null
     source?: string | null
 }
 

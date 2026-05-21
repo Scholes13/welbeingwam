@@ -1,5 +1,6 @@
 'use client'
 
+import { Loader2 } from 'lucide-react'
 import type { WellbeingFilterState, WellbeingPeriodKind } from '../types'
 import { WELLBEING_PERIOD_OPTIONS } from '../utils'
 
@@ -21,29 +22,20 @@ export function PeriodFilter({ isLoading = false, value, onChange }: PeriodFilte
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#111111] p-4 md:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#FC4C02]">Global Period</p>
-          <h2 className="mt-2 text-xl font-bold text-white">Wellbeing Window</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Semua widget overview mengikuti periode ini. Default monitoring tetap 30D.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-full bg-white/[0.04] p-1">
           {WELLBEING_PERIOD_OPTIONS.map((option) => {
             const isActive = option.value === value.period
-
             return (
               <button
                 key={option.value}
                 type="button"
                 onClick={() => updatePeriod(option.value)}
-                className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
                   isActive
-                    ? 'bg-[#FC4C02] text-white'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white'
+                    ? 'bg-[#FC4C02] text-white shadow-sm shadow-[#FC4C02]/20'
+                    : 'text-gray-400 hover:text-white'
                 }`}
               >
                 {option.label}
@@ -51,44 +43,42 @@ export function PeriodFilter({ isLoading = false, value, onChange }: PeriodFilte
             )
           })}
         </div>
+
+        {isLoading && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Memuat data...
+          </span>
+        )}
       </div>
 
       {value.period === 'Custom' && (
-        <div className="mt-4 grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="space-y-2 text-sm text-gray-300">
-            <span className="block text-xs font-bold uppercase tracking-[0.18em] text-gray-500">Start Date</span>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-xs text-gray-400">
+            <span className="mb-1 block uppercase tracking-wider text-gray-500">Mulai</span>
             <input
               type="date"
               value={value.startDate}
               onChange={(event) => onChange({ ...value, startDate: event.target.value })}
-              className="w-full rounded-xl border border-white/10 bg-[#0c0c0c] px-4 py-3 text-white outline-none transition-colors focus:border-[#FC4C02]"
+              className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#FC4C02]/50"
             />
           </label>
-
-          <label className="space-y-2 text-sm text-gray-300">
-            <span className="block text-xs font-bold uppercase tracking-[0.18em] text-gray-500">End Date</span>
+          <label className="text-xs text-gray-400">
+            <span className="mb-1 block uppercase tracking-wider text-gray-500">Selesai</span>
             <input
               type="date"
               value={value.endDate}
               onChange={(event) => onChange({ ...value, endDate: event.target.value })}
-              className="w-full rounded-xl border border-white/10 bg-[#0c0c0c] px-4 py-3 text-white outline-none transition-colors focus:border-[#FC4C02]"
+              className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#FC4C02]/50"
             />
           </label>
-
-          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-400">
-            {value.startDate && value.endDate
-              ? 'Custom range aktif dan dashboard akan refresh otomatis.'
-              : 'Lengkapi dua tanggal untuk mulai memuat overview custom.'}
-          </div>
+          {value.startDate && value.endDate ? null : (
+            <span className="self-center text-[11px] text-gray-500">
+              Lengkapi dua tanggal untuk memuat data.
+            </span>
+          )}
         </div>
       )}
-
-      <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-gray-500">
-        <span className="rounded-full border border-white/10 px-3 py-1 uppercase tracking-[0.16em]">
-          Dashboard Overview First
-        </span>
-        <span>{isLoading ? 'Refreshing wellbeing data...' : 'Click a user from the operational tables to open drilldown.'}</span>
-      </div>
-    </section>
+    </div>
   )
 }

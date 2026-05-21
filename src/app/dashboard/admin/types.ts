@@ -32,6 +32,7 @@ export type AdminSportSession = {
   activity_points: number | null
   has_calories?: boolean | null
   proof_url: string | null
+  proof_urls: string[] | null
   review_status: string | null
   review_reason: string | null
   source: string | null

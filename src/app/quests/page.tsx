@@ -79,7 +79,7 @@ export default function QuestsPage() {
         : dimensions.find(d => d.id === selectedDimension)?.display_name ?? '...'
 
     return (
-        <div className="min-h-screen bg-black text-white pb-32">
+        <div className="min-h-screen bg-[#0A0A0A] text-white pb-32">
             {/* Ambient */}
             <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
                 <div className="absolute -top-20 -right-20 w-72 h-72 bg-[#FC4C02] rounded-full mix-blend-screen blur-[90px] opacity-10" />
@@ -101,7 +101,7 @@ export default function QuestsPage() {
                     <div className="relative" ref={dimRef}>
                         <button
                             onClick={() => setDimOpen(v => !v)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-gray-300 hover:bg-white/10 transition-all"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/[0.12] text-xs font-semibold text-gray-300 hover:bg-white/10 transition-all"
                         >
                             <SlidersHorizontal size={13} className="text-[#FC4C02]" />
                             <span className="max-w-[90px] truncate">{activeDimLabel}</span>
@@ -109,7 +109,7 @@ export default function QuestsPage() {
                         </button>
 
                         {dimOpen && (
-                            <div className="absolute right-0 mt-2 w-52 bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
+                            <div className="absolute right-0 mt-2 w-52 bg-[#111111] border border-white/[0.12] rounded-2xl shadow-2xl overflow-hidden z-50">
                                 <button
                                     onClick={() => { setSelectedDimension('all'); setDimOpen(false) }}
                                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${selectedDimension === 'all' ? 'text-[#FC4C02] bg-[#FC4C02]/10' : 'text-gray-300 hover:bg-white/5'}`}

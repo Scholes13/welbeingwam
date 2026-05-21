@@ -43,6 +43,7 @@ import {
 import { applyCreateUserSuccess } from './components/createUserJourney'
 import { RewardsTab } from './components/RewardsTab'
 import { UsersTab } from './components/UsersTab'
+import { ActivityTypesTab } from './components/ActivityTypesTab'
 import { useUserSelection } from './hooks/useUserSelection'
 import type { AdminReward, AdminSportSession, AdminUser } from './types'
 
@@ -79,6 +80,7 @@ export default function AdminPage() {
         review_status: string
         review_reason: string | null
         proof_url: string | null
+        proof_urls: string[] | null
         source: string | null
         dimension_id: string | null
         created_at: string
@@ -87,6 +89,8 @@ export default function AdminPage() {
         dimension: { name: string; display_name: string } | null
     }
     const [pendingActivities, setPendingActivities] = useState<PendingActivity[]>([])
+    const [processedActivities, setProcessedActivities] = useState<PendingActivity[]>([])
+    const [auditView, setAuditView] = useState<'pending' | 'rejected'>('pending')
     const [reviewLoading, setReviewLoading] = useState(false)
     const [reviewPointInputs, setReviewPointInputs] = useState<Record<string, string>>({})
     const [reviewRejectReasons, setReviewRejectReasons] = useState<Record<string, string>>({})
@@ -510,6 +514,7 @@ export default function AdminPage() {
             const res = await fetch('/api/admin/activities/review')
             const data = await res.json()
             setPendingActivities(data.needs_points || [])
+            setProcessedActivities(data.processed || [])
         } catch (e) {
             console.error(e)
         } finally {
@@ -1844,26 +1849,24 @@ export default function AdminPage() {
                             </button>
                         </div>
 
-                        <div className="mb-8 rounded-2xl border border-white/10 bg-gradient-to-r from-[#121212] via-[#0f0f0f] to-[#141414] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.35)] md:p-6">
-                            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        {activeTab !== 'wellbeing' && (
+                        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                             <div>
-                                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.22em] text-[#FC4C02]">Admin Workspace</p>
-                                <h1 className="text-2xl font-bold md:text-3xl">{pageMeta.title}</h1>
-                                <p className="text-sm text-gray-400 md:text-base">{pageMeta.description}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Admin</p>
+                                <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{pageMeta.title}</h1>
+                                <p className="mt-1 text-sm text-gray-500">{pageMeta.description}</p>
                             </div>
                             {createLabel && (
                                 <button
                                     onClick={() => setIsModalOpen(true)}
-                                    className="w-full rounded-xl bg-[#FC4C02] px-6 py-3 font-bold text-white transition-colors hover:bg-orange-600 md:w-auto"
+                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#FC4C02] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-600"
                                 >
-                                    <span className="flex items-center justify-center gap-2">
-                                        <Plus size={20} />
-                                        Add {createLabel}
-                                    </span>
+                                    <Plus size={16} />
+                                    Add {createLabel}
                                 </button>
                             )}
-                            </div>
                         </div>
+                        )}
 
             {activeTab === 'wellbeing' && <WellbeingOverview />}
 
@@ -1967,17 +1970,51 @@ export default function AdminPage() {
                                 >
                                     <div className="grid gap-0 md:grid-cols-[220px,1fr]">
                                         <div className="border-b border-white/10 bg-black/40 md:border-b-0 md:border-r">
-                                            {session.proof_url ? (
-                                                <img
-                                                    src={session.proof_url}
-                                                    alt={session.name || 'Sport proof'}
-                                                    className="h-56 w-full object-cover md:h-full"
-                                                />
-                                            ) : (
-                                                <div className="flex h-56 items-center justify-center text-sm text-gray-600">
-                                                    No proof uploaded
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const urls = (Array.isArray(session.proof_urls) && session.proof_urls.length > 0)
+                                                    ? session.proof_urls
+                                                    : (session.proof_url ? [session.proof_url] : [])
+                                                if (urls.length === 0) {
+                                                    return (
+                                                        <div className="flex h-56 items-center justify-center text-sm text-gray-600">
+                                                            No proof uploaded
+                                                        </div>
+                                                    )
+                                                }
+                                                if (urls.length === 1) {
+                                                    return (
+                                                        <img
+                                                            src={urls[0]}
+                                                            alt={session.name || 'Sport proof'}
+                                                            className="h-56 w-full object-cover md:h-full"
+                                                        />
+                                                    )
+                                                }
+                                                return (
+                                                    <div className="grid grid-cols-2 gap-1 p-1 md:h-full">
+                                                        {urls.slice(0, 4).map((url, idx) => (
+                                                            <a
+                                                                key={`${url}-${idx}`}
+                                                                href={url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="relative block overflow-hidden rounded-md"
+                                                            >
+                                                                <img
+                                                                    src={url}
+                                                                    alt={`Proof ${idx + 1}`}
+                                                                    className="h-28 w-full object-cover md:h-full"
+                                                                />
+                                                                {idx === 3 && urls.length > 4 && (
+                                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-sm font-bold text-white">
+                                                                        +{urls.length - 4}
+                                                                    </div>
+                                                                )}
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )
+                                            })()}
                                         </div>
 
                                         <div className="space-y-4 p-5">
@@ -2040,16 +2077,21 @@ export default function AdminPage() {
                                             )}
 
                                             <div className="flex flex-wrap gap-3">
-                                                {session.proof_url && (
-                                                    <a
-                                                        href={session.proof_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
-                                                    >
-                                                        Open Proof
-                                                    </a>
-                                                )}
+                                                {(() => {
+                                                    const firstProof = (Array.isArray(session.proof_urls) && session.proof_urls.length > 0)
+                                                        ? session.proof_urls[0]
+                                                        : session.proof_url
+                                                    return firstProof ? (
+                                                        <a
+                                                            href={firstProof}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                                                        >
+                                                            Open Proof
+                                                        </a>
+                                                    ) : null
+                                                })()}
                                                 <button
                                                     onClick={() => handleVoidSportSession(session)}
                                                     disabled={isVoided || voidingSportSessionId === String(session.id)}
@@ -2074,6 +2116,8 @@ export default function AdminPage() {
             )}
 
             {activeTab === 'admins' && <ManageAdmins />}
+
+            {activeTab === 'activity-types' && <ActivityTypesTab />}
 
             {activeTab === 'templates' && (
                 <div className="space-y-6">
@@ -3005,11 +3049,29 @@ export default function AdminPage() {
             {activeTab === 'review' && (
                 <div className="space-y-6 pb-24">
                     <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-xl font-bold">Review Queue</h2>
-                            <span className="bg-yellow-500/20 text-yellow-400 px-2.5 py-1 rounded-full text-xs font-bold">
-                                {pendingActivities.length} kegiatan
-                            </span>
+                        <div className="inline-flex rounded-full bg-white/[0.04] p-1">
+                            <button
+                                type="button"
+                                onClick={() => setAuditView('pending')}
+                                className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                                    auditView === 'pending'
+                                        ? 'bg-[#FC4C02] text-white shadow-sm shadow-[#FC4C02]/20'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                Aktif ({pendingActivities.length})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAuditView('rejected')}
+                                className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                                    auditView === 'rejected'
+                                        ? 'bg-[#FC4C02] text-white shadow-sm shadow-[#FC4C02]/20'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                Riwayat Reject ({processedActivities.length})
+                            </button>
                         </div>
                         <button
                             onClick={fetchPendingActivities}
@@ -3020,20 +3082,33 @@ export default function AdminPage() {
                         </button>
                     </div>
 
-                    {reviewLoading && pendingActivities.length === 0 ? (
-                        <div className="text-center py-20 text-gray-500">
-                            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-                            <p>Memuat data...</p>
-                        </div>
-                    ) : pendingActivities.length === 0 ? (
-                        <div className="text-center py-20 text-gray-500 border border-dashed border-white/10 rounded-2xl">
-                            <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                            <p className="font-medium">Belum ada kegiatan yang disubmit</p>
-                            <p className="text-sm mt-1">Kegiatan dari karyawan akan muncul di sini</p>
-                        </div>
-                    ) : (
+                    {(() => {
+                        const list = auditView === 'pending' ? pendingActivities : processedActivities
+                        const emptyTitle = auditView === 'pending' ? 'Belum ada kegiatan aktif' : 'Belum ada kegiatan yang ditolak'
+                        const emptyHint = auditView === 'pending'
+                            ? 'Kegiatan baru dari karyawan akan otomatis muncul di sini.'
+                            : 'Kegiatan yang Anda tolak akan tercatat di sini sebagai audit trail.'
+
+                        if (reviewLoading && list.length === 0) {
+                            return (
+                                <div className="text-center py-20 text-gray-500">
+                                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+                                    <p>Memuat data...</p>
+                                </div>
+                            )
+                        }
+                        if (list.length === 0) {
+                            return (
+                                <div className="text-center py-20 text-gray-500 border border-dashed border-white/10 rounded-2xl">
+                                    <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                    <p className="font-medium">{emptyTitle}</p>
+                                    <p className="text-sm mt-1">{emptyHint}</p>
+                                </div>
+                            )
+                        }
+                        return (
                         <div className="space-y-4">
-                            {pendingActivities.map((activity) => {
+                            {list.map((activity) => {
                                 const aid = String(activity.id)
                                 const isActioning = reviewActionLoading === aid
                                 return (
@@ -3103,29 +3178,63 @@ export default function AdminPage() {
                                                 </div>
                                             )}
 
-                                            {/* Photo proof */}
-                                            {activity.proof_url && (
-                                                <div>
-                                                    <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-1.5">Foto Dokumentasi</p>
-                                                    <a href={activity.proof_url} target="_blank" rel="noopener noreferrer">
-                                                        <img
-                                                            src={activity.proof_url}
-                                                            alt="Proof"
-                                                            className="w-full max-w-sm h-48 object-cover rounded-xl border border-white/10 hover:border-[#FC4C02]/50 transition-colors cursor-pointer"
-                                                        />
-                                                    </a>
-                                                </div>
-                                            )}
+                                            {/* Photo proof — supports multiple images */}
+                                            {(() => {
+                                                const urls = (Array.isArray(activity.proof_urls) && activity.proof_urls.length > 0)
+                                                    ? activity.proof_urls
+                                                    : (activity.proof_url ? [activity.proof_url] : [])
+                                                if (urls.length === 0) return null
+                                                return (
+                                                    <div>
+                                                        <p className="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-1.5">
+                                                            Foto Dokumentasi {urls.length > 1 ? `(${urls.length})` : ''}
+                                                        </p>
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                            {urls.map((url, idx) => (
+                                                                <a key={`${url}-${idx}`} href={url} target="_blank" rel="noopener noreferrer">
+                                                                    <img
+                                                                        src={url}
+                                                                        alt={`Proof ${idx + 1}`}
+                                                                        className="w-full h-32 object-cover rounded-xl border border-white/10 hover:border-[#FC4C02]/50 transition-colors cursor-pointer"
+                                                                    />
+                                                                </a>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })()}
 
                                             {/* Action area */}
                                             <div className="border-t border-white/[0.06] pt-4 space-y-3">
                                                 {/* Poin yang sudah diberikan */}
                                                 {activity.activity_points != null && activity.activity_points > 0 && (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Poin:</span>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Poin saat ini:</span>
                                                         <span className="text-sm font-bold text-green-400">+{activity.activity_points}</span>
+                                                        <span className="text-[10px] text-gray-600">(otomatis dari CMS)</span>
                                                     </div>
                                                 )}
+
+                                                {/* Override poin */}
+                                                <div className="flex flex-col gap-2 sm:flex-row">
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={10000}
+                                                        value={reviewPointInputs[aid] ?? ''}
+                                                        onChange={(e) => setReviewPointInputs(prev => ({ ...prev, [aid]: e.target.value }))}
+                                                        placeholder="Override poin (kosongkan untuk pakai default)"
+                                                        className="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-lg py-2 px-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-white/20"
+                                                    />
+                                                    <button
+                                                        onClick={() => handleReviewAssignPoints(activity.id)}
+                                                        disabled={isActioning || !reviewPointInputs[aid]}
+                                                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-bold text-emerald-300 transition-colors hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    >
+                                                        {isActioning ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                                        Simpan Poin
+                                                    </button>
+                                                </div>
 
                                                 {/* Reject reason input */}
                                                 <input
@@ -3151,7 +3260,8 @@ export default function AdminPage() {
                                 )
                             })}
                         </div>
-                    )}
+                        )
+                    })()}
                 </div>
             )}
 

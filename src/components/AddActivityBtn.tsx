@@ -19,102 +19,101 @@ type Dimension = {
     display_name: string
 }
 
-/* Jenis kegiatan per dimensi sesuai Excel "JENIS WELLBEING" */
-type ActivityConfig = {
-    label: string
-    requiresSteps: boolean  // only for physical "Steps" activity
+type ActivityType = {
+    id: string
+    code: string
+    name: string
+    mode: ActivityMode
+    dimension_id: string | null
+    points: number
+    requires_steps: boolean
+    requires_calories: boolean
+    is_active: boolean
+    sort_order: number
 }
-
-const ACTIVITIES_BY_DIMENSION: Record<string, ActivityConfig[]> = {
-    physical: [
-        { label: 'Werkudara Workout Fitness', requiresSteps: false },
-        { label: 'Yoga', requiresSteps: false },
-        { label: 'Badminton', requiresSteps: false },
-        { label: 'Mountaineering / Hiking', requiresSteps: false },
-        { label: 'Treadmill', requiresSteps: false },
-        { label: 'Olahraga yang Dilakukan Sendiri', requiresSteps: false },
-        { label: 'Steps', requiresSteps: true },
-    ],
-    emotional: [
-        { label: 'Konsultasi / Konseling / Sharing Session Mental Health', requiresSteps: false },
-        { label: 'Penyaluran Hobi / Minat dengan Aktivitas Sosial', requiresSteps: false },
-    ],
-    social: [
-        { label: 'Team Building / Gathering / WAM / Internal Activities', requiresSteps: false },
-        { label: 'Kegiatan Sosial di Luar Kantor (CSR, Bakti Sosial, Arisan, dsb)', requiresSteps: false },
-        { label: 'CSR', requiresSteps: false },
-    ],
-    financial: [
-        { label: 'Program Tabungan atau Benefit Financial', requiresSteps: false },
-        { label: 'Seminar & Edukasi Pengelolaan Keuangan dan Investasi', requiresSteps: false },
-    ],
-    spiritual: [
-        { label: 'Ibadah Tidak Wajib', requiresSteps: false },
-    ],
-}
-
-const SPORT_OPTIONS = ['Running', 'Cycling', 'Swimming', 'Workout', 'Badminton', 'Futsal', 'Other']
 
 export default function AddActivityBtn() {
     const [isOpen, setIsOpen] = useState(false)
     const [mode, setMode] = useState<ActivityMode>('daily')
     const [steps, setSteps] = useState('')
     const [calories, setCalories] = useState('')
-    const [activityType, setActivityType] = useState(SPORT_OPTIONS[0])
-    const [proofFile, setProofFile] = useState<File | null>(null)
+    const [activityType, setActivityType] = useState('')
+    const [proofFiles, setProofFiles] = useState<File[]>([])
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
     const [description, setDescription] = useState('')
     const [loading, setLoading] = useState(false)
 
-    // Dimension & activity type state
+    // Dimension & activity type state — sourced from /api/activity-types (CMS)
     const [dimensions, setDimensions] = useState<Dimension[]>([])
+    const [activityTypes, setActivityTypes] = useState<ActivityType[]>([])
     const [selectedDimensionId, setSelectedDimensionId] = useState<string>('')
     const [selectedJenisKegiatan, setSelectedJenisKegiatan] = useState<string>('')
 
     const router = useRouter()
     const { success, error: toastError } = useToast()
 
-    // Fetch dimensions when modal opens
+    // Fetch dimensions + activity catalog when modal opens
     useEffect(() => {
-        if (!isOpen || dimensions.length > 0) return
-        fetchJson<{ dimensions?: Dimension[] }>('/api/dimensions')
-            .then((data) => {
-                const dims = data.dimensions || []
-                setDimensions(dims)
-                const physical = dims.find((d) => d.name === 'physical')
-                if (physical && !selectedDimensionId) {
-                    setSelectedDimensionId(physical.id)
-                    const activities = ACTIVITIES_BY_DIMENSION['physical'] || []
-                    setSelectedJenisKegiatan(activities[0]?.label || '')
-                }
-            })
-            .catch(() => {})
+        if (!isOpen) return
+        if (dimensions.length === 0) {
+            fetchJson<{ dimensions?: Dimension[] }>('/api/dimensions')
+                .then((data) => setDimensions(data.dimensions || []))
+                .catch(() => {})
+        }
+        if (activityTypes.length === 0) {
+            fetchJson<{ types?: ActivityType[] }>('/api/activity-types')
+                .then((data) => setActivityTypes(data.types || []))
+                .catch(() => {})
+        }
     }, [isOpen])
 
-    const selectedDimension = dimensions.find((d) => d.id === selectedDimensionId)
-    const jenisKegiatanOptions = ACTIVITIES_BY_DIMENSION[selectedDimension?.name || ''] || []
-    const selectedActivityConfig = jenisKegiatanOptions.find((a) => a.label === selectedJenisKegiatan)
+    // Default selections once both lists are ready
+    useEffect(() => {
+        if (!isOpen) return
+        if (dimensions.length > 0 && !selectedDimensionId) {
+            const physical = dimensions.find((d) => d.name === 'physical')
+            if (physical) setSelectedDimensionId(physical.id)
+        }
+        if (activityTypes.length > 0 && !activityType) {
+            const firstSport = activityTypes.find((t) => t.mode === 'sport')
+            if (firstSport) setActivityType(firstSport.name)
+        }
+    }, [isOpen, dimensions, activityTypes, selectedDimensionId, activityType])
+
+    const jenisKegiatanOptions = activityTypes.filter(
+        (t) => t.mode === 'daily' && t.dimension_id === selectedDimensionId,
+    )
+    const sportOptions = activityTypes.filter((t) => t.mode === 'sport')
+    const selectedActivityConfig = jenisKegiatanOptions.find((a) => a.name === selectedJenisKegiatan)
+
+    // Sync default jenisKegiatan when dimension changes / list arrives
+    useEffect(() => {
+        if (jenisKegiatanOptions.length === 0) {
+            if (selectedJenisKegiatan) setSelectedJenisKegiatan('')
+            return
+        }
+        const stillValid = jenisKegiatanOptions.some((a) => a.name === selectedJenisKegiatan)
+        if (!stillValid) setSelectedJenisKegiatan(jenisKegiatanOptions[0].name)
+    }, [jenisKegiatanOptions, selectedJenisKegiatan])
 
     const resetForm = () => {
         setMode('daily')
         setSteps('')
         setCalories('')
-        setActivityType(SPORT_OPTIONS[0])
-        setProofFile(null)
+        const firstSport = activityTypes.find((t) => t.mode === 'sport')
+        setActivityType(firstSport?.name || '')
+        setProofFiles([])
         setDescription('')
         setDate(new Date().toISOString().split('T')[0])
         const physical = dimensions.find((d) => d.name === 'physical')
-        if (physical) {
-            setSelectedDimensionId(physical.id)
-            const activities = ACTIVITIES_BY_DIMENSION['physical'] || []
-            setSelectedJenisKegiatan(activities[0]?.label || '')
-        }
+        if (physical) setSelectedDimensionId(physical.id)
+        // jenis kegiatan reset is handled by the sync effect
     }
 
-    const uploadProof = async (file: File) => {
+    const uploadProof = async (file: File, index: number) => {
         const supabase = createSupabaseBrowserClient()
         const ext = file.name.split('.').pop() || 'jpg'
-        const path = `activity-proofs/${date}/${Date.now()}.${ext}`
+        const path = `activity-proofs/${date}/${Date.now()}-${index}.${ext}`
 
         const { data, error } = await supabase.storage
             .from('quest-proofs')
@@ -130,29 +129,29 @@ export default function AddActivityBtn() {
     }
 
     const handleSubmit = async () => {
-        if (mode === 'daily' && !proofFile) return
-        if (mode === 'daily' && selectedActivityConfig?.requiresSteps && !steps) return
-        if (mode === 'sport' && (!calories || !proofFile)) return
+        if (mode === 'daily' && proofFiles.length === 0) return
+        if (mode === 'daily' && selectedActivityConfig?.requires_steps && !steps) return
+        if (mode === 'sport' && (!calories || proofFiles.length === 0)) return
 
         setLoading(true)
 
         try {
-            let proofUrl: string | null = null
-            if (proofFile) {
-                proofUrl = await uploadProof(proofFile)
-            }
+            const proofUrls = proofFiles.length > 0
+                ? await Promise.all(proofFiles.map((file, i) => uploadProof(file, i)))
+                : []
 
             const res = await fetch('/api/activities/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode,
-                    steps: selectedActivityConfig?.requiresSteps ? Number(steps || 0) : 0,
+                    steps: selectedActivityConfig?.requires_steps ? Number(steps || 0) : 0,
                     distance: 0,
                     calories: mode === 'sport' ? Number(calories) : 0,
                     date,
                     type: mode === 'sport' ? activityType : selectedJenisKegiatan || 'Daily Activity',
-                    proof_url: proofUrl,
+                    proof_url: proofUrls[0] ?? null,
+                    proof_urls: proofUrls,
                     dimension_id: mode === 'daily' ? selectedDimensionId || null : null,
                     description: description.trim() || null,
                 }),
@@ -269,9 +268,6 @@ export default function AddActivityBtn() {
                                                 value={selectedDimensionId}
                                                 onChange={(e) => {
                                                     setSelectedDimensionId(e.target.value)
-                                                    const dim = dimensions.find((d) => d.id === e.target.value)
-                                                    const activities = ACTIVITIES_BY_DIMENSION[dim?.name || ''] || []
-                                                    setSelectedJenisKegiatan(activities[0]?.label || '')
                                                     setDescription('')
                                                 }}
                                                 className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
@@ -290,14 +286,20 @@ export default function AddActivityBtn() {
                                                 onChange={(e) => { setSelectedJenisKegiatan(e.target.value); setDescription(''); setSteps('') }}
                                                 className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             >
-                                                {jenisKegiatanOptions.map((act) => (
-                                                    <option key={act.label} value={act.label} className="bg-[#1a1a1a] text-white">{act.label}</option>
-                                                ))}
+                                                {jenisKegiatanOptions.length === 0 ? (
+                                                    <option value="" className="bg-[#1a1a1a] text-white">— Tidak ada kegiatan —</option>
+                                                ) : (
+                                                    jenisKegiatanOptions.map((act) => (
+                                                        <option key={act.id} value={act.name} className="bg-[#1a1a1a] text-white">
+                                                            {act.name}
+                                                        </option>
+                                                    ))
+                                                )}
                                             </select>
                                         </div>
 
                                         {/* Steps — hanya muncul jika kegiatan "Steps" dipilih */}
-                                        {selectedActivityConfig?.requiresSteps && (
+                                        {selectedActivityConfig?.requires_steps && (
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Jumlah Langkah</label>
                                                 <input
@@ -323,22 +325,48 @@ export default function AddActivityBtn() {
                                             />
                                         </div>
 
-                                        {/* Foto Dokumentasi — selalu ada */}
+                                        {/* Foto Dokumentasi — selalu ada (multi-upload) */}
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Foto Dokumentasi</label>
                                             <label className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-white/[0.02] px-4 py-3.5 text-sm text-gray-400 cursor-pointer hover:border-[#FC4C02]/30 hover:bg-white/[0.04] transition-all">
-                                                <span className="truncate">{proofFile ? proofFile.name : 'Tap untuk upload foto'}</span>
+                                                <span className="truncate">
+                                                    {proofFiles.length > 0
+                                                        ? `${proofFiles.length} foto dipilih — tap untuk tambah`
+                                                        : 'Tap untuk upload foto (bisa lebih dari 1)'}
+                                                </span>
                                                 <input
                                                     type="file"
                                                     accept="image/*"
+                                                    multiple
                                                     className="hidden"
-                                                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                                                    onChange={(e) => {
+                                                        const files = Array.from(e.target.files || [])
+                                                        if (files.length > 0) setProofFiles((prev) => [...prev, ...files])
+                                                        e.target.value = ''
+                                                    }}
                                                 />
                                             </label>
-                                            {proofFile && (
-                                                <button type="button" onClick={() => setProofFile(null)} className="text-[11px] text-red-400 mt-1.5 hover:text-red-300">
-                                                    Hapus foto
-                                                </button>
+                                            {proofFiles.length > 0 && (
+                                                <div className="mt-2 grid grid-cols-3 gap-2">
+                                                    {proofFiles.map((file, idx) => (
+                                                        <div key={`${file.name}-${idx}`} className="relative rounded-lg overflow-hidden border border-white/10 group">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img
+                                                                src={URL.createObjectURL(file)}
+                                                                alt={`Preview ${idx + 1}`}
+                                                                className="w-full h-20 object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setProofFiles((prev) => prev.filter((_, i) => i !== idx))}
+                                                                className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none transition-colors"
+                                                                aria-label="Hapus foto"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
                                     </>
@@ -351,9 +379,13 @@ export default function AddActivityBtn() {
                                                 onChange={(e) => setActivityType(e.target.value)}
                                                 className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             >
-                                                {SPORT_OPTIONS.map((option) => (
-                                                    <option key={option} value={option} className="bg-[#1a1a1a] text-white">{option}</option>
-                                                ))}
+                                                {sportOptions.length === 0 ? (
+                                                    <option value="" className="bg-[#1a1a1a] text-white">— Tidak ada pilihan —</option>
+                                                ) : (
+                                                    sportOptions.map((option) => (
+                                                        <option key={option.id} value={option.name} className="bg-[#1a1a1a] text-white">{option.name}</option>
+                                                    ))
+                                                )}
                                             </select>
                                         </div>
 
@@ -372,14 +404,45 @@ export default function AddActivityBtn() {
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Photo Proof</label>
                                             <label className="flex items-center justify-center rounded-xl border border-dashed border-white/[0.1] bg-white/[0.02] px-4 py-3.5 text-sm text-gray-400 cursor-pointer hover:border-[#FC4C02]/30 hover:bg-white/[0.04] transition-all">
-                                                <span className="truncate">{proofFile ? proofFile.name : 'Tap to upload photo'}</span>
+                                                <span className="truncate">
+                                                    {proofFiles.length > 0
+                                                        ? `${proofFiles.length} photo(s) selected — tap to add more`
+                                                        : 'Tap to upload photo (multiple allowed)'}
+                                                </span>
                                                 <input
                                                     type="file"
                                                     accept="image/*"
+                                                    multiple
                                                     className="hidden"
-                                                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                                                    onChange={(e) => {
+                                                        const files = Array.from(e.target.files || [])
+                                                        if (files.length > 0) setProofFiles((prev) => [...prev, ...files])
+                                                        e.target.value = ''
+                                                    }}
                                                 />
                                             </label>
+                                            {proofFiles.length > 0 && (
+                                                <div className="mt-2 grid grid-cols-3 gap-2">
+                                                    {proofFiles.map((file, idx) => (
+                                                        <div key={`${file.name}-${idx}`} className="relative rounded-lg overflow-hidden border border-white/10">
+                                                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                            <img
+                                                                src={URL.createObjectURL(file)}
+                                                                alt={`Preview ${idx + 1}`}
+                                                                className="w-full h-20 object-cover"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setProofFiles((prev) => prev.filter((_, i) => i !== idx))}
+                                                                className="absolute top-1 right-1 bg-black/70 hover:bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none transition-colors"
+                                                                aria-label="Remove photo"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </>
                                 )}
@@ -387,8 +450,8 @@ export default function AddActivityBtn() {
                                 <button
                                     onClick={handleSubmit}
                                     disabled={loading || (mode === 'daily'
-                                        ? (!proofFile || (selectedActivityConfig?.requiresSteps && !steps))
-                                        : !calories || !proofFile)}
+                                        ? (proofFiles.length === 0 || !selectedJenisKegiatan || (selectedActivityConfig?.requires_steps && !steps))
+                                        : !calories || proofFiles.length === 0 || !activityType)}
                                     className="w-full bg-[#FC4C02] text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-all mt-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#FC4C02]/20 disabled:shadow-none"
                                 >
                                     {loading ? 'Saving...' : mode === 'sport' ? 'Save Sport Session' : 'Simpan Kegiatan'}

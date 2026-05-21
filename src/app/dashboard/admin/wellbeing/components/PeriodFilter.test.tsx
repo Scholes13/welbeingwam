@@ -27,8 +27,7 @@ describe('PeriodFilter', () => {
       />,
     )
 
-    expect(html).toContain('Start Date')
-    expect(html).toContain('End Date')
-    expect(html).toContain('Custom range aktif')
+    expect(html).toContain('Mulai')
+    expect(html).toContain('Selesai')
   })
 })

@@ -23,6 +23,7 @@ export async function GET() {
         activity_points,
         has_calories,
         proof_url,
+        proof_urls,
         review_status,
         review_reason,
         source,

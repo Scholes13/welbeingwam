@@ -201,14 +201,14 @@ export default function SettingsPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-black text-white">
+            <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A] text-white">
                 <Loader2 className="w-8 h-8 animate-spin text-[#FC4C02]" />
             </div>
         )
     }
 
     return (
-        <div className="min-h-screen bg-black text-white p-6 pb-32">
+        <div className="min-h-screen bg-[#0A0A0A] text-white p-6 pb-32">
             {/* Ambient Background */}
             <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[20%] right-[20%] w-[300px] h-[300px] bg-blue-900 rounded-full mix-blend-screen filter blur-[100px] opacity-10" />

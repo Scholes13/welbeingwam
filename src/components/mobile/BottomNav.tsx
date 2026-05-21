@@ -4,9 +4,11 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Home, Trophy, User, Gift, Target } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useOverlayState } from '@/context/OverlayContext'
 
 export default function BottomNav() {
     const pathname = usePathname()
+    const { isActive: overlayActive } = useOverlayState()
 
     const links = [
         { href: '/dashboard', label: 'Home', icon: Home },
@@ -16,11 +18,19 @@ export default function BottomNav() {
         { href: '/profile', label: 'Profile', icon: User },
     ]
 
-    // Don't show on login page, survey, doorprize, or admin dashboard
-    if (pathname === '/' || pathname?.startsWith('/survey') || pathname?.startsWith('/doorprize') || pathname === '/dashboard/admin') return null
+    // Don't show on login page, survey, doorprize, admin dashboard, or while a fullscreen overlay is active.
+    if (
+        pathname === '/' ||
+        pathname?.startsWith('/survey') ||
+        pathname?.startsWith('/doorprize') ||
+        pathname === '/dashboard/admin' ||
+        overlayActive
+    ) {
+        return null
+    }
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-50 pb-[env(safe-area-inset-bottom)]">
+        <div className="fixed bottom-0 left-0 right-0 z-40 pb-[env(safe-area-inset-bottom)]">
             <div className="bg-[#0A0A0A]/95 backdrop-blur-2xl border-t border-white/[0.06]">
                 <div className="mx-auto max-w-lg flex justify-around items-center px-2 pt-2 pb-3">
                     {links.map((link) => {

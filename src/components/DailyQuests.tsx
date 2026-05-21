@@ -288,7 +288,7 @@ export default function DailyQuests({ quests = [], userQuests = [], onClaim, sho
                                                         animate={{ opacity: 1 }}
                                                         exit={{ opacity: 0 }}
                                                     >
-                                                        {errorMessage ? 'Retry' : 'Done'}
+                                                        {errorMessage ? 'Retry' : 'Claim'}
                                                     </motion.span>
                                                 )}
                                             </AnimatePresence>

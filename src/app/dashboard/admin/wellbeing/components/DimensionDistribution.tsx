@@ -7,33 +7,26 @@ type DimensionDistributionProps = {
 
 export function DimensionDistribution({ items }: DimensionDistributionProps) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#111111] p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#FC4C02]">Dominant Dimensions</p>
-          <h3 className="mt-2 text-xl font-bold text-white">Where Users Are Leaning</h3>
-        </div>
-        <div className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-gray-500">
-          Overview
-        </div>
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h3 className="text-sm font-bold text-white">Where Users Are Leaning</h3>
+        <p className="text-[11px] text-gray-500">{items.length} dimensi</p>
       </div>
 
       {items.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-sm text-gray-500">
-          Belum ada distribusi wellbeing yang bisa dirangkum untuk periode ini.
-        </div>
+        <p className="text-sm text-gray-500">Belum ada distribusi yang bisa dirangkum untuk periode ini.</p>
       ) : (
-        <div className="mt-5 space-y-4">
+        <div className="space-y-3 rounded-2xl border border-white/[0.06] bg-[#0c0c0c] p-4">
           {items.map((item) => (
-            <div key={item.dimension} className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold text-white">{formatDimensionLabel(item.dimension)}</span>
-                <span className="text-gray-400">{item.userCount} users / {item.percentage}%</span>
+            <div key={item.dimension} className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-gray-200">{formatDimensionLabel(item.dimension)}</span>
+                <span className="tabular-nums text-gray-500">{item.userCount} users · {item.percentage}%</span>
               </div>
-              <div className="h-3 overflow-hidden rounded-full bg-white/5">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#FC4C02] to-orange-300"
-                  style={{ width: `${Math.max(item.percentage, 6)}%` }}
+                  className="h-full bg-gradient-to-r from-[#FC4C02] to-orange-300"
+                  style={{ width: `${Math.max(item.percentage, 4)}%` }}
                 />
               </div>
             </div>

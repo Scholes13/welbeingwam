@@ -10,6 +10,7 @@ import { useProfile } from '@/hooks/use-swr-hooks'
 import { useToast } from '@/context/ToastContext'
 import { Scanner } from '@yudiel/react-qr-scanner'
 import Loader from '@/components/ui/Loader'
+import { useFullscreenOverlay } from '@/context/OverlayContext'
 
 export default function ProfilePage() {
     const { profile, stats, totalPoints, coins, isLoading: loading, isError } = useProfile()
@@ -22,6 +23,9 @@ export default function ProfilePage() {
     const [userAwards, setUserAwards] = useState<any[]>([])
     const router = useRouter()
     const { success, error } = useToast()
+
+    // Hide BottomNav while any fullscreen overlay is open.
+    useFullscreenOverlay(isScannerOpen || !!scannedUser || showIdCard)
 
     const persistActivityScanMode = (mode: 'scan_in' | 'scan_out') => {
         setActivityScanMode(mode)
@@ -173,7 +177,7 @@ export default function ProfilePage() {
     if (!profile) return null
 
     return (
-        <div className="min-h-screen bg-black text-white p-4 pb-32">
+        <div className="min-h-screen bg-[#0A0A0A] text-white p-4 pb-32">
             {/* Ambient Background */}
             <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
                 <div className="absolute top-[-20%] left-[20%] w-[400px] h-[400px] bg-blue-900 rounded-full mix-blend-screen filter blur-[100px] opacity-20" />
@@ -205,8 +209,12 @@ export default function ProfilePage() {
                                 <button onClick={() => setScannedUser(null)} className="text-gray-400"><X size={20} /></button>
                             </div>
                             <div className="flex items-center gap-3 mb-4 p-3 bg-black/50 rounded-lg">
-                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/20">
-                                    <img src={scannedUser.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} className="w-full h-full object-cover" />
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/[0.12]">
+                                    <img
+                                        src={scannedUser.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                                        alt={scannedUser.username || 'avatar'}
+                                        className="w-full h-full object-cover"
+                                    />
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm">@{scannedUser.username}</p>
@@ -216,7 +224,7 @@ export default function ProfilePage() {
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
-                                className="w-full bg-black border border-white/10 rounded-lg p-3 text-sm focus:border-[#FC4C02] outline-none mb-4 h-24 resize-none"
+                                className="w-full bg-black border border-white/[0.12] rounded-lg p-3 text-sm focus:border-[#FC4C02] outline-none mb-4 h-24 resize-none"
                                 placeholder="Type your message..."
                             />
                             <button
@@ -253,7 +261,7 @@ export default function ProfilePage() {
                     <div className="flex gap-2 relative">
                         <button
                             onClick={() => setIsScannerOpen(true)}
-                            className="px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10 flex items-center gap-2"
+                            className="px-3 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/[0.12] flex items-center gap-2"
                         >
                             <Scan size={20} className="text-[#FC4C02]" />
                             <span className="text-[11px] font-bold uppercase tracking-wider text-gray-300">
@@ -261,7 +269,7 @@ export default function ProfilePage() {
                             </span>
                         </button>
 
-                        <Link href="/profile/settings" className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/10">
+                        <Link href="/profile/settings" className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors border border-white/[0.12]">
                             <Settings size={20} className="text-gray-400" />
                         </Link>
                     </div>
@@ -292,12 +300,12 @@ export default function ProfilePage() {
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 gap-4 mb-8">
-                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
+                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/[0.06] p-5 rounded-2xl flex flex-col items-center justify-center text-center">
                         <Footprints className="w-6 h-6 text-[#FC4C02] mb-2" />
                         <span className="text-2xl font-bold font-mono">{stats.steps.toLocaleString()}</span>
                         <span className="text-xs text-gray-500 uppercase">Steps</span>
                     </div>
-                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/5 p-5 rounded-2xl flex flex-col items-center justify-center text-center">
+                    <div className="bg-gray-900/50 backdrop-blur-md border border-white/[0.06] p-5 rounded-2xl flex flex-col items-center justify-center text-center">
                         <Trophy className="w-6 h-6 text-yellow-500 mb-2" />
                         <span className="text-2xl font-bold font-mono">{totalPoints.toLocaleString()}</span>
                         <span className="text-xs text-gray-500 uppercase">Total Points</span>
@@ -325,12 +333,12 @@ export default function ProfilePage() {
 
                 {/* Menu */}
                 <div className="space-y-3">
-                    <div className="bg-gray-900/30 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden">
+                    <div className="bg-gray-900/30 backdrop-blur-md border border-white/[0.06] rounded-2xl overflow-hidden">
 
                         {/* ID Card Button */}
                         <button
                             onClick={() => setShowIdCard(true)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5"
+                            className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/[0.06]"
                         >
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
@@ -341,7 +349,7 @@ export default function ProfilePage() {
                             <span className="text-gray-500">→</span>
                         </button>
 
-                        <Link href="/profile/settings" className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5">
+                        <Link href="/profile/settings" className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/[0.06]">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
                                     <Settings className="w-5 h-5" />
@@ -414,7 +422,7 @@ export default function ProfilePage() {
                         <div className="relative flex flex-col items-center">
                             <div className="bg-white p-1.5 rounded-full mb-4 shadow-lg mt-8">
                                 <img
-                                    src={profile.profile || undefined}
+                                    src={profile.avatar_url || undefined}
                                     alt={String(profile.username || '')}
                                     className="w-20 h-20 rounded-full object-cover border-4 border-white"
                                 />
