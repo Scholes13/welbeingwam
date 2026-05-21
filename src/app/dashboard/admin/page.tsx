@@ -45,6 +45,7 @@ import { RewardsTab } from './components/RewardsTab'
 import { UsersTab } from './components/UsersTab'
 import { ActivityTypesTab } from './components/ActivityTypesTab'
 import { ExportsTab } from './components/ExportsTab'
+import { ImportTab } from './components/ImportTab'
 import { useUserSelection } from './hooks/useUserSelection'
 import type { AdminReward, AdminSportSession, AdminUser } from './types'
 
@@ -2120,6 +2121,7 @@ export default function AdminPage() {
 
             {activeTab === 'activity-types' && <ActivityTypesTab />}
             {activeTab === 'exports' && <ExportsTab />}
+            {activeTab === 'imports' && <ImportTab />}
 
             {activeTab === 'templates' && (
                 <div className="space-y-6">

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Download, Dumbbell, FileText, Flame, Gift, MapPin, Settings2, Shield, User } from 'lucide-react'
+import { BarChart2, Calendar, ClipboardCheck, ClipboardList, Download, Dumbbell, FileText, Flame, Gift, MapPin, Settings2, Shield, Upload, User } from 'lucide-react'
 
 export type AdminTab =
   | 'users'
@@ -17,6 +17,7 @@ export type AdminTab =
   | 'review'
   | 'activity-types'
   | 'exports'
+  | 'imports'
 
 export type AdminTabConfig = {
   key: AdminTab
@@ -41,6 +42,7 @@ export const ADMIN_TAB_CONFIG: AdminTabConfig[] = [
   { key: 'review', label: 'Audit Poin', group: 'management', Icon: ClipboardCheck },
   { key: 'activity-types', label: 'Activity CMS', group: 'management', Icon: Settings2 },
   { key: 'exports', label: 'Export Data', group: 'system', Icon: Download },
+  { key: 'imports', label: 'Import Data', group: 'system', Icon: Upload },
 ]
 
 type AdminPageMeta = {
@@ -126,6 +128,10 @@ const PAGE_META: Record<AdminTab, AdminPageMeta> = {
   exports: {
     title: 'Export Data',
     description: 'Backup snapshot leaderboard, users, activities, point adjustments, dan coin transactions ke file CSV.',
+  },
+  imports: {
+    title: 'Import Data',
+    description: 'Bulk update points dan coins user dari file CSV (mode OVERRIDE: nilai di CSV jadi target absolut).',
   },
 }
 
