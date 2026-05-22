@@ -116,6 +116,72 @@ describe('POST /api/admin/users/create', () => {
     expect(createUser).not.toHaveBeenCalled()
   })
 
+  it('reuses an orphan auth user when canonical email already exists without a profile', async () => {
+    const updateEq = vi.fn().mockResolvedValue({ error: null })
+    const insert = vi.fn().mockResolvedValue({ error: null })
+    const ilike = vi.fn().mockReturnValue({
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    })
+
+    const from = vi.fn((table: string) => {
+      if (table !== 'profiles') throw new Error(`Unexpected table ${table}`)
+
+      return {
+        select: vi.fn().mockReturnValue({ ilike }),
+        update: vi.fn().mockReturnValue({ eq: updateEq }),
+        insert,
+      }
+    })
+    const createUser = vi.fn().mockResolvedValue({
+      data: { user: null },
+      error: { message: 'A user with this email address has already been registered' },
+    })
+    const listUsers = vi.fn().mockResolvedValue({
+      data: {
+        users: [
+          {
+            id: 'existing-auth-id',
+            email: 'tyo@werkudara.com',
+          },
+        ],
+      },
+      error: null,
+    })
+
+    createSupabaseAdminClientMock.mockReturnValue({
+      from,
+      auth: {
+        admin: {
+          createUser,
+          listUsers,
+          deleteUser: vi.fn().mockResolvedValue({ error: null }),
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost:3000/api/admin/users/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: 'Tyo',
+          password: 'werkudara88',
+          fullName: 'Tyo',
+          gender: 'male',
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(200)
+    expect(listUsers).toHaveBeenCalled()
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auth_user_id: 'existing-auth-id',
+        username: 'tyo',
+        full_name: 'Tyo',
+      }),
+    )
+  })
+
   it('keeps the auth signup trigger compatible with bigint profile ids', () => {
     const migration = readFileSync(
       join(process.cwd(), 'supabase/migrations/20260401002000_fix_auth_signup_trigger_bigint_profiles.sql'),

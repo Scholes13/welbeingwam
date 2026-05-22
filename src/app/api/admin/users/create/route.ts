@@ -7,6 +7,19 @@ function generateProfileId() {
     return -(Date.now() + Math.floor(Math.random() * 1000))
 }
 
+async function findAuthUserByEmail(
+    supabase: ReturnType<typeof createSupabaseAdminClient>,
+    email: string,
+) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    if (error) {
+        console.error('Auth list users error:', error)
+        return null
+    }
+
+    return data.users.find((user) => user.email?.toLowerCase() === email.toLowerCase()) ?? null
+}
+
 export async function POST(request: Request) {
   try {
     const { authorized } = await verifyAdminPermission('manage_users')
@@ -42,7 +55,16 @@ export async function POST(request: Request) {
         user_metadata: { username: normalizedUsername, full_name: fullName || username }
     })
 
-    if (authError || !authUser.user) {
+    let authUserId = authUser.user?.id ?? null
+
+    if (authError || !authUserId) {
+        const existingAuthUser = await findAuthUserByEmail(supabase, email)
+        if (existingAuthUser) {
+            authUserId = existingAuthUser.id
+        }
+    }
+
+    if (!authUserId) {
         console.error('Auth create error:', authError)
         return NextResponse.json({ error: 'Failed to create auth user' }, { status: 500 })
     }
@@ -72,22 +94,36 @@ export async function POST(request: Request) {
     // Create profile linked to auth user
     // Use upsert because the `on_auth_user_created` trigger may have already
     // inserted a skeleton profile row when the auth user was created above.
-    const { error } = await supabase
-        .from('profiles')
-        .update({
-            username: normalizedUsername,
-            full_name: fullName || username,
-            avatar_url: avatarUrl,
-            gender: gender || null,
-            is_manual: true,
-            access_code: `CODE-${Math.floor(Math.random() * 9000) + 1000}`
-        })
-        .eq('auth_user_id', authUser.user.id)
+    const profilePayload = {
+        username: normalizedUsername,
+        full_name: fullName || username,
+        avatar_url: avatarUrl,
+        gender: gender || null,
+        is_manual: true,
+        access_code: `CODE-${Math.floor(Math.random() * 9000) + 1000}`
+    }
+
+    const profileWrite = authUser.user
+        ? supabase
+            .from('profiles')
+            .update(profilePayload)
+            .eq('auth_user_id', authUserId)
+        : supabase
+            .from('profiles')
+            .insert({
+                id: generateProfileId(),
+                auth_user_id: authUserId,
+                ...profilePayload,
+            })
+
+    const { error } = await profileWrite
 
     if (error) {
         console.error('Create User Error:', error)
         // Cleanup: delete auth user if profile creation fails
-        await supabase.auth.admin.deleteUser(authUser.user.id)
+        if (authUser.user) {
+            await supabase.auth.admin.deleteUser(authUserId)
+        }
         return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
     }
 
