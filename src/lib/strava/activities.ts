@@ -6,6 +6,7 @@ import {
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 import {
   getStravaActivitiesNeedingDetail,
+  getStravaActivitiesSinceCutoff,
   hasStoredStravaConnection,
   mergeStravaActivity,
   resolveStravaSyncCooldown,
@@ -100,7 +101,9 @@ export async function syncStravaActivities(input: {
   }
 
   const stravaProfile = profileResult.status === 'fulfilled' ? profileResult.value : null
-  const summaries = Array.isArray(summariesResult.value) ? summariesResult.value : []
+  const summaries = Array.isArray(summariesResult.value)
+    ? getStravaActivitiesSinceCutoff(summariesResult.value)
+    : []
   const externalIds = summaries.map((summary) => String(summary.id))
 
   let existingActivities: ExistingStravaActivityRow[] = []

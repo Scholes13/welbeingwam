@@ -1,6 +1,7 @@
 type NullableDateInput = string | Date | null | undefined
 
 export const DEFAULT_STRAVA_SYNC_COOLDOWN_MINUTES = 15
+export const STRAVA_ACTIVITY_SYNC_CUTOFF_ISO = '2026-05-22T08:00:00.000Z'
 
 type StravaProfileTokens = {
   strava_access_token?: string | null
@@ -71,6 +72,15 @@ function toCalories(...values: Array<number | null | undefined>): number {
   }
 
   return 0
+}
+
+export function getStravaActivitiesSinceCutoff(summaries: StravaActivitySummary[]): StravaActivitySummary[] {
+  const cutoffTime = new Date(STRAVA_ACTIVITY_SYNC_CUTOFF_ISO).getTime()
+
+  return summaries.filter((summary) => {
+    const startTime = toDate(summary.start_date)?.getTime()
+    return typeof startTime === 'number' && startTime >= cutoffTime
+  })
 }
 
 export function getStoredStravaAccessToken(profile: StravaProfileTokens): string | null {

@@ -4,6 +4,7 @@ import {
   buildStravaProfileUpdate,
   buildStravaDisconnectUpdate,
   getStravaActivitiesNeedingDetail,
+  getStravaActivitiesSinceCutoff,
   getStoredStravaAccessToken,
   getStoredStravaExpiresAt,
   getStoredStravaRefreshToken,
@@ -131,6 +132,19 @@ describe('getStravaActivitiesNeedingDetail', () => {
         { external_id: '2', has_calories: false, last_synced_at: '2026-03-11T02:10:00Z' },
       ],
     })
+
+    expect(result.map((activity) => activity.id)).toEqual([2, 3])
+  })
+})
+
+describe('getStravaActivitiesSinceCutoff', () => {
+  it('keeps only Strava activities starting at or after 22 May 2026 15:00 WIB', () => {
+    const result = getStravaActivitiesSinceCutoff([
+      { id: 1, name: 'Before cutoff', type: 'Run', distance: 1000, moving_time: 600, start_date: '2026-05-22T07:59:59Z' },
+      { id: 2, name: 'At cutoff', type: 'Run', distance: 1000, moving_time: 600, start_date: '2026-05-22T08:00:00Z' },
+      { id: 3, name: 'After cutoff', type: 'Run', distance: 1000, moving_time: 600, start_date: '2026-05-22T08:00:01Z' },
+      { id: 4, name: 'Invalid date', type: 'Run', distance: 1000, moving_time: 600, start_date: 'not-a-date' },
+    ])
 
     expect(result.map((activity) => activity.id)).toEqual([2, 3])
   })
