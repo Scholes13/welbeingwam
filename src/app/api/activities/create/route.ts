@@ -16,6 +16,7 @@ type CreateActivityPayload = {
   moving_time?: number
   dimension_id?: string | null
   description?: string | null
+  custom_name?: string | null
 }
 
 async function getPhysicalDimensionId() {
@@ -40,7 +41,7 @@ function buildActivityId(): number {
 
 export async function POST(request: Request) {
   try {
-    const { steps, distance, calories, date, type, mode, proof_url, proof_urls, moving_time, dimension_id, description } = (await request.json()) as CreateActivityPayload
+    const { steps, distance, calories, date, type, mode, proof_url, proof_urls, moving_time, dimension_id, description, custom_name } = (await request.json()) as CreateActivityPayload
 
     const proofUrlList = (() => {
         const fromArray = Array.isArray(proof_urls)
@@ -62,9 +63,10 @@ export async function POST(request: Request) {
     const stepCount = Math.max(0, Math.floor(toSafeNumber(steps)))
     const distanceMeters = Math.max(0, toSafeNumber(distance))
     const calorieCount = Math.max(0, Math.floor(toSafeNumber(calories)))
-	    const rawType = String(type || '').trim()
-	    const activityType = rawType || 'Manual'
+    const rawType = String(type || '').trim()
+    const activityType = rawType || 'Manual'
     const activityDate = String(date || '').trim()
+    const customName = typeof custom_name === 'string' ? custom_name.trim().slice(0, 200) : ''
 
     if (!activityDate) {
         return NextResponse.json({ error: 'Date is required' }, { status: 400 })
@@ -86,9 +88,9 @@ export async function POST(request: Request) {
     // (e.g., Team Building / Gathering uses app check-in data)
 
     if (normalizedMode === 'sport') {
-	        if (!rawType) {
-	            return NextResponse.json({ error: 'Activity type is required for sport session' }, { status: 400 })
-	        }
+        if (!rawType) {
+            return NextResponse.json({ error: 'Activity type is required for sport session' }, { status: 400 })
+        }
 
         if (!isDowngradeMode()) {
             if (calorieCount <= 0) {
@@ -101,30 +103,67 @@ export async function POST(request: Request) {
     //   - Sport with calories → 1:1 calories → points
     //   - Daily "Steps" entry → 0 here; total points come from the steps aggregation
     //   - Anything else → fixed lookup from `activity_types` (admin editable)
+    //
+    // Daily lookups are scoped by dimension_id so that custom-input rows that
+    // share the display name "Lainnya" across dimensions resolve to the right
+    // points value (and is_custom_input flag).
     let activityPointsValue = 0
+    let isCustomInput = false
     if (normalizedMode === 'sport' && calorieCount > 0) {
         activityPointsValue = convertActivityPoints(calorieCount)
-    } else if (rawType) {
-        const { data: typeRow } = await supabase
+    }
+
+    if (rawType) {
+        let typeQuery = supabase
             .from('activity_types')
-            .select('points, requires_steps')
+            .select('points, requires_steps, is_custom_input, dimension_id')
             .eq('mode', normalizedMode)
             .eq('name', rawType)
             .eq('is_active', true)
-            .maybeSingle()
+
+        if (normalizedMode === 'daily' && dimension_id) {
+            typeQuery = typeQuery.eq('dimension_id', dimension_id)
+        }
+
+        const { data: typeRow } = await typeQuery.maybeSingle()
 
         // Steps activity earns its points via step aggregation, not a fixed value.
         if (typeRow && !typeRow.requires_steps) {
-            activityPointsValue = Math.max(0, Math.floor(toSafeNumber(typeRow.points)))
+            if (normalizedMode !== 'sport') {
+                activityPointsValue = Math.max(0, Math.floor(toSafeNumber(typeRow.points)))
+            }
         }
+        isCustomInput = Boolean(typeRow?.is_custom_input)
     }
+
+    if (normalizedMode === 'sport' && rawType.toLowerCase() === 'other') {
+        isCustomInput = true
+    }
+
+    if (isCustomInput && !customName) {
+        const label = normalizedMode === 'sport' ? 'olahraga' : 'kegiatan'
+        const option = normalizedMode === 'sport' ? 'Other' : 'Lainnya'
+        return NextResponse.json({ error: `Nama ${label} wajib diisi untuk pilihan ${option}` }, { status: 400 })
+    }
+
+    const displayName = isCustomInput && customName ? customName : (rawType || 'Daily Activity')
+
+    // Daily custom-input activities ("Lainnya"): admin must verify and assign points.
+    // We park those rows as pending with 0 points so they show up in:
+    //   - Recent Activity feed (badge: pending)
+    //   - Admin review queue
+    // Final points + approval/rejection happen via /api/admin/activities/review
+    // which also creates a notification for the user.
+    const requiresAdminReview = normalizedMode === 'daily' && isCustomInput
+    const reviewStatus: 'pending' | 'approved' = requiresAdminReview ? 'pending' : 'approved'
+    const insertedPoints = requiresAdminReview ? 0 : activityPointsValue
 
     // Insert Activity
     const { error } = await supabase
         .from('activities')
         .insert({
             user_id: userId,
-            name: rawType || 'Daily Activity',
+            name: displayName,
             distance: distanceMeters,
             moving_time: normalizedMode === 'sport' ? Math.max(0, Math.floor(toSafeNumber(moving_time))) : 0,
             type: activityType,
@@ -132,11 +171,12 @@ export async function POST(request: Request) {
             steps: normalizedMode === 'daily' ? stepCount : 0,
             mode: normalizedMode,
             calories: normalizedMode === 'sport' ? calorieCount : 0,
-            activity_points: activityPointsValue,
+            activity_points: insertedPoints,
             proof_url: primaryProofUrl,
             proof_urls: proofUrlList,
-            review_status: 'approved',
+            review_status: reviewStatus,
             review_reason: description || null,
+            custom_name: isCustomInput && customName ? customName : null,
             source: 'manual',
             dimension_id: dimension_id || physicalDimensionId,
             id: buildActivityId()

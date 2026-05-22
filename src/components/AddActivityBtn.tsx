@@ -28,6 +28,7 @@ type ActivityType = {
     points: number
     requires_steps: boolean
     requires_calories: boolean
+    is_custom_input: boolean
     is_active: boolean
     sort_order: number
 }
@@ -41,6 +42,7 @@ export default function AddActivityBtn() {
     const [proofFiles, setProofFiles] = useState<File[]>([])
     const [date, setDate] = useState(new Date().toISOString().split('T')[0])
     const [description, setDescription] = useState('')
+    const [customName, setCustomName] = useState('')
     const [loading, setLoading] = useState(false)
 
     // Dimension & activity type state — sourced from /api/activity-types (CMS)
@@ -85,6 +87,8 @@ export default function AddActivityBtn() {
     )
     const sportOptions = activityTypes.filter((t) => t.mode === 'sport')
     const selectedActivityConfig = jenisKegiatanOptions.find((a) => a.name === selectedJenisKegiatan)
+    const selectedSportConfig = sportOptions.find((a) => a.name === activityType)
+    const hasInvalidSportSelection = mode === 'sport' && Boolean(activityType) && !selectedSportConfig
 
     // Sync default jenisKegiatan when dimension changes / list arrives
     useEffect(() => {
@@ -104,6 +108,7 @@ export default function AddActivityBtn() {
         setActivityType(firstSport?.name || '')
         setProofFiles([])
         setDescription('')
+        setCustomName('')
         setDate(new Date().toISOString().split('T')[0])
         const physical = dimensions.find((d) => d.name === 'physical')
         if (physical) setSelectedDimensionId(physical.id)
@@ -131,7 +136,8 @@ export default function AddActivityBtn() {
     const handleSubmit = async () => {
         if (mode === 'daily' && proofFiles.length === 0) return
         if (mode === 'daily' && selectedActivityConfig?.requires_steps && !steps) return
-        if (mode === 'sport' && (!calories || proofFiles.length === 0)) return
+        if (mode === 'daily' && selectedActivityConfig?.is_custom_input && !customName.trim()) return
+        if (mode === 'sport' && (!calories || proofFiles.length === 0 || hasInvalidSportSelection)) return
 
         setLoading(true)
 
@@ -154,6 +160,11 @@ export default function AddActivityBtn() {
                     proof_urls: proofUrls,
                     dimension_id: mode === 'daily' ? selectedDimensionId || null : null,
                     description: description.trim() || null,
+                    custom_name:
+                        ((mode === 'daily' && selectedActivityConfig?.is_custom_input)
+                            || (mode === 'sport' && selectedSportConfig?.is_custom_input))
+                            ? customName.trim() || null
+                            : null,
                 }),
             })
 
@@ -313,6 +324,24 @@ export default function AddActivityBtn() {
                                             </div>
                                         )}
 
+                                        {/* Nama Kegiatan — hanya muncul kalau kegiatan "Lainnya" dipilih */}
+                                        {selectedActivityConfig?.is_custom_input && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                                                    Nama Kegiatan <span className="text-[#FC4C02]">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={customName}
+                                                    onChange={(e) => setCustomName(e.target.value)}
+                                                    maxLength={200}
+                                                    placeholder="Contoh: Workshop Public Speaking"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                                />
+                                                <p className="mt-1 text-[11px] text-gray-600">Sebutkan nama spesifik kegiatan yang kamu lakukan.</p>
+                                            </div>
+                                        )}
+
                                         {/* Deskripsi — selalu ada */}
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Deskripsi Kegiatan</label>
@@ -376,7 +405,7 @@ export default function AddActivityBtn() {
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Activity Type</label>
                                             <select
                                                 value={activityType}
-                                                onChange={(e) => setActivityType(e.target.value)}
+                                                onChange={(e) => { setActivityType(e.target.value); setCustomName('') }}
                                                 className="w-full appearance-none bg-[#1a1a1a] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
                                             >
                                                 {sportOptions.length === 0 ? (
@@ -388,6 +417,27 @@ export default function AddActivityBtn() {
                                                 )}
                                             </select>
                                         </div>
+
+                                        {selectedSportConfig?.is_custom_input && (
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                                                    Nama Olahraga <span className="text-[#FC4C02]">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={customName}
+                                                    onChange={(e) => setCustomName(e.target.value)}
+                                                    maxLength={200}
+                                                    placeholder="Contoh: Padel, Boxing, Dance Fitness"
+                                                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl py-2.5 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-[#FC4C02]/40 transition-colors"
+                                                />
+                                                <p className="mt-1 text-[11px] text-gray-600">Sebutkan nama olahraga yang kamu lakukan.</p>
+                                            </div>
+                                        )}
+
+                                        {hasInvalidSportSelection && (
+                                            <p className="text-xs text-red-400">Activity type tidak tersedia. Pilih ulang dari daftar.</p>
+                                        )}
 
                                         <div>
                                             <label className="block text-xs font-medium text-gray-500 mb-1.5 uppercase tracking-wide">Calories</label>
@@ -451,7 +501,7 @@ export default function AddActivityBtn() {
                                     onClick={handleSubmit}
                                     disabled={loading || (mode === 'daily'
                                         ? (proofFiles.length === 0 || !selectedJenisKegiatan || (selectedActivityConfig?.requires_steps && !steps))
-                                        : !calories || proofFiles.length === 0 || !activityType)}
+                                        : !calories || proofFiles.length === 0 || !activityType || hasInvalidSportSelection || (selectedSportConfig?.is_custom_input && !customName.trim()))}
                                     className="w-full bg-[#FC4C02] text-white font-bold py-3.5 rounded-xl hover:bg-orange-600 transition-all mt-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-[#FC4C02]/20 disabled:shadow-none"
                                 >
                                     {loading ? 'Saving...' : mode === 'sport' ? 'Save Sport Session' : 'Simpan Kegiatan'}

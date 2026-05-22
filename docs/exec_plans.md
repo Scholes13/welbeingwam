@@ -27,6 +27,24 @@
 
 ## Active Tasks
 
+### 2026-05-22 - Popular calories-friendly Sport Session catalog
+- Status: implemented (pending staging deploy + DB migration apply)
+- Owner: PM Agent
+- Delegates: `@coder_backend` (activity create validation, sport catalog migration), `@coder_frontend` (Sport Session Other input), `@qa` (focused tests and build), `@reviewer` (standards review)
+- Scope:
+  - refresh `activity_types` sport catalog with popular calories-friendly Strava-style options,
+  - keep Sport Session points 1:1 with submitted calories,
+  - make `Other` require a custom sport name,
+  - store the custom sport name in `activities.name` and `activities.custom_name` while preserving `type = 'Other'`.
+- Risks:
+  - migration refreshes sport display names and sort order for seeded sport codes,
+  - UI still depends on the `activity_types.is_custom_input` contract being present in deployed DB.
+- Verification:
+  - design doc: `docs/plans/2026-05-22-sport-session-strava-catalog-design.md`,
+  - implementation plan: `docs/plans/2026-05-22-sport-session-strava-catalog-implementation.md`,
+  - focused activity create route tests passed,
+  - `npm run build` passed.
+
 ### 2026-05-22 - Admin-controlled maintenance mode
 - Status: implemented (pending staging smoke after migration apply)
 - Owner: PM Agent
