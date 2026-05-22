@@ -22,7 +22,7 @@ const POINT_KEYS = ['base_checkin_points', 'photo_bonus_points', 'category_strea
 type ValidationSuccess = { valid: true; data: Partial<AppSettings> }
 type ValidationFailure = { valid: false; error: string }
 
-export function validateSettingsPayload(
+function validateSettingsPayload(
   body: unknown,
 ): ValidationSuccess | ValidationFailure {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
