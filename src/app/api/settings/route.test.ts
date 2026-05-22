@@ -39,6 +39,8 @@ describe('settings route', () => {
         { key: 'feature_rewards', value: true },
         { key: 'feature_surveys', value: false },
         { key: 'feature_category_filter', value: true },
+        { key: 'maintenance_enabled', value: true },
+        { key: 'maintenance_message', value: 'Maintenance in progress' },
       ],
       error: null,
     })
@@ -64,6 +66,10 @@ describe('settings route', () => {
           rewards: true,
           surveys: false,
           category_filter: true,
+        },
+        maintenance: {
+          enabled: true,
+          message: 'Maintenance in progress',
         },
       },
     })
@@ -160,6 +166,10 @@ describe('settings route', () => {
             qr_checkin: false,
             rewards: true,
           },
+          maintenance: {
+            enabled: true,
+            message: 'Maintenance in progress',
+          },
         }),
       }),
     )
@@ -169,5 +179,51 @@ describe('settings route', () => {
     expect(upsert).toHaveBeenCalledWith({ key: 'strava_sync_cooldown_minutes', value: 25 }, { onConflict: 'key' })
     expect(upsert).toHaveBeenCalledWith({ key: 'feature_qr_checkin', value: false }, { onConflict: 'key' })
     expect(upsert).toHaveBeenCalledWith({ key: 'feature_rewards', value: true }, { onConflict: 'key' })
+    expect(upsert).toHaveBeenCalledWith({ key: 'maintenance_enabled', value: true }, { onConflict: 'key' })
+    expect(upsert).toHaveBeenCalledWith({ key: 'maintenance_message', value: 'Maintenance in progress' }, { onConflict: 'key' })
+  })
+
+  it('PUT returns 400 for invalid maintenance payload', async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null })
+    const from = vi.fn().mockReturnValue({ upsert })
+    createClientMock.mockReturnValue({ from })
+
+    const response = await PUT(
+      new Request('http://localhost:3000/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          maintenance: {
+            enabled: 'yes',
+          },
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'maintenance.enabled must be a boolean',
+    })
+  })
+
+  it('PUT returns 400 when maintenance message is too long', async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null })
+    const from = vi.fn().mockReturnValue({ upsert })
+    createClientMock.mockReturnValue({ from })
+
+    const response = await PUT(
+      new Request('http://localhost:3000/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          maintenance: {
+            message: 'x'.repeat(501),
+          },
+        }),
+      }),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'maintenance.message must be 500 characters or fewer',
+    })
   })
 })

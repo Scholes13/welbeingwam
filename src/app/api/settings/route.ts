@@ -63,6 +63,38 @@ function validateSettingsPayload(
     data.features = validatedFeatures as AppSettings['features']
   }
 
+  if ('maintenance' in raw) {
+    const maintenance = raw.maintenance
+    if (maintenance === null || typeof maintenance !== 'object' || Array.isArray(maintenance)) {
+      return { valid: false, error: 'maintenance must be an object' }
+    }
+
+    const maintenanceObj = maintenance as Record<string, unknown>
+    const validatedMaintenance: Partial<AppSettings['maintenance']> = {}
+
+    if ('enabled' in maintenanceObj) {
+      if (typeof maintenanceObj.enabled !== 'boolean') {
+        return { valid: false, error: 'maintenance.enabled must be a boolean' }
+      }
+      validatedMaintenance.enabled = maintenanceObj.enabled
+    }
+
+    if ('message' in maintenanceObj) {
+      if (typeof maintenanceObj.message !== 'string') {
+        return { valid: false, error: 'maintenance.message must be a string' }
+      }
+      if (maintenanceObj.message.length > 500) {
+        return { valid: false, error: 'maintenance.message must be 500 characters or fewer' }
+      }
+      validatedMaintenance.message = maintenanceObj.message.trim() || DEFAULT_SETTINGS.maintenance.message
+    }
+
+    data.maintenance = {
+      ...DEFAULT_SETTINGS.maintenance,
+      ...validatedMaintenance,
+    }
+  }
+
   return { valid: true, data }
 }
 
@@ -133,6 +165,10 @@ export async function PUT(request: Request) {
         ...DEFAULT_SETTINGS.features,
         ...(body.features ?? {}),
       },
+      maintenance: {
+        ...DEFAULT_SETTINGS.maintenance,
+        ...(body.maintenance ?? {}),
+      },
     })
 
     if (body.strava_sync_cooldown_minutes !== undefined) {
@@ -159,6 +195,8 @@ export async function PUT(request: Request) {
       ...(body.features?.rewards !== undefined ? ['feature_rewards'] : []),
       ...(body.features?.surveys !== undefined ? ['feature_surveys'] : []),
       ...(body.features?.category_filter !== undefined ? ['feature_category_filter'] : []),
+      ...(body.maintenance?.enabled !== undefined ? ['maintenance_enabled'] : []),
+      ...(body.maintenance?.message !== undefined ? ['maintenance_message'] : []),
     ])
 
     for (const update of updates.filter((row) => requestedKeys.has(row.key))) {

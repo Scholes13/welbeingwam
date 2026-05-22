@@ -27,6 +27,28 @@
 
 ## Active Tasks
 
+### 2026-05-22 - Admin-controlled maintenance mode
+- Status: implemented (pending staging smoke after migration apply)
+- Owner: PM Agent
+- Delegates: `@coder_backend` (settings contract, middleware gate, migration), `@coder_frontend` (admin control and maintenance page), `@reviewer` (pre-commit review)
+- Scope:
+  - add `maintenance_enabled` and `maintenance_message` rows to the existing `settings` table,
+  - expose `settings.maintenance.enabled` and `settings.maintenance.message` from `GET /api/settings`,
+  - accept `maintenance.enabled` and `maintenance.message` in `PUT /api/settings` for admins,
+  - redirect regular page requests to `/maintenance` while maintenance mode is enabled,
+  - return `503` JSON for non-admin API requests during maintenance,
+  - keep admin routes, admin APIs, auth routes, and static assets accessible.
+- Risks:
+  - middleware depends on the `settings` table being readable through the request Supabase client; if unavailable, maintenance defaults off to prevent lockout,
+  - fresh environments must apply `supabase/migrations/20260522000400_add_maintenance_settings.sql` before admin controls persist these rows,
+  - manual smoke test still required after deployment because middleware behavior depends on deployed Supabase/RLS state.
+- Verification:
+  - design doc: `docs/plans/2026-05-22-maintenance-mode-design.md`,
+  - implementation plan: `docs/plans/2026-05-22-maintenance-mode-implementation.md`,
+  - focused settings tests passed,
+  - `npm test` passed,
+  - `npm run build` passed.
+
 ### 2026-05-21 - Replace daily activity catalog from Excel point matrix
 - Status: implemented (pending DB apply + smoke test)
 - Owner: PM Agent

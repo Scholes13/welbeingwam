@@ -7,6 +7,7 @@ import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
 import { supabase } from '@/lib/supabase/client'
+import type { AppSettings } from '@/lib/settings'
 
 import ManageAdmins from './ManageAdmins'
 import type { AdminTab } from './components/AdminTabs'
@@ -67,6 +68,9 @@ export default function AdminPage() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
     const [myPermissions, setMyPermissions] = useState<string[]>([])
+    const [maintenanceEnabled, setMaintenanceEnabled] = useState(false)
+    const [maintenanceMessage, setMaintenanceMessage] = useState('')
+    const [maintenanceSaving, setMaintenanceSaving] = useState(false)
 
     // Review Queue state (downgrade mode)
     type PendingActivity = {
@@ -128,6 +132,50 @@ export default function AdminPage() {
         }
         checkMe()
     }, [router])
+
+    const fetchMaintenanceSettings = async () => {
+        try {
+            const res = await fetch('/api/settings')
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to load settings')
+
+            const settings = data.settings as AppSettings
+            setMaintenanceEnabled(settings.maintenance.enabled)
+            setMaintenanceMessage(settings.maintenance.message)
+        } catch (error) {
+            console.error('Failed to load maintenance settings:', error)
+            toastError('Failed to load maintenance settings')
+        }
+    }
+
+    const saveMaintenanceSettings = async () => {
+        setMaintenanceSaving(true)
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    maintenance: {
+                        enabled: maintenanceEnabled,
+                        message: maintenanceMessage,
+                    },
+                }),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || 'Failed to save maintenance settings')
+            success('Maintenance settings saved')
+        } catch (error) {
+            toastError(error instanceof Error ? error.message : 'Failed to save maintenance settings')
+        } finally {
+            setMaintenanceSaving(false)
+        }
+    }
+
+    useEffect(() => {
+        if (isAuthorized) {
+            fetchMaintenanceSettings()
+        }
+    }, [isAuthorized])
 
     // ... (keep existing state) ...
 
@@ -1682,6 +1730,49 @@ export default function AdminPage() {
                             )}
                         </div>
                         )}
+
+                        <div className="mb-6 rounded-2xl border border-orange-500/20 bg-orange-500/[0.08] p-4 shadow-[0_0_30px_rgba(252,76,2,0.08)]">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`h-2.5 w-2.5 rounded-full ${maintenanceEnabled ? 'bg-orange-400' : 'bg-emerald-400'}`} />
+                                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-orange-200">Maintenance Mode</p>
+                                    </div>
+                                    <h2 className="mt-2 text-lg font-bold text-white">
+                                        {maintenanceEnabled ? 'App is blocked for regular users' : 'App is open for regular users'}
+                                    </h2>
+                                    <p className="mt-1 text-sm text-gray-400">
+                                        Admin pages stay available so maintenance can be turned off anytime.
+                                    </p>
+                                    <textarea
+                                        value={maintenanceMessage}
+                                        onChange={(event) => setMaintenanceMessage(event.target.value)}
+                                        maxLength={500}
+                                        rows={3}
+                                        className="mt-4 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-400"
+                                        placeholder="Message shown to users during maintenance"
+                                    />
+                                </div>
+                                <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col">
+                                    <button
+                                        type="button"
+                                        onClick={() => setMaintenanceEnabled((value) => !value)}
+                                        className={`rounded-xl px-5 py-2.5 text-sm font-bold transition-colors ${maintenanceEnabled ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-white/10 text-gray-200 hover:bg-white/15'}`}
+                                    >
+                                        {maintenanceEnabled ? 'Turn Off' : 'Turn On'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={saveMaintenanceSettings}
+                                        disabled={maintenanceSaving}
+                                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        {maintenanceSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
             {activeTab === 'wellbeing' && <WellbeingOverview />}
 

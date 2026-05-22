@@ -18,6 +18,8 @@ describe('parseSettingsRows', () => {
       { key: 'feature_rewards', value: true },
       { key: 'feature_surveys', value: false },
       { key: 'feature_category_filter', value: true },
+      { key: 'maintenance_enabled', value: true },
+      { key: 'maintenance_message', value: 'Maintenance in progress' },
     ])
 
     expect(settings).toEqual({
@@ -36,6 +38,10 @@ describe('parseSettingsRows', () => {
         surveys: false,
         category_filter: true,
       },
+      maintenance: {
+        enabled: true,
+        message: 'Maintenance in progress',
+      },
     })
   })
 
@@ -50,6 +56,8 @@ describe('parseSettingsRows', () => {
     expect(settings.strava_sync_cooldown_minutes).toBe(15)
     expect(settings.features.qr_checkin).toBe(true)
     expect(settings.features.gps_checkin).toBe(true)
+    expect(settings.maintenance.enabled).toBe(false)
+    expect(settings.maintenance.message).toBe('We are performing scheduled maintenance. Please check back soon.')
   })
 })
 
@@ -71,11 +79,17 @@ describe('buildSettingsRows', () => {
         surveys: false,
         category_filter: true,
       },
+      maintenance: {
+        enabled: true,
+        message: 'Maintenance in progress',
+      },
     })
 
     expect(rows).toContainEqual({ key: 'base_checkin_points', value: 90 })
     expect(rows).toContainEqual({ key: 'strava_sync_cooldown_minutes', value: 25 })
     expect(rows).toContainEqual({ key: 'feature_qr_checkin', value: false })
     expect(rows).toContainEqual({ key: 'feature_rewards', value: true })
+    expect(rows).toContainEqual({ key: 'maintenance_enabled', value: true })
+    expect(rows).toContainEqual({ key: 'maintenance_message', value: 'Maintenance in progress' })
   })
 })

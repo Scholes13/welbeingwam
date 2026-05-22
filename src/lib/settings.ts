@@ -14,6 +14,10 @@ export type AppSettings = {
     surveys: boolean
     category_filter: boolean
   }
+  maintenance: {
+    enabled: boolean
+    message: string
+  }
 }
 
 export type SettingsRow = {
@@ -37,6 +41,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     surveys: true,
     category_filter: true,
   },
+  maintenance: {
+    enabled: false,
+    message: 'We are performing scheduled maintenance. Please check back soon.',
+  },
 }
 
 function parseInteger(value: unknown, fallback: number, minimum = 0): number {
@@ -59,6 +67,10 @@ function parseBoolean(value: unknown, fallback: boolean): boolean {
   }
 
   return fallback
+}
+
+function parseString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value : fallback
 }
 
 export function parseSettingsRows(rows: SettingsRow[] | null | undefined): AppSettings {
@@ -93,6 +105,10 @@ export function parseSettingsRows(rows: SettingsRow[] | null | undefined): AppSe
         DEFAULT_SETTINGS.features.category_filter,
       ),
     },
+    maintenance: {
+      enabled: parseBoolean(settingsMap.get('maintenance_enabled'), DEFAULT_SETTINGS.maintenance.enabled),
+      message: parseString(settingsMap.get('maintenance_message'), DEFAULT_SETTINGS.maintenance.message),
+    },
   }
 }
 
@@ -111,6 +127,8 @@ export function buildSettingsRows(settings: AppSettings): SettingsRow[] {
     { key: 'feature_rewards', value: settings.features.rewards },
     { key: 'feature_surveys', value: settings.features.surveys },
     { key: 'feature_category_filter', value: settings.features.category_filter },
+    { key: 'maintenance_enabled', value: settings.maintenance.enabled },
+    { key: 'maintenance_message', value: settings.maintenance.message },
   ]
 }
 
