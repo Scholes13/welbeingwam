@@ -2,3 +2,6 @@
   # Next.js embeds NEXT_PUBLIC_* values into client bundles by design.
   # Keep private keys scanned; only omit public browser-safe values.
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_MAPBOX_TOKEN"
+  # Supabase anon keys are JWT-shaped public browser keys, which triggers
+  # Netlify smart detection in .next output even when key omission is set.
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
