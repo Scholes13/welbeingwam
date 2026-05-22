@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu, FileText, Zap } from 'lucide-react'
+import { ArrowLeft, Plus, X, Loader2, Gift, User, ClipboardList, ChevronRight, Trash2, Target, Save, Calendar, Scan, Share2, Footprints, RotateCcw, MapPin, QrCode, Download, Copy, Check, Edit, BarChart2, Trophy, Menu, FileText, Zap, Search } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/context/ToastContext'
@@ -101,6 +101,7 @@ export default function AdminPage() {
     const [reviewPointInputs, setReviewPointInputs] = useState<Record<string, string>>({})
     const [reviewRejectReasons, setReviewRejectReasons] = useState<Record<string, string>>({})
     const [reviewActionLoading, setReviewActionLoading] = useState<string | null>(null)
+    const [reviewSearchTerm, setReviewSearchTerm] = useState('')
 
     useEffect(() => {
         // Fetch my permissions using Supabase Auth
@@ -429,6 +430,34 @@ export default function AdminPage() {
         } finally {
             setReviewActionLoading(null)
         }
+    }
+
+    const matchesReviewSearch = (activity: PendingActivity, query: string) => {
+        const normalizedQuery = query.trim().toLowerCase()
+        if (!normalizedQuery) return true
+
+        const haystack = [
+            activity.user.full_name,
+            activity.name,
+            activity.type,
+            activity.dimension?.name,
+            activity.dimension?.display_name,
+            activity.review_reason,
+            activity.activity_points,
+            activity.start_date,
+            activity.created_at,
+            new Date(activity.start_date).toLocaleDateString('id-ID', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            }),
+        ]
+            .filter((value) => value !== null && value !== undefined)
+            .join(' ')
+            .toLowerCase()
+
+        return haystack.includes(normalizedQuery)
     }
 
     const pageMeta = getAdminPageMeta(activeTab)
@@ -2742,7 +2771,7 @@ export default function AdminPage() {
             {/* Review Queue Tab (Downgrade Mode) */}
             {activeTab === 'review' && (
                 <div className="space-y-6 pb-24">
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                         <div className="inline-flex rounded-full bg-white/[0.04] p-1">
                             <button
                                 type="button"
@@ -2767,21 +2796,35 @@ export default function AdminPage() {
                                 Riwayat Reject ({processedActivities.length})
                             </button>
                         </div>
-                        <button
-                            onClick={fetchPendingActivities}
-                            disabled={reviewLoading}
-                            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-200 transition-colors hover:bg-white/10 disabled:opacity-50"
-                        >
-                            {reviewLoading ? 'Loading...' : 'Refresh'}
-                        </button>
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                            <div className="relative min-w-0 md:w-80">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                                <input
+                                    type="search"
+                                    value={reviewSearchTerm}
+                                    onChange={(event) => setReviewSearchTerm(event.target.value)}
+                                    placeholder="Cari user, aktivitas, dimensi, tanggal, poin..."
+                                    className="w-full rounded-lg border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-[#FC4C02]/60"
+                                />
+                            </div>
+                            <button
+                                onClick={fetchPendingActivities}
+                                disabled={reviewLoading}
+                                className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-200 transition-colors hover:bg-white/10 disabled:opacity-50"
+                            >
+                                {reviewLoading ? 'Loading...' : 'Refresh'}
+                            </button>
+                        </div>
                     </div>
 
                     {(() => {
-                        const list = auditView === 'pending' ? pendingActivities : processedActivities
+                        const sourceList = auditView === 'pending' ? pendingActivities : processedActivities
+                        const list = sourceList.filter((activity) => matchesReviewSearch(activity, reviewSearchTerm))
                         const emptyTitle = auditView === 'pending' ? 'Belum ada kegiatan aktif' : 'Belum ada kegiatan yang ditolak'
                         const emptyHint = auditView === 'pending'
                             ? 'Kegiatan baru dari karyawan akan otomatis muncul di sini.'
                             : 'Kegiatan yang Anda tolak akan tercatat di sini sebagai audit trail.'
+                        const isSearching = reviewSearchTerm.trim().length > 0
 
                         if (reviewLoading && list.length === 0) {
                             return (
@@ -2795,8 +2838,10 @@ export default function AdminPage() {
                             return (
                                 <div className="text-center py-20 text-gray-500 border border-dashed border-white/10 rounded-2xl">
                                     <ClipboardList className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                                    <p className="font-medium">{emptyTitle}</p>
-                                    <p className="text-sm mt-1">{emptyHint}</p>
+                                    <p className="font-medium">{isSearching ? 'Tidak ada hasil pencarian' : emptyTitle}</p>
+                                    <p className="text-sm mt-1">
+                                        {isSearching ? `Tidak ada item yang cocok dengan "${reviewSearchTerm.trim()}".` : emptyHint}
+                                    </p>
                                 </div>
                             )
                         }
