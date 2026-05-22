@@ -20,6 +20,10 @@ function isAdminPath(pathname: string): boolean {
   return pathname.startsWith('/dashboard/admin') || pathname.startsWith('/api/admin/')
 }
 
+function isAdminMaintenancePath(pathname: string): boolean {
+  return isAdminPath(pathname) || pathname === '/api/settings'
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -69,7 +73,7 @@ export async function updateSession(request: NextRequest) {
         isAdmin = profile?.is_admin === true
       }
 
-      if (!isAdmin || !isAdminPath(request.nextUrl.pathname)) {
+      if (!isAdmin || !isAdminMaintenancePath(request.nextUrl.pathname)) {
         if (request.nextUrl.pathname.startsWith('/api/')) {
           return NextResponse.json(
             { error: 'Maintenance mode enabled', message: maintenance.message },
