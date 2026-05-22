@@ -49,6 +49,12 @@ export async function POST(request: Request) {
             .delete()
             .eq('user_id', targetUserId)
          if (rewardError) throw rewardError
+
+         const { error: coinError } = await supabase
+            .from('coin_transactions')
+            .delete()
+            .eq('user_id', targetUserId)
+         if (coinError) throw coinError
     }
 
     return NextResponse.json({ success: true })
