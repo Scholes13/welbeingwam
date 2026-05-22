@@ -64,7 +64,7 @@ After applying migrations, run the verification script:
 
 ```bash
 $env:NEXT_PUBLIC_SUPABASE_URL="https://ihrutobdomnagnwzwncy.supabase.co"
-$env:SUPABASE_SERVICE_ROLE_KEY="sb_secret_KIEIuPuT1mQgZeZdpSKIXw_7gqNntAU"
+$env:SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 npx tsx scripts/verify_database.ts
 ```
 
